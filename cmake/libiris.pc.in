@@ -1,0 +1,17 @@
+# pkg-config file for iris
+# https://people.freedesktop.org/~dbn/pkg-config-guide.html
+# Usage: cc `pkg-config --cflags --libs libiris` -o myapp myapp.c
+# after you added @CMAKE_INSTALL_FULL_LIBDIR@/pkg-config to PKG_CONFIG_PATH,
+# e.g. export PKG_CONFIG_PATH=@CMAKE_INSTALL_FULL_LIBDIR@/pkgconfig
+
+prefix=@CMAKE_INSTALL_FULL_PREFIX@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: libiris@IRIS_SUFFIX@
+Description: Infinite Range Interactions Solvers
+Version: @IRIS_VERSION@
+Requires:
+Libs: -L${libdir} -liris@IRIS_SUFFIX@
+Libs.private: -lm
+Cflags: -I${includedir}
