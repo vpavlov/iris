@@ -27,14 +27,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#ifndef __IRIS_DOMAIN_H__
+#define __IRIS_DOMAIN_H__
+
+#include "global_state.h"
 
 namespace ORG_NCSA_IRIS {
 
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
+    class domain : protected global_state {
 
+    public:
+	domain(class iris *obj);
+	~domain();
+
+	void set_dimensions(int in_dim);
+	void set_box(iris_real in_box_min[3], iris_real in_box_max[3]);
+
+	void setup_local_box();
+
+    public:
+	int  dimensions;  // # of dimensions of the domain, default 3
+
+	// global box
+	iris_real box_min[3];  // left/bottom/front corner of computational box
+	iris_real box_max[3];  // right/top/back corner of the computational box
+	iris_real box_size[3]; // min - max in every dimention
+
+	// local box (sub-domain for which this proc is responsicle)
+	iris_real loc_box_min[3];
+	iris_real loc_box_max[3];
+	iris_real loc_box_size[3];
+    };
 }
-
 #endif

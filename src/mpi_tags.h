@@ -27,14 +27,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#ifndef __IRIS_MPI_TAGS_H__
+#define __IRIS_MPI_TAGS_H__
 
-namespace ORG_NCSA_IRIS {
-
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
-
-}
+#define IRIS_TAG_LOCAL_BOXES_MIN  0
+#define IRIS_TAG_LOCAL_BOXES_MAX  1
 
 #endif

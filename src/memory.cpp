@@ -27,14 +27,51 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#include <stdlib.h>
+#include <string.h>
+#include <malloc.h>
+#include <new>
+#include <cstdint>
+#include "memory.h"
+#include "utils.h"
 
-namespace ORG_NCSA_IRIS {
+using namespace ORG_NCSA_IRIS;
 
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
+void *memory::wmalloc(size_t nbytes)
+{
+    void *retval;
+    int res = posix_memalign(&retval, IRIS_MEMALIGN, nbytes);
+    if(res != 0) {
+	throw std::bad_alloc();
+    }
 
+    return retval;
 }
 
-#endif
+void *memory::wrealloc(void *ptr, size_t nbytes)
+{
+    if(nbytes == 0) {
+	wfree(ptr);
+	return NULL;
+    }
+
+    ptr = realloc(ptr, nbytes);
+    if(ptr == NULL) {
+	throw std::bad_alloc();
+    }
+
+    if((uintptr_t)ptr % IRIS_MEMALIGN != 0) {
+	void *tmp = wmalloc(nbytes);
+	memcpy(tmp, ptr, MIN(nbytes, malloc_usable_size(ptr)));
+	free(ptr);
+	return tmp;
+    }else {
+	return ptr;
+    }
+}
+
+void memory::wfree(void *ptr)
+{
+    free(ptr);
+}
+

@@ -27,14 +27,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#ifndef __IRIS_REAL_H__
+#define __IRIS_REAL_H__
 
-namespace ORG_NCSA_IRIS {
+#if IRIS_DOUBLE
 
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
+typedef double iris_real;
 
-}
+#define IRIS_REAL MPI_DOUBLE
+
+#else
+
+typedef float iris_real;
+
+#define IRIS_REAL MPI_FLOAT
 
 #endif
+
+#endif // __IRIS_REAL_H__

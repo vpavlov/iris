@@ -1,45 +1,34 @@
 // -*- c++ -*-
 //==============================================================================
-// Copyright (c) 2017-2018 NCSA
+// IRIS - Long-range Interaction Solver Library
 //
-// See the README and LICENSE files in the top-level IRIS directory.
+// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+//
+// Primary authors:
+//     Valentin Pavlov <vpavlov@rila.bg>
+//     Peicho Petkov <peicho@phys.uni-sofia.bg>
+//     Stoyan Markov <markov@acad.bg>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 //==============================================================================
+#include <stdexcept>
 #include "utils.h"
-#include "iris_exception.h"
+#include "memory.h"
 
 
-namespace ORG_NCSA_IRIS {
-
-// Brute force factorization of N into factors.
-// fac is initialized here and will contain the unique prime factors of N
-// mfac is initialized here and will contain the power of each primer factor
-// returns the number of unique factors (sizeof fac)
-//
-// Of course, this can only be used for small Ns (e.g. number of ranks in a
-// MPI communicator)
-
-int factorize(int n, int **factors, int **powers)
-{
-    if(n <= 0) {
-	throw new iris_exception("Can only factorize positive integers!");
-    }
-
-    *factors = new int[n/2];
-    *powers = new int[n/2];
-    int count = 0;
-    for(int p = 2; n != 1; p++) {
-	while(n % p == 0) {
-	    if(count == 0 || (*factors)[count-1] != p) {
-		(*factors)[count] = p;
-		(*powers)[count++] = 1;
-	    }else {
-		(*powers)[count-1]++;
-	    }
-	    n /= p;
-	}
-    }
-
-    return count;
-}
-
-}

@@ -14,4 +14,4 @@ Version: @IRIS_VERSION@
 Requires:
 Libs: -L${libdir} -liris@IRIS_SUFFIX@
 Libs.private: -lm
-Cflags: -I${includedir}
+Cflags: -I${includedir} @PKG_CFLAGS@

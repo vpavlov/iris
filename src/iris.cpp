@@ -1,135 +1,135 @@
 // -*- c++ -*-
 //==============================================================================
-// Copyright (c) 2017-2018 NCSA
+// IRIS - Long-range Interaction Solver Library
 //
-// See the README and LICENSE files in the top-level IRIS directory.
+// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+//
+// Primary authors:
+//     Valentin Pavlov <vpavlov@rila.bg>
+//     Peicho Petkov <peicho@phys.uni-sofia.bg>
+//     Stoyan Markov <markov@acad.bg>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 //==============================================================================
-#include "api.h"
+#include <mpi.h>
 #include "iris.h"
-#include "poisson_solver_psm.h"
-#include "iris_exception.h"
-#include "utils.h"
+#include "domain.h"
+#include "comm.h"
+#include "mpi_tags.h"
+#include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
 
-iris::iris(MPI_Comm communicator)
+iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
 {
-    m_commrec = new commrec(communicator);
-    m_poisson_solver = NULL;
-    m_ddx = 0;
-    m_ddy = 0;
-    m_ddz = 0;
+    the_comm = new comm(this, uber_comm, iris_comm, sim_master);
+    the_domain = new domain(this);
 }
 
 iris::~iris()
 {
-    delete m_commrec;
-
-    if(m_poisson_solver != NULL) {
-	delete m_poisson_solver;
-    }
+    delete the_comm;
+    delete the_domain;
 }
 
-void iris::select_poisson_solver_method(int method)
+void iris::domain_set_dimensions(int in_dimensions)
 {
-    if(m_poisson_solver != NULL) {
-	delete m_poisson_solver;
-    }
-
-    switch(method) {
-    case IRIS_POISSON_PSM:
-	m_poisson_solver = new poisson_solver_psm();
-	break;
-
-    default:
-	throw new iris_exception("Unknown solver selected!");
-    }
+    the_domain->set_dimensions(in_dimensions);
 }
 
-void iris::select_dd_conf(int x, int y, int z)
+void iris::domain_set_box(iris_real in_box_min[3], iris_real in_box_max[3])
 {
-    if(x*y*z != m_commrec->get_size()) {
-	throw new iris_exception("Bad domain decomposition configuration!");
-    }
-    m_ddx = x;
-    m_ddy = y;
-    m_ddz = z;
+    the_domain->set_box(in_box_min, in_box_max);
 }
 
-// Call this to apply all configuration, which will make the lib ready to
-// perform calculations
+void iris::comm_set_grid_pref(int x, int y, int z)
+{
+    the_comm->set_grid_pref(x, y, z);
+}
+
+// call this after all user-configuration is set so we can calculate whatever
+// we need in order to start looping
 void iris::apply_conf()
 {
-    // first, check if any of the configuration parameters was left
-    // unititialized and initialized it to its default value
-    if(m_poisson_solver == NULL) {
-	select_poisson_solver_method(IRIS_POISSON_PSM);
+    the_comm->setup_grid();
+    the_domain->setup_local_box();
+    __announce_loc_box_info();
+}
+
+// This gathers the local boxes of all IRIS procs and sends them to proc 0
+// of the uber comm (e.g. simulation master). It can then re-distribute this
+// information to PP-only nodes so they know which atoms to send to which
+// IRIS procs.
+void iris::__announce_loc_box_info()
+{
+    iris_real *local_boxes_min;
+    iris_real *local_boxes_max;
+    int sz = 3 * the_comm->iris_size;
+
+    if(the_comm->iris_rank == 0) {
+	memory::create_1d(local_boxes_min, sz);
+	memory::create_1d(local_boxes_max, sz);
+    }
+    
+    MPI_Request req1, req2;
+    MPI_Status status1, status2;
+
+    MPI_Gather(the_domain->loc_box_min, 3, IRIS_REAL,
+	       local_boxes_min, 3, IRIS_REAL,
+	       0, the_comm->iris_comm);
+
+    if(the_comm->iris_rank == 0) {
+	MPI_Isend(local_boxes_min, sz, IRIS_REAL, the_comm->sim_master,
+		  IRIS_TAG_LOCAL_BOXES_MIN,
+		  the_comm->uber_comm, &req1);
+    }
+	      
+    MPI_Gather(the_domain->loc_box_max, 3, IRIS_REAL,
+	       local_boxes_max, 3, IRIS_REAL,
+	       0, the_comm->iris_comm);
+
+    if(the_comm->iris_rank == 0) {
+	MPI_Isend(local_boxes_max, sz, IRIS_REAL, the_comm->sim_master,
+		  IRIS_TAG_LOCAL_BOXES_MAX,
+		  the_comm->uber_comm, &req2);
     }
 
-    if(m_ddx == 0 || m_ddy == 0 || m_ddz == 0) {
-	select_dd_conf_auto();
+    if(the_comm->iris_rank == 0) {
+	MPI_Wait(&req1, &status1);
+	memory::destroy_1d(local_boxes_min);
+
+	MPI_Wait(&req2, &status2);
+	memory::destroy_1d(local_boxes_max);
     }
 }
 
-
-void iris::eval_dd_conf(int *factors, int *powers, int count,
-			int tx, int ty, int tz,
-			int *bestx, int *besty, int *bestz,
-			float *best_val)
+// This must be called from simulation master only.
+// Paired to the Isends in __announce_local_boxes
+void iris::recv_local_boxes(MPI_Comm comm, int iris_comm_size,
+			    iris_real *&out_local_boxes_min,
+			    iris_real *&out_local_boxes_max)
 {
-    if(count == 0) {
-	float val = m_poisson_solver->eval_dd_conf(tx, ty, tz);
-	if(val > *best_val) {
-	    *bestx = tx;
-	    *besty = ty;
-	    *bestz = tz;
-	    *best_val = val;
-	}
-	return;
-    }
-
-    for(int x = powers[0]; x>= 0; x--) {
-	for(int i = 0; i < x; i++) {
-	    tx *= factors[0];
-	}
-
-	for(int y = powers[0] - x; y >= 0; y--) {
-	    for(int i = 0; i < y; i++) {
-		ty *= factors[0];
-	    }
-
-	    for(int i = 0; i < powers[0]-x-y; i++) {
-		tz *= factors[0];
-	    }
-
-	    eval_dd_conf(factors+1, powers+1, count-1, tx, ty, tz,
-			 bestx, besty, bestz, best_val);
-
-	    for(int i = 0; i < powers[0]-x-y; i++) {
-		tz /= factors[0];
-	    }
-
-	    for(int i = 0; i < y; i++) {
-		ty /= factors[0];
-	    }
-	}
-        for (int i = 0; i < x; i++)
-        {
-	    tx /= factors[0];
-        }
-    }
-}
-
-void iris::select_dd_conf_auto()
-{
-    int *factors;
-    int *powers;
-    float best = 0.0;
-    int count = factorize(m_commrec->get_size(), &factors, &powers);
-    
-    eval_dd_conf(factors, powers, count, 1, 1, 1,
-		 &m_ddx, &m_ddy, &m_ddz, &best);
-    
-    delete factors;
-    delete powers;
+    int sz = iris_comm_size * 3;
+    memory::create_1d(out_local_boxes_min, sz);
+    memory::create_1d(out_local_boxes_max, sz);
+    MPI_Recv(out_local_boxes_min, sz, IRIS_REAL, MPI_ANY_SOURCE,
+	     IRIS_TAG_LOCAL_BOXES_MIN, comm, MPI_STATUS_IGNORE);
+    MPI_Recv(out_local_boxes_max, sz, IRIS_REAL, MPI_ANY_SOURCE,
+	     IRIS_TAG_LOCAL_BOXES_MAX, comm, MPI_STATUS_IGNORE);
 }

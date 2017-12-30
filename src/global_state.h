@@ -27,13 +27,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#ifndef __IRIS_GLOBAL_STATE_H__
+#define __IRIS_GLOBAL_STATE_H__
+
+#include "iris.h"
 
 namespace ORG_NCSA_IRIS {
 
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
+    class global_state {
+
+    public:
+	global_state(iris *obj) :
+	    the_iris(obj),
+	    the_domain(obj->the_domain),
+	    the_comm(obj->the_comm)
+	{};
+
+	virtual ~global_state() {};
+
+    protected:
+	iris *the_iris;
+	domain *&the_domain;
+	comm *&the_comm;
+	
+    };
 
 }
 

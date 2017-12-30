@@ -1,0 +1,55 @@
+The caller splits its communicator -- one part for his own, one for IRIS
+
+uber_comm - the caller comm (MPI_COMM_WORLD usually)
+iris_comm - the communicator for IRIS
+
+All the processes in iris_comm call
+
+new iris(uber_comm, iris_comm)
+
+Then they may call
+
+iris->is_master() to figure out which node in uber_comm is node 0 in iris_comm
+
+mpirun -np 5 ./bahor
+
+uber_comm  iris_comm  !iris_comm
+---------  ---------  ----------
+0                     0
+1                     1
+2                     2
+3          0
+4          1
+
+
+
+BOX: 100 x 100 x 100 nm
+
+SIM NODES               IRIS NODES
+---------               ----------
+1, 2, 3                 1, 2
+
+
+3 x 1 x 1               1 x 1 x 2
+                        0: low x, low y, low z
+                        1: low x, low y, high z
+
+
+sim_node 0 -> iris_node 0: get me your local boxes
+
+  iris_node 0 replies: 
+    node 0 has box [0, 100][0, 100][0, 50]
+    node 1 has box [0, 100][0, 100][50, 100]
+
+This is asked once.
+
+sim_node_0: iris_get_local_boxes();
+
+ sim_node 0: by whatever means it wants distributes this info to its nodes
+and asks them: to which nodes are you going to send how many atoms?
+
+communicators:
+ uber_comm - the whole simulation communicator (MPI_COMM_WORLD?)
+ iris_comm - part of uber_comm dedicated to IRIS
+
+iris_master_node

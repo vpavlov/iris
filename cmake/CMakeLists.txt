@@ -1,40 +1,58 @@
+# -*- cmake -*-
+#==============================================================================
+# IRIS - Long-range Interaction Solver Library
 #
+# Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+#
+# Primary authors:
+#     Valentin Pavlov <vpavlov@rila.bg>
+#     Peicho Petkov <peicho@phys.uni-sofia.bg>
+#     Stoyan Markov <markov@acad.bg>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#==============================================================================
 cmake_minimum_required(VERSION 3.1)
 
 project(iris)
+set(SOVERSION 0)
 
 enable_language(CXX)
-set(CMAKE_CXX_STANDARD 11)  # we require C++ 11
+set(CMAKE_CXX_STANDARD 11)
 
-set(IRIS_VERSION_MAJOR 0)
-set(IRIS_VERSION_MINOR 1)
-set(IRIS_VERSION "${IRIS_VERSION_MAJOR}.${IRIS_VERSION_MINOR}")
-math(EXPR IRIS_VERSION_NUMERIC "${IRIS_VERSION_MAJOR}*10000 + ${IRIS_VERSION_MINOR}")
-
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 set(IRIS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 set(IRIS_LINK_LIBS)
-set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})  # is this necessary?
+set(INSTALLED_DEFINITIONS "")
 
 file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.cpp)
+file(GLOB IRIS_INCLUDES ${IRIS_SOURCE_DIR}/*.h)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(IRIS_DOUBLE "Use double precision" OFF)
 
-set(IRIS_DATA_PRECISION "single" CACHE STRING "Data precision. Allowed values: single double")
-set_property(CACHE IRIS_DATA_PRECISION PROPERTY STRINGS single double)
-
-if(IRIS_DATA_PRECISION STREQUAL "single")
-  set(IRIS_DATA_TYPE float)
-  set(IRIS_IS_FLOAT 1)
-  set(IRIS_IS_DOUBLE 0)
+if(IRIS_DOUBLE)
+  set(IRIS_DOUBLE_VALUE 1)
 else()
-  set(IRIS_DATA_TYPE double)
-  set(IRIS_IS_FLOAT 0)
-  set(IRIS_IS_DOUBLE 1)
+  set(IRIS_DOUBLE_VALUE 0)
 endif()
-
-add_definitions(-DIRIS_DATA_TYPE=${IRIS_DATA_TYPE})
-add_definitions(-DIRIS_IS_FLOAT=${IRIS_IS_FLOAT})
-add_definitions(-DIRIS_IS_DOUBLE=${IRIS_IS_DOUBLE})
+add_definitions(-DIRIS_DOUBLE=${IRIS_DOUBLE_VALUE})
+list(APPEND INSTALLED_DEFINITIONS "-DIRIS_DOUBLE=${IRIS_DOUBLE_VALUE}")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CXX_FLAGS)
   #release comes with -O3 by default
@@ -57,6 +75,7 @@ endif()
 
 set(IRIS_MEMALIGN "64" CACHE STRING "Memory alignment")
 add_definitions(-DIRIS_MEMALIGN=${IRIS_MEMALIGN})
+list(APPEND INSTALLED_DEFINITIONS "-DIRIS_MEMALIGN=${IRIS_MEMALIGN}")
 
 set(IRIS_SUFFIX "" CACHE STRING "Suffix to append to libiris")
 
@@ -76,38 +95,37 @@ list(APPEND IRIS_LINK_LIBS ${${FFT}_LIBRARIES})
 ### Needed standard libaries, etc.
 ###
 include(CheckIncludeFile)
-foreach(HEADER math.h)
-  check_include_file(${HEADER} FOUND_${HEADER})
-  if(NOT FOUND_${HEADER})
-    message(FATAL_ERROR "Could not find needed header - ${HEADER}")
-  endif(NOT FOUND_${HEADER})
-endforeach(HEADER)
-
-set(MATH_LIBRARIES "m" CACHE STRING "math library")
-mark_as_advanced( MATH_LIBRARIES )
+include(CheckFunctionExists)
 include(CheckLibraryExists)
-foreach(FUNC sin cos)
-  check_library_exists(${MATH_LIBRARIES} ${FUNC} "" FOUND_${FUNC}_${MATH_LIBRARIES})
-  if(NOT FOUND_${FUNC}_${MATH_LIBRARIES})
-    message(FATAL_ERROR "Could not find needed math function - ${FUNC}")
-  endif(NOT FOUND_${FUNC}_${MATH_LIBRARIES})
+
+foreach(FUNC posix_memalign)
+  check_function_exists(${FUNC} FOUND_${FUNC})
 endforeach(FUNC)
-list(APPEND IRIS_LINK_LIBS ${MATH_LIBRARIES})
-configure_file(config.h.in ${IRIS_SOURCE_DIR}/config.h)
+
+list(APPEND IRIS_LINK_LIBS "m")
+
 include_directories(${IRIS_SOURCE_DIR})
 add_library(iris ${IRIS_SOURCES})
 target_link_libraries(iris ${IRIS_LINK_LIBS})
 set_target_properties(iris PROPERTIES OUTPUT_NAME iris${IRIS_SUFFIX})
 
 if(BUILD_SHARED_LIBS)
-  set_target_properties(iris PROPERTIES SOVERSION ${IRIS_VERSION})
-  configure_file(libiris.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libiris${IRIS_SUFFIX}.pc @ONLY)
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libiris${IRIS_SUFFIX}.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+  set_target_properties(iris PROPERTIES SOVERSION ${SOVERSION})
 endif()
 
+# Handle pkgconfig
+set(PKG_CFLAGS "")
+foreach (_def ${INSTALLED_DEFINITIONS})
+  set(PKG_CFLAGS "${PKG_CFLAGS} ${_def}")
+endforeach()
+configure_file(libiris.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libiris${IRIS_SUFFIX}.pc @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libiris${IRIS_SUFFIX}.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig COMPONENT development)
+
 install(TARGETS iris LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(FILES ${IRIS_SOURCE_DIR}/config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/iris)
-install(FILES ${IRIS_SOURCE_DIR}/api.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/iris)
+
+foreach (_inc ${IRIS_INCLUDES})
+  install(FILES ${_inc} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/iris)
+endforeach()
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BTYPE)
 message(STATUS "<<< Build configuration >>>
