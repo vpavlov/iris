@@ -50,7 +50,8 @@ namespace ORG_NCSA_IRIS {
 	// API: set the number of dimentions of the domain of the problem
 	// Example: hiris->domain_set_exceptions(3)
 	void domain_set_dimensions(int in_dimensions);
-	void domain_set_box(iris_real in_box_min[3], iris_real in_box_max[3]);
+	void domain_set_box(iris_real x0, iris_real y0, iris_real z0,
+			    iris_real x1, iris_real y1, iris_real z1);
 
 	// API: set preferences about domain decomposition (e.g. 3x4x5 procs)
 	void comm_set_grid_pref(int x, int y, int z);
@@ -60,8 +61,7 @@ namespace ORG_NCSA_IRIS {
 	void apply_conf();
 
 	static void recv_local_boxes(MPI_Comm comm, int iris_comm_size,
-				     iris_real *&out_local_boxes_min,
-				     iris_real *&out_local_boxes_max);
+				     iris_real *&out_local_boxes);
 
     private:
 	void __announce_loc_box_info();

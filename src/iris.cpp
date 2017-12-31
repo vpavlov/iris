@@ -53,9 +53,10 @@ void iris::domain_set_dimensions(int in_dimensions)
     the_domain->set_dimensions(in_dimensions);
 }
 
-void iris::domain_set_box(iris_real in_box_min[3], iris_real in_box_max[3])
+void iris::domain_set_box(iris_real x0, iris_real y0, iris_real z0,
+			  iris_real x1, iris_real y1, iris_real z1)
 {
-    the_domain->set_box(in_box_min, in_box_max);
+    the_domain->set_box(x0, y0, z0, x1, y1, z1);
 }
 
 void iris::comm_set_grid_pref(int x, int y, int z)
@@ -78,58 +79,33 @@ void iris::apply_conf()
 // IRIS procs.
 void iris::__announce_loc_box_info()
 {
-    iris_real *local_boxes_min;
-    iris_real *local_boxes_max;
-    int sz = 3 * the_comm->iris_size;
+    iris_real *local_boxes;
+    int sz = 6 * the_comm->iris_size;
 
     if(the_comm->iris_rank == 0) {
-	memory::create_1d(local_boxes_min, sz);
-	memory::create_1d(local_boxes_max, sz);
+	memory::create_1d(local_boxes, sz);
     }
     
-    MPI_Request req1, req2;
-    MPI_Status status1, status2;
-
-    MPI_Gather(the_domain->loc_box_min, 3, IRIS_REAL,
-	       local_boxes_min, 3, IRIS_REAL,
+    MPI_Gather(the_domain->lbox_sides, 6, IRIS_REAL,
+	       local_boxes, 6, IRIS_REAL,
 	       0, the_comm->iris_comm);
 
     if(the_comm->iris_rank == 0) {
-	MPI_Isend(local_boxes_min, sz, IRIS_REAL, the_comm->sim_master,
-		  IRIS_TAG_LOCAL_BOXES_MIN,
-		  the_comm->uber_comm, &req1);
-    }
-	      
-    MPI_Gather(the_domain->loc_box_max, 3, IRIS_REAL,
-	       local_boxes_max, 3, IRIS_REAL,
-	       0, the_comm->iris_comm);
-
-    if(the_comm->iris_rank == 0) {
-	MPI_Isend(local_boxes_max, sz, IRIS_REAL, the_comm->sim_master,
-		  IRIS_TAG_LOCAL_BOXES_MAX,
-		  the_comm->uber_comm, &req2);
+	MPI_Send(local_boxes, sz, IRIS_REAL, the_comm->sim_master,
+		 IRIS_TAG_LOCAL_BOXES,
+		 the_comm->uber_comm);
+	memory::destroy_1d(local_boxes);
     }
 
-    if(the_comm->iris_rank == 0) {
-	MPI_Wait(&req1, &status1);
-	memory::destroy_1d(local_boxes_min);
-
-	MPI_Wait(&req2, &status2);
-	memory::destroy_1d(local_boxes_max);
-    }
 }
 
 // This must be called from simulation master only.
 // Paired to the Isends in __announce_local_boxes
 void iris::recv_local_boxes(MPI_Comm comm, int iris_comm_size,
-			    iris_real *&out_local_boxes_min,
-			    iris_real *&out_local_boxes_max)
+			    iris_real *&out_local_boxes)
 {
-    int sz = iris_comm_size * 3;
-    memory::create_1d(out_local_boxes_min, sz);
-    memory::create_1d(out_local_boxes_max, sz);
-    MPI_Recv(out_local_boxes_min, sz, IRIS_REAL, MPI_ANY_SOURCE,
-	     IRIS_TAG_LOCAL_BOXES_MIN, comm, MPI_STATUS_IGNORE);
-    MPI_Recv(out_local_boxes_max, sz, IRIS_REAL, MPI_ANY_SOURCE,
-	     IRIS_TAG_LOCAL_BOXES_MAX, comm, MPI_STATUS_IGNORE);
+    int sz = 6 * iris_comm_size;
+    memory::create_1d(out_local_boxes, sz);
+    MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
+	     IRIS_TAG_LOCAL_BOXES, comm, MPI_STATUS_IGNORE);
 }

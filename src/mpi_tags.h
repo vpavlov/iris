@@ -30,7 +30,6 @@
 #ifndef __IRIS_MPI_TAGS_H__
 #define __IRIS_MPI_TAGS_H__
 
-#define IRIS_TAG_LOCAL_BOXES_MIN  0
-#define IRIS_TAG_LOCAL_BOXES_MAX  1
+#define IRIS_TAG_LOCAL_BOXES  0
 
 #endif

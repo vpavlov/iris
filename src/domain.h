@@ -41,22 +41,33 @@ namespace ORG_NCSA_IRIS {
 	~domain();
 
 	void set_dimensions(int in_dim);
-	void set_box(iris_real in_box_min[3], iris_real in_box_max[3]);
+	void set_box(iris_real x0, iris_real y0, iris_real z0,
+		     iris_real x1, iris_real y1, iris_real z1);
 
 	void setup_local_box();
 
     public:
 	int  dimensions;  // # of dimensions of the domain, default 3
 
-	// global box
-	iris_real box_min[3];  // left/bottom/front corner of computational box
-	iris_real box_max[3];  // right/top/back corner of the computational box
-	iris_real box_size[3]; // min - max in every dimention
+	// Global and local cartesian boxes are described by the 6 coordinates
+	// of each of the sides (which are parallel to the coordinate axis)
+	//
+	// box_sides[0][0] - x coord of left side
+	// box_sides[0][1] - y coord of bottom side
+	// box_sides[0][2] - z coord of front side
+	// box_sides[1][0] - x coord of right side
+	// box_sides[1][1] - y coord of top side
+	// box_sides[1][2] - z coord of back side
+	//
+	// Another way to put it:
+	// box_sides[0] are the coordinates of the left/bottom/front corner;
+	// box_sides[1] are the coordinates of the right/top/back corner;
+	//
+	iris_real box_sides[2][3];
+	iris_real box_size[3];  // size in every direction
 
-	// local box (sub-domain for which this proc is responsicle)
-	iris_real loc_box_min[3];
-	iris_real loc_box_max[3];
-	iris_real loc_box_size[3];
+	iris_real lbox_sides[2][3];
+	iris_real lbox_size[3];
     };
 }
 #endif

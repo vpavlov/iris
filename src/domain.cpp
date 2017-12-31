@@ -36,11 +36,8 @@ using namespace ORG_NCSA_IRIS;
 
 domain::domain(iris *obj) : global_state(obj)
 {
-    iris_real default_box_min[] = {0.0, 0.0, 0.0};
-    iris_real default_box_max[] = {1.0, 1.0, 1.0};
-
     dimensions = 3;
-    this->set_box(default_box_min, default_box_max);
+    this->set_box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 }
 
 domain::~domain()
@@ -56,26 +53,25 @@ void domain::set_dimensions(int in_dimensions)
     dimensions = in_dimensions;
 }
 
-void domain::set_box(iris_real in_box_min[3], iris_real in_box_max[3])
+void domain::set_box(iris_real x0, iris_real y0, iris_real z0,
+		     iris_real x1, iris_real y1, iris_real z1)
 {
-    if(in_box_min[0] >= in_box_max[0] ||
-       in_box_min[1] >= in_box_max[1] ||
-       in_box_min[2] >= in_box_max[2])
+    if(x0 >= x1 || y0 >= y1 || z0 >= z1)
     {
 	throw std::domain_error("Invalid bounding box!");
     }
 
-    box_min[0] = in_box_min[0];
-    box_min[1] = in_box_min[1];
-    box_min[2] = in_box_min[2];
+    box_sides[0][0] = x0;
+    box_sides[0][1] = y0;
+    box_sides[0][2] = z0;
 
-    box_max[0] = in_box_max[0];
-    box_max[1] = in_box_max[1];
-    box_max[2] = in_box_max[2];
+    box_sides[1][0] = x1;
+    box_sides[1][1] = y1;
+    box_sides[1][2] = z1;
 
-    box_size[0] = box_max[0] - box_min[0];
-    box_size[1] = box_max[1] - box_min[1];
-    box_size[2] = box_max[2] - box_min[2];
+    box_size[0] = box_sides[1][0] - box_sides[0][0];
+    box_size[1] = box_sides[1][1] - box_sides[0][1];
+    box_size[2] = box_sides[1][2] - box_sides[0][2];
 }
 
 void domain::setup_local_box()
@@ -83,27 +79,31 @@ void domain::setup_local_box()
     iris_real *xsplit = the_comm->xsplit;
     iris_real *ysplit = the_comm->ysplit;
     iris_real *zsplit = the_comm->zsplit;
-    int *coords = the_comm->grid_coords;
+    int *c = the_comm->grid_coords;
     int *size = the_comm->grid_size;
 
-    loc_box_min[0] = box_min[0] + box_size[0] * xsplit[coords[0]];
-    if(coords[0] < size[0] - 1) {
-	loc_box_max[0] = box_min[0] + box_size[0] * xsplit[coords[0] + 1];
+    lbox_sides[0][0] = box_sides[0][0] + box_size[0] * xsplit[c[0]];
+    if(c[0] < size[0] - 1) {
+	lbox_sides[1][0] = box_sides[0][0] + box_size[0] * xsplit[c[0] + 1];
     }else {
-	loc_box_max[0] = box_max[0];
+	lbox_sides[1][0] = box_sides[1][0];
     }
 
-    loc_box_min[1] = box_min[1] + box_size[1] * ysplit[coords[1]];
-    if(coords[1] < size[1] - 1) {
-	loc_box_max[1] = box_min[1] + box_size[1] * ysplit[coords[1] + 1];
+    lbox_sides[0][1] = box_sides[0][1] + box_size[1] * ysplit[c[1]];
+    if(c[1] < size[1] - 1) {
+	lbox_sides[1][1] = box_sides[0][1] + box_size[1] * ysplit[c[1] + 1];
     }else {
-	loc_box_max[1] = box_max[1];
+	lbox_sides[1][1] = box_sides[1][1];
     }
 
-    loc_box_min[2] = box_min[2] + box_size[2] * zsplit[coords[2]];
-    if(coords[2] < size[2] - 1) {
-	loc_box_max[2] = box_min[2] + box_size[2] * zsplit[coords[2] + 1];
+    lbox_sides[0][2] = box_sides[0][2] + box_size[2] * zsplit[c[2]];
+    if(c[2] < size[2] - 1) {
+	lbox_sides[1][2] = box_sides[0][2] + box_size[2] * zsplit[c[2] + 1];
     }else {
-	loc_box_max[2] = box_max[2];
+	lbox_sides[1][2] = box_sides[1][2];
     }
+
+    lbox_size[0] = lbox_sides[1][0] - lbox_sides[0][0];
+    lbox_size[1] = lbox_sides[1][1] - lbox_sides[0][1];
+    lbox_size[2] = lbox_sides[1][2] - lbox_sides[0][2];
 }
