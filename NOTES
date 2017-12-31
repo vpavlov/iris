@@ -53,3 +53,12 @@ communicators:
  iris_comm - part of uber_comm dedicated to IRIS
 
 iris_master_node
+
+ATOMS:
+------
+
+double **x     x[i][0] is x coord of atom i
+               x[i][1] is y coord of atom i
+               x[i][2] is z coord of atom i
+
+double *q      q[i] is the charge of atom i

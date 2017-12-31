@@ -99,13 +99,75 @@ void iris::__announce_loc_box_info()
 
 }
 
-// This must be called from simulation master only.
+// Receive IRIS local boxes in all procs in pp_comm
 // Paired to the Isends in __announce_local_boxes
-void iris::recv_local_boxes(MPI_Comm comm, int iris_comm_size,
+// iris_comm_size: the size of the dedicated IRIS communicator (# of boxes)
+// rank: this proc rank (in uber comm)
+// pp_master: the proc rank (in uber_comm) that will receive the data from IRIS
+// uber_comm: usually MPI_COMM_WORLD
+// pp_comm: communicator for PP procs only (receivers of the data)
+// out_local_boxes: the result
+// 
+// Paired to the send in __announce_local_boxes
+void iris::recv_local_boxes(int iris_comm_size,
+			    int rank,
+			    int pp_master,
+			    MPI_Comm uber_comm, 
+			    MPI_Comm pp_comm,
 			    iris_real *&out_local_boxes)
 {
     int sz = 6 * iris_comm_size;
     memory::create_1d(out_local_boxes, sz);
-    MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
-	     IRIS_TAG_LOCAL_BOXES, comm, MPI_STATUS_IGNORE);
+
+    if(rank == pp_master) {
+	MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
+		 IRIS_TAG_LOCAL_BOXES, uber_comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Bcast(out_local_boxes, sz, IRIS_REAL, pp_master, pp_comm);
+}
+
+void iris::recv_atoms()
+{
+    MPI_Status status;
+
+    while(42) { // will break from within the loop
+	MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, the_comm->uber_comm, &status);
+
+	if(status.MPI_TAG == IRIS_TAG_ATOMS) {
+	    int msg_size;
+	    int natoms;
+	    MPI_Get_count(&status, IRIS_REAL, &msg_size);
+	    if(msg_size % 4 != 0) {
+		throw std::length_error("Unexpected message size while receiving atoms!");
+	    }
+
+	    natoms = msg_size / 4;
+	    iris_real **atoms;
+	    if(natoms != 0) {
+		memory::create_2d(atoms, natoms, 4);
+		MPI_Recv(&(atoms[0][0]), msg_size, IRIS_REAL, 
+			 status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
+			 MPI_STATUS_IGNORE);
+		printf("%d: Received %d atoms from %d\n",
+		       the_comm->uber_rank, natoms, status.MPI_SOURCE);
+		memory::destroy_2d(atoms);
+	    }else {
+		printf("%d: Received 0 atoms from %d\n",
+		       the_comm->uber_rank, status.MPI_SOURCE);
+		MPI_Recv(NULL, msg_size, IRIS_REAL,
+			 status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
+			 MPI_STATUS_IGNORE);
+	    }
+	}else if(status.MPI_TAG == IRIS_TAG_ATOMS_EOF) {
+	    int dummy;
+	    MPI_Recv(&dummy, 1, MPI_INT,
+		     status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
+		     MPI_STATUS_IGNORE);
+	    break;
+	}else {
+	    throw std::logic_error("Unexpected MPI message while receiving atoms!");
+	
+	}
+    }
 }

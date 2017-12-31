@@ -60,7 +60,14 @@ namespace ORG_NCSA_IRIS {
 	// apply the configuration and prepare for the actual calculations
 	void apply_conf();
 
-	static void recv_local_boxes(MPI_Comm comm, int iris_comm_size,
+	// API: call this to make IRIS receive the atom coords and charges
+	void recv_atoms();
+
+	static void recv_local_boxes(int iris_comm_size,
+				     int rank,
+				     int pp_master,
+				     MPI_Comm uber_comm, 
+				     MPI_Comm pp_comm,
 				     iris_real *&out_local_boxes);
 
     private:
@@ -69,6 +76,11 @@ namespace ORG_NCSA_IRIS {
     public:
 	class domain *the_domain;  // Domain of the simulation (box, etc.)
 	class comm *the_comm;      // MPI Comm related stuff
+
+	// key in atoms: rank (in uber_comm) of the process that sent this
+	// batch. We need to return forces, etc. to the same process
+	std::map<int, double **> atoms_x;  // atom coords local to this proc
+	std::map<int, double *> atoms_q;   // atom charges local to this proc
     };
 }
 #endif

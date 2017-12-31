@@ -30,6 +30,8 @@
 #ifndef __IRIS_MPI_TAGS_H__
 #define __IRIS_MPI_TAGS_H__
 
-#define IRIS_TAG_LOCAL_BOXES  0
+#define IRIS_TAG_LOCAL_BOXES  1
+#define IRIS_TAG_ATOMS        2
+#define IRIS_TAG_ATOMS_EOF    3
 
 #endif
