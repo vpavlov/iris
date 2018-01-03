@@ -31,6 +31,7 @@
 #include "domain.h"
 #include "iris.h"
 #include "comm.h"
+#include "mesh.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -38,6 +39,13 @@ domain::domain(iris *obj) : global_state(obj)
 {
     dimensions = 3;
     this->set_box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+
+    for(int j=0;j<3;j++) {
+	for(int i=0;i<2;i++) {
+	    lbox_sides[i][j] = box_sides[i][j];
+	}
+	lbox_size[j] = box_size[j];
+    }
 }
 
 domain::~domain()
@@ -72,9 +80,13 @@ void domain::set_box(iris_real x0, iris_real y0, iris_real z0,
     box_size[0] = box_sides[1][0] - box_sides[0][0];
     box_size[1] = box_sides[1][1] - box_sides[0][1];
     box_size[2] = box_sides[1][2] - box_sides[0][2];
+
+    if(the_mesh != NULL) {
+	the_mesh->box_changed();
+    }
 }
 
-void domain::setup_local_box()
+void domain::setup_local()
 {
     iris_real *xsplit = the_comm->xsplit;
     iris_real *ysplit = the_comm->ysplit;

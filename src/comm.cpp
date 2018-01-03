@@ -33,6 +33,7 @@
 #include "iris.h"
 #include "domain.h"
 #include "memory.h"
+#include "mesh.h"
 
 using namespace ORG_NCSA_IRIS;
 using namespace std;
@@ -159,40 +160,29 @@ int **comm::__all_grid_factorizations_of(int n, int *count)
     return retval;
 }
 
-int comm::__filter_factors_for_1d(int n, int **factors)
-{
-    for(int i=0;i<n;i++) {
-	if(factors[i][2] != 1 && factors[i][1] != 1) {
-	    for(int j = 0; j < 3; j++) {
-		factors[i][j] = factors[n-1][j];
-	    }
-	    n--;
-	    i--;
-	}
-    }
-    return n;
-}
-
-int comm::__filter_factors_for_2d(int n, int **factors)
-{
-    for(int i=0;i<n;i++) {
-	if(factors[i][2] != 1) {
-	    for(int j = 0; j < 3; j++) {
-		factors[i][j] = factors[n-1][j];
-	    }
-	    n--;
-	    i--;
-	}
-    }
-    return n;
-}
-
 int comm::__filter_factors_per_pref(int n, int **factors)
 {
     for(int i=0;i<n;i++) {
 	if((grid_pref[0] != 0 && factors[i][0] != grid_pref[0]) ||
 	   (grid_pref[1] != 0 && factors[i][1] != grid_pref[1]) ||
 	   (grid_pref[2] != 0 && factors[i][2] != grid_pref[2]))
+	{
+	    for(int j = 0; j < 3; j++) {
+		factors[i][j] = factors[n-1][j];
+	    }
+	    n--;
+	    i--;
+	}
+    }
+    return n;
+}
+
+int comm::__filter_factors_per_mesh(int n, int **factors)
+{
+    for(int i=0;i<n;i++) {
+	if(the_mesh->size[0] % factors[i][0] ||
+	   the_mesh->size[1] % factors[i][1] ||
+	   the_mesh->size[2] % factors[i][2])
 	{
 	    for(int j = 0; j < 3; j++) {
 		factors[i][j] = factors[n-1][j];
@@ -254,14 +244,8 @@ void comm::__select_grid_size()
     int num_factors;
     int **factors = __all_grid_factorizations_of(iris_size, &num_factors);
 
-    if(the_domain->dimensions == 2) {
-	num_factors = __filter_factors_for_2d(num_factors, factors);
-    }else if(the_domain->dimensions == 1) {
-	num_factors = __filter_factors_for_1d(num_factors, factors);
-    }
-
+    num_factors = __filter_factors_per_mesh(num_factors, factors);
     num_factors = __filter_factors_per_pref(num_factors, factors);
-
     if(num_factors == 0) {
 	throw domain_error("Impossible grid processor assignment!");
     }
@@ -286,11 +270,63 @@ void comm::__setup_grid_details()
     // process inside the grid (e.g. this proc is 3,1,0)
     MPI_Cart_get(cart_comm, 3, grid_size, periods, grid_coords);
 
-    // Fill in process neighbourhood -- the ranks of the neighbours in each
-    // direction.
-    MPI_Cart_shift(cart_comm, 0, 1, &grid_hood[0][0], &grid_hood[0][1]);
-    MPI_Cart_shift(cart_comm, 1, 1, &grid_hood[1][0], &grid_hood[1][1]);
-    MPI_Cart_shift(cart_comm, 2, 1, &grid_hood[2][0], &grid_hood[2][1]);
+    // Now, fill the process neighbourhood (me + all 26 surrounding procs)
+    for(int i=0;i<27;i++) {
+	int coords[3];
+	int q1 = i % 3;
+	int r1 = i / 3;
+	switch(q1) {
+	case 0:
+	    coords[0] = grid_coords[0];
+	    break;
+
+	case 1:
+	    coords[0] = grid_coords[0] - 1;
+	    if(coords[0] < 0) coords[0] += grid_size[0];
+	    break;
+
+	case 2:
+	    coords[0] = (grid_coords[0] + 1) % grid_size[0];
+	    break;
+	}
+
+	int q2 = r1 % 3;
+	int r2 = r1 / 3;
+	switch(q2) {
+	case 0:
+	    coords[1] = grid_coords[1];
+	    break;
+
+	case 1:
+	    coords[1] = grid_coords[1] - 1;
+	    if(coords[1] < 0) coords[1] += grid_size[1];
+	    break;
+
+	case 2:
+	    coords[1] = (grid_coords[1] + 1) % grid_size[1];
+	    break;
+	}
+
+	int q3 = r2 % 3;
+	switch(q3) {
+	case 0:
+	    coords[2] = grid_coords[2];
+	    break;
+
+	case 1:
+	    coords[2] = grid_coords[2] - 1;
+	    if(coords[2] < 0) coords[2] += grid_size[2];
+	    break;
+
+	case 2:
+	    coords[2] = (grid_coords[2] + 1) % grid_size[2];
+	    break;
+	}
+
+	int irank;
+	MPI_Cart_rank(cart_comm, coords, &irank);
+	grid_hood[i] = irank;
+    }
 
     memory::destroy_3d(grid_rank);
     memory::create_3d(grid_rank, grid_size[0], grid_size[1], grid_size[2]);

@@ -53,6 +53,8 @@ namespace ORG_NCSA_IRIS {
 	void domain_set_box(iris_real x0, iris_real y0, iris_real z0,
 			    iris_real x1, iris_real y1, iris_real z1);
 
+	void mesh_set_size(int nx, int ny, int nz);
+
 	// API: set preferences about domain decomposition (e.g. 3x4x5 procs)
 	void comm_set_grid_pref(int x, int y, int z);
 
@@ -76,6 +78,7 @@ namespace ORG_NCSA_IRIS {
     public:
 	class domain *the_domain;  // Domain of the simulation (box, etc.)
 	class comm *the_comm;      // MPI Comm related stuff
+	class mesh *the_mesh;      // Computational mesh
 
 	// key in atoms: rank (in uber_comm) of the process that sent this
 	// batch. We need to return forces, etc. to the same process

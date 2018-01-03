@@ -9,6 +9,8 @@
 #include <iris/utils.h>
 #include <iris/mpi_tags.h>
 
+#define NSTEPS 1
+
 using namespace ORG_NCSA_IRIS;
 
 char **split(char *line, int max)
@@ -123,6 +125,7 @@ void __send_atoms(MPI_Comm mycomm, int rank,
 {
     iris_real ***scratch;
     size_t *counts;
+
     memory::create_3d(scratch, nboxes, natoms, 4);
     memory::create_1d(counts, nboxes);
 
@@ -149,10 +152,10 @@ void __send_atoms(MPI_Comm mycomm, int rank,
 	       y >= y0 && y < y1 &&
 	       z >= z0 && z < z1)
 	    {
-		scratch[j][i][0] = x;
-		scratch[j][i][1] = y;
-		scratch[j][i][2] = z;
-		scratch[j][i][3] = q;
+		scratch[j][counts[j]][0] = x;
+		scratch[j][counts[j]][1] = y;
+		scratch[j][counts[j]][2] = z;
+		scratch[j][counts[j]][3] = q;
 		counts[j]++;
 		break;
 	    }
@@ -208,8 +211,14 @@ main(int argc, char **argv)
 	iris *x = new iris(MPI_COMM_WORLD, mycomm, 0);
 	x->domain_set_box(-50.39064, -50.39064, -50.39064,
 			   50.39064,  50.39064,  50.39064);
+	x->mesh_set_size(128, 128, 128);
 	x->apply_conf();
-	x->recv_atoms();
+
+	// timesteps
+	for(int i=0;i<NSTEPS;i++) {
+	    x->recv_atoms();
+	}
+
 	delete x;
     }else {
 	// PP nodes
@@ -222,7 +231,9 @@ main(int argc, char **argv)
 	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, mycomm,
 			       local_boxes);
 
-	__send_atoms(mycomm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);
+	for(int i=0;i<NSTEPS;i++) {
+	    __send_atoms(mycomm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);  // this is to be done for every timestep
+	}
 
 	memory::destroy_2d(my_x);
 	memory::destroy_1d(my_q);

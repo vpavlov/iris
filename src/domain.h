@@ -43,8 +43,7 @@ namespace ORG_NCSA_IRIS {
 	void set_dimensions(int in_dim);
 	void set_box(iris_real x0, iris_real y0, iris_real z0,
 		     iris_real x1, iris_real y1, iris_real z1);
-
-	void setup_local_box();
+	void setup_local();
 
     public:
 	int  dimensions;  // # of dimensions of the domain, default 3

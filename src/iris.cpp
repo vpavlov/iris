@@ -28,18 +28,22 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <mpi.h>
+#include <omp.h>
 #include "iris.h"
 #include "domain.h"
 #include "comm.h"
 #include "mpi_tags.h"
 #include "memory.h"
+#include "mesh.h"
 
 using namespace ORG_NCSA_IRIS;
 
 iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
 {
+    the_mesh = NULL;  // to prevent domain from notifying the mesh for box changed
     the_comm = new comm(this, uber_comm, iris_comm, sim_master);
     the_domain = new domain(this);
+    the_mesh = new mesh(this);
 }
 
 iris::~iris()
@@ -69,7 +73,8 @@ void iris::comm_set_grid_pref(int x, int y, int z)
 void iris::apply_conf()
 {
     the_comm->setup_grid();
-    the_domain->setup_local_box();
+    the_domain->setup_local();
+    the_mesh->setup_local();
     __announce_loc_box_info();
 }
 
@@ -131,43 +136,65 @@ void iris::recv_atoms()
 {
     MPI_Status status;
 
-    while(42) { // will break from within the loop
-	MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, the_comm->uber_comm, &status);
-
-	if(status.MPI_TAG == IRIS_TAG_ATOMS) {
-	    int msg_size;
-	    int natoms;
-	    MPI_Get_count(&status, IRIS_REAL, &msg_size);
-	    if(msg_size % 4 != 0) {
-		throw std::length_error("Unexpected message size while receiving atoms!");
+#pragma omp parallel
+    {
+#pragma omp single
+	{
+	    while(42) { // will break from within the loop
+		MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG,
+			  the_comm->uber_comm, &status);
+		if(status.MPI_TAG == IRIS_TAG_ATOMS) {
+		    int msg_size;
+		    int natoms;
+		    MPI_Get_count(&status, IRIS_REAL, &msg_size);
+		    if(msg_size % 4 != 0) {
+			throw std::length_error("Unexpected message size while receiving atoms!");
+		    }
+		    
+		    natoms = msg_size / 4;
+		    if(natoms != 0) {
+			int src = status.MPI_SOURCE;
+			iris_real **atoms;
+			memory::create_2d(atoms, natoms, 4);
+			MPI_Recv(&(atoms[0][0]), msg_size, IRIS_REAL, 
+				 status.MPI_SOURCE, status.MPI_TAG,
+				 the_comm->uber_comm,
+				 MPI_STATUS_IGNORE);
+#pragma omp task firstprivate(atoms, natoms, src)
+			{
+			    printf("%d[%d]: Received %d atoms from %d\n",
+			           the_comm->uber_rank, omp_get_thread_num(), natoms, src);
+			    the_mesh->assign_charges(atoms, natoms);
+			    printf("%d[%d]: charge assignment done\n",
+				   the_comm->uber_rank, omp_get_thread_num());
+			    memory::destroy_2d(atoms);
+			}
+		    }else {
+			// printf("%d: Received 0 atoms from %d\n",
+			//        the_comm->uber_rank, status.MPI_SOURCE);
+			MPI_Recv(NULL, msg_size, IRIS_REAL,
+				 status.MPI_SOURCE, status.MPI_TAG,
+				 the_comm->uber_comm,
+				 MPI_STATUS_IGNORE);
+		    }
+		}else if(status.MPI_TAG == IRIS_TAG_ATOMS_EOF) {
+		    int dummy;
+		    MPI_Recv(&dummy, 1, MPI_INT,
+			     status.MPI_SOURCE, status.MPI_TAG,
+			     the_comm->uber_comm,
+			     MPI_STATUS_IGNORE);
+		    break;
+		}else {
+		    throw std::logic_error("Unexpected MPI message while receiving atoms!");
+		    
+		}
 	    }
-
-	    natoms = msg_size / 4;
-	    iris_real **atoms;
-	    if(natoms != 0) {
-		memory::create_2d(atoms, natoms, 4);
-		MPI_Recv(&(atoms[0][0]), msg_size, IRIS_REAL, 
-			 status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
-			 MPI_STATUS_IGNORE);
-		printf("%d: Received %d atoms from %d\n",
-		       the_comm->uber_rank, natoms, status.MPI_SOURCE);
-		memory::destroy_2d(atoms);
-	    }else {
-		printf("%d: Received 0 atoms from %d\n",
-		       the_comm->uber_rank, status.MPI_SOURCE);
-		MPI_Recv(NULL, msg_size, IRIS_REAL,
-			 status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
-			 MPI_STATUS_IGNORE);
-	    }
-	}else if(status.MPI_TAG == IRIS_TAG_ATOMS_EOF) {
-	    int dummy;
-	    MPI_Recv(&dummy, 1, MPI_INT,
-		     status.MPI_SOURCE, status.MPI_TAG, the_comm->uber_comm,
-		     MPI_STATUS_IGNORE);
-	    break;
-	}else {
-	    throw std::logic_error("Unexpected MPI message while receiving atoms!");
-	
 	}
     }
+    the_mesh->dump_rho("NaCl-rho-2");
+}
+
+void iris::mesh_set_size(int nx, int ny, int nz)
+{
+    the_mesh->set_size(nx, ny, nz);
 }

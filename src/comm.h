@@ -50,9 +50,8 @@ namespace ORG_NCSA_IRIS {
 	static void __next_fcomb(int fcnt, int *factors, int *powers,
 				 int tx, int ty, int tz,
 				 int **output, int *out_count);
-	static int __filter_factors_for_1d(int n, int **factors);
-	static int __filter_factors_for_2d(int n, int **factors);
 	int __filter_factors_per_pref(int n, int **factors);
+	int __filter_factors_per_mesh(int n, int **factors);
 	int __select_best_factor(int n, int **factors, int *out_best);
 	void __select_grid_size();
 	void __setup_grid_details();
@@ -73,7 +72,7 @@ namespace ORG_NCSA_IRIS {
 	int grid_pref[3];     // User preference about procs in each dir
 	int grid_size[3];     // MxNxK procs in each direction
 	int grid_coords[3];   // This process' coords in the grid
-	int grid_hood[3][2];  // Ranks of this process' neighbours
+	int grid_hood[27];    // Ranks of this process' neighbours (0 - me; 1 - left, 2 - right, 3 - bottom...)
 	int ***grid_rank;     // = rank of the proc at [i][j][k] point in grid
 	iris_real *xsplit;    // M ranges (rel 0 - 1) for each proc in X dir
 	iris_real *ysplit;    // N ranges (rel 0 - 1) for each proc in Y dir
