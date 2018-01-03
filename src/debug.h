@@ -27,11 +27,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MPI_TAGS_H__
-#define __IRIS_MPI_TAGS_H__
+#ifndef __IRIS_DEBUG_H__
+#define __IRIS_DEBUG_H__
 
-#define IRIS_TAG_LOCAL_BOXES  1
-#define IRIS_TAG_ATOMS        2
-#define IRIS_TAG_ATOMS_EOF    3
+#include "global_state.h"
+
+namespace ORG_NCSA_IRIS {
+
+    class debug : protected global_state {
+
+    public:
+
+	debug(class iris *obj);
+	~debug();
+
+	void trace(const char *str, ...);
+
+    };
+
+}
 
 #endif

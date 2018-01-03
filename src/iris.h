@@ -62,8 +62,9 @@ namespace ORG_NCSA_IRIS {
 	// apply the configuration and prepare for the actual calculations
 	void apply_conf();
 
-	// API: call this to make IRIS receive the atom coords and charges
-	void recv_atoms();
+	void run();
+
+	struct event_t poke_event(bool &out_has_event);
 
 	static void recv_local_boxes(int iris_comm_size,
 				     int rank,
@@ -75,15 +76,27 @@ namespace ORG_NCSA_IRIS {
     private:
 	void __announce_loc_box_info();
 
+
     public:
 	class domain *the_domain;  // Domain of the simulation (box, etc.)
 	class comm *the_comm;      // MPI Comm related stuff
 	class mesh *the_mesh;      // Computational mesh
+	class debug *the_debug;    // Debug helper
+
 
 	// key in atoms: rank (in uber_comm) of the process that sent this
 	// batch. We need to return forces, etc. to the same process
 	std::map<int, double **> atoms_x;  // atom coords local to this proc
 	std::map<int, double *> atoms_q;   // atom charges local to this proc
+
+    private:
+	// event handlers
+	bool __quit_event_loop;  // when to break the event loop
+	std::map<int, void (iris::*)(event_t)> __event_handlers;
+	void __handle_event(event_t event);
+	void __handle_atoms(event_t event);
+	void __handle_atoms_eof(event_t event);
+	void __handle_unimplemented(event_t event);
     };
 }
 #endif

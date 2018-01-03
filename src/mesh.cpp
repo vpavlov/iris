@@ -34,6 +34,7 @@
 #include "comm.h"
 #include "memory.h"
 #include "domain.h"
+#include "debug.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -206,14 +207,14 @@ void mesh::__compute_ca_coeff(iris_real dx, iris_real dy, iris_real dz)
     }
 }
 
-void mesh::assign_charges(iris_real **atoms, int natoms)
+void mesh::assign_charges(iris_real *atoms, int natoms)
 {
     std::map<int, std::map<std::tuple<int, int, int>, iris_real>> outer;
 
     for(int i=0;i<natoms;i++) {
-	iris_real tx = (atoms[i][0] - the_domain->lbox_sides[0][0]) * hinv[0];
-	iris_real ty = (atoms[i][1] - the_domain->lbox_sides[0][1]) * hinv[1];
-	iris_real tz = (atoms[i][2] - the_domain->lbox_sides[0][2]) * hinv[2];
+	iris_real tx = (atoms[i*4 + 0] - the_domain->lbox_sides[0][0]) * hinv[0];
+	iris_real ty = (atoms[i*4 + 1] - the_domain->lbox_sides[0][1]) * hinv[1];
+	iris_real tz = (atoms[i*4 + 2] - the_domain->lbox_sides[0][2]) * hinv[2];
 
 	// the number of the cell that is to the "left" of the atom
 	int nx = (int) (tx + __center);
@@ -232,7 +233,7 @@ void mesh::assign_charges(iris_real **atoms, int natoms)
 
 	__compute_ca_coeff(dx, dy, dz);
 
-	iris_real t0 = hinv3 * atoms[i][3];  // charge/volume
+	iris_real t0 = hinv3 * atoms[i*4 + 3];  // charge/volume
 	for(int x = 0; x < order; x++) {
 	    iris_real t1 = t0 * __ca_coeff[0][x];
 	    for(int y = 0; y < order; y++) {
@@ -289,13 +290,13 @@ void mesh::assign_charges(iris_real **atoms, int natoms)
     // send out halo elements
     for(auto it = outer.begin(); it != outer.end(); it++) {
     	for(auto it2 = it->second.begin(); it2 != it->second.end(); it2++) {
-    	    printf("%d -> %d[%d %d %d]: %g\n",
-		   the_comm->iris_rank,
-    		   it->first,
-    		   std::get<0>(it2->first),
-    		   std::get<1>(it2->first),
-    		   std::get<2>(it2->first),
-    		   it2->second);
+    	    // printf("%d -> %d[%d %d %d]: %g\n",
+	    // 	   the_comm->iris_rank,
+    	    // 	   it->first,
+    	    // 	   std::get<0>(it2->first),
+    	    // 	   std::get<1>(it2->first),
+    	    // 	   std::get<2>(it2->first),
+    	    // 	   it2->second);
     	}
     }
 }

@@ -27,29 +27,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <unistd.h>
 #include <mpi.h>
 #include <omp.h>
 #include "iris.h"
 #include "domain.h"
 #include "comm.h"
-#include "mpi_tags.h"
+#include "event_codes.h"
 #include "memory.h"
 #include "mesh.h"
+#include "event.h"
+#include "debug.h"
 
 using namespace ORG_NCSA_IRIS;
 
 iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
 {
     the_mesh = NULL;  // to prevent domain from notifying the mesh for box changed
+    the_debug = new debug(this);
     the_comm = new comm(this, uber_comm, iris_comm, sim_master);
     the_domain = new domain(this);
     the_mesh = new mesh(this);
+
+    __event_handlers[IRIS_EVENT_ATOMS] = &iris::__handle_atoms;
+    __event_handlers[IRIS_EVENT_ATOMS_EOF] = &iris::__handle_atoms_eof;
 }
 
 iris::~iris()
 {
     delete the_comm;
     delete the_domain;
+    delete the_mesh;
+    delete the_debug;
 }
 
 void iris::domain_set_dimensions(int in_dimensions)
@@ -66,6 +75,11 @@ void iris::domain_set_box(iris_real x0, iris_real y0, iris_real z0,
 void iris::comm_set_grid_pref(int x, int y, int z)
 {
     the_comm->set_grid_pref(x, y, z);
+}
+
+void iris::mesh_set_size(int nx, int ny, int nz)
+{
+    the_mesh->set_size(nx, ny, nz);
 }
 
 // call this after all user-configuration is set so we can calculate whatever
@@ -97,7 +111,7 @@ void iris::__announce_loc_box_info()
 
     if(the_comm->iris_rank == 0) {
 	MPI_Send(local_boxes, sz, IRIS_REAL, the_comm->sim_master,
-		 IRIS_TAG_LOCAL_BOXES,
+		 IRIS_EVENT_LOCAL_BOXES,
 		 the_comm->uber_comm);
 	memory::destroy_1d(local_boxes);
     }
@@ -126,75 +140,99 @@ void iris::recv_local_boxes(int iris_comm_size,
 
     if(rank == pp_master) {
 	MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
-		 IRIS_TAG_LOCAL_BOXES, uber_comm, MPI_STATUS_IGNORE);
+		 IRIS_EVENT_LOCAL_BOXES, uber_comm, MPI_STATUS_IGNORE);
     }
 
     MPI_Bcast(out_local_boxes, sz, IRIS_REAL, pp_master, pp_comm);
 }
 
-void iris::recv_atoms()
+void iris::__handle_atoms(event_t event)
+{
+    int unit = 4 * sizeof(iris_real);
+    int natoms;
+    if(event.size % unit != 0) {
+	throw std::length_error("Unexpected message size while receiving atoms!");
+    }
+    natoms = event.size / unit;
+    if(natoms != 0) {
+	the_debug->trace("Received %d atoms from %d", natoms, event.sender);
+	the_mesh->assign_charges((iris_real *)event.data, natoms);
+	the_debug->trace("Charge assignment done");
+    }
+}
+
+void iris::__handle_atoms_eof(event_t event)
+{
+    the_debug->trace("All atoms received");
+    the_mesh->dump_rho("NaCl-rho-2");
+    __quit_event_loop = true;
+}
+
+void iris::__handle_unimplemented(event_t event)
+{
+    the_debug->trace("Unimplemented event: %d\n", event.code);
+}
+
+typedef void (iris::*event_handler_t)(event_t);
+
+void iris::__handle_event(event_t event)
+{
+    event_handler_t fun = __event_handlers[event.code];
+    if(fun) {
+	(this->*fun)(event);
+    }else {
+	__handle_unimplemented(event);
+    }
+    memory::wfree(event.data);
+}
+
+event_t iris::poke_event(bool &out_has_event)
 {
     MPI_Status status;
+    int nbytes;
+    void *msg;
+    event_t retval;
+    int has_event;
 
+    // block until we receive an MPI message
+    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, the_comm->uber_comm,
+	       &has_event, &status);
+    if(has_event) {
+	MPI_Get_count(&status, MPI_BYTE, &nbytes);
+	msg = memory::wmalloc(nbytes);
+	MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
+		 the_comm->uber_comm, MPI_STATUS_IGNORE);
+	retval.sender = status.MPI_SOURCE;
+	retval.code = status.MPI_TAG;
+	retval.size = nbytes;
+	retval.data = msg;
+	out_has_event = true;
+    }else {
+	out_has_event = false;
+    }
+    return retval;
+}
+
+void iris::run()
+{
 #pragma omp parallel
     {
 #pragma omp single
 	{
-	    while(42) { // will break from within the loop
-		MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG,
-			  the_comm->uber_comm, &status);
-		if(status.MPI_TAG == IRIS_TAG_ATOMS) {
-		    int msg_size;
-		    int natoms;
-		    MPI_Get_count(&status, IRIS_REAL, &msg_size);
-		    if(msg_size % 4 != 0) {
-			throw std::length_error("Unexpected message size while receiving atoms!");
-		    }
-		    
-		    natoms = msg_size / 4;
-		    if(natoms != 0) {
-			int src = status.MPI_SOURCE;
-			iris_real **atoms;
-			memory::create_2d(atoms, natoms, 4);
-			MPI_Recv(&(atoms[0][0]), msg_size, IRIS_REAL, 
-				 status.MPI_SOURCE, status.MPI_TAG,
-				 the_comm->uber_comm,
-				 MPI_STATUS_IGNORE);
-#pragma omp task firstprivate(atoms, natoms, src)
-			{
-			    printf("%d[%d]: Received %d atoms from %d\n",
-			           the_comm->uber_rank, omp_get_thread_num(), natoms, src);
-			    the_mesh->assign_charges(atoms, natoms);
-			    printf("%d[%d]: charge assignment done\n",
-				   the_comm->uber_rank, omp_get_thread_num());
-			    memory::destroy_2d(atoms);
-			}
-		    }else {
-			// printf("%d: Received 0 atoms from %d\n",
-			//        the_comm->uber_rank, status.MPI_SOURCE);
-			MPI_Recv(NULL, msg_size, IRIS_REAL,
-				 status.MPI_SOURCE, status.MPI_TAG,
-				 the_comm->uber_comm,
-				 MPI_STATUS_IGNORE);
-		    }
-		}else if(status.MPI_TAG == IRIS_TAG_ATOMS_EOF) {
-		    int dummy;
-		    MPI_Recv(&dummy, 1, MPI_INT,
-			     status.MPI_SOURCE, status.MPI_TAG,
-			     the_comm->uber_comm,
-			     MPI_STATUS_IGNORE);
-		    break;
+	    __quit_event_loop = false;
+	    while(!__quit_event_loop) {
+		bool has_event;
+		event_t event = poke_event(has_event);
+
+		if(has_event) {
+#pragma omp task default(none) firstprivate(event)
+		    __handle_event(event);
 		}else {
-		    throw std::logic_error("Unexpected MPI message while receiving atoms!");
-		    
+		    usleep(100);  // suspend for some time so others can work
 		}
 	    }
 	}
     }
-    the_mesh->dump_rho("NaCl-rho-2");
 }
 
-void iris::mesh_set_size(int nx, int ny, int nz)
-{
-    the_mesh->set_size(nx, ny, nz);
-}
+

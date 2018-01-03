@@ -27,55 +27,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
-
-#include "global_state.h"
+#ifndef __IRIS_EVENT_H__
+#define __IRIS_EVENT_H__
 
 namespace ORG_NCSA_IRIS {
 
-    class mesh : protected global_state {
-
-    public:
-	mesh(class iris *obj);
-	~mesh();
-
-	void set_size(int nx, int ny, int nz);
-	void set_order(int order);
-	void setup_local();
-	void assign_charges(iris_real *atoms, int natoms);
-
-	void box_changed();  // called by the_domain when the box is changed
-	void dump_rho(char *fname);  // dump right-hand-side to a BOV file
-    private:
-	void __compute_ca_coeff(iris_real dx, iris_real dy, iris_real dz);
-
-    public:
-
-	int order;    // charge assignment/interpolation order (from 2 to 7)
-
-	int size[3];  // global mesh size: MxNxP mesh points in each dir
-	int lsize[3];  // this proc's mesh size: M1xN1xP1 mesh points
-	int loffset[3];  // lower/left/front of local mesh
-	iris_real hinv[3];  // 1/h for each direction
-	iris_real hinv3;    // 1/dV
-	iris_real ***rho;  // values of rho (rhight-hand side) [local]
-
-    private:
-
-	iris_real __center;  // for even orders: 0.5; odd order: 0
-	iris_real __shift1;   // for even orders: 0.0; odd orders: 0.5
-	iris_real **__ca_coeff;  // temporary array to hold charge assignment coefficients
-	iris_real *__rho_coeff;  // pointer to one of the below
-	int __left;              // -(order-1)/2
-	int __right;             // order/2
-
-	static iris_real __2order[2][2];
-	static iris_real __3order[3][3];
-	static iris_real __4order[4][4];
-	static iris_real __5order[5][5];
-	static iris_real __6order[6][6];
-	static iris_real __7order[7][7];
+    struct event_t {
+	int sender;  // MPI_SOURCE (in uber_comm)
+	int code;    // MPI_TAG
+	int size;    // in bytes
+	void *data;  // data allocated with memory::wmalloc
     };
+    
 }
+
 #endif

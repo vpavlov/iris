@@ -41,7 +41,8 @@ namespace ORG_NCSA_IRIS {
 	    the_iris(obj),
 	    the_domain(obj->the_domain),
 	    the_comm(obj->the_comm),
-	    the_mesh(obj->the_mesh)
+	    the_mesh(obj->the_mesh),
+	    the_debug(obj->the_debug)
 	{};
 
 	virtual ~global_state() {};
@@ -51,7 +52,7 @@ namespace ORG_NCSA_IRIS {
 	domain *&the_domain;
 	comm *&the_comm;
 	mesh *&the_mesh;
-	
+	debug *&the_debug;
     };
 
 }

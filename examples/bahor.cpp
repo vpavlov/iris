@@ -7,7 +7,7 @@
 #include <iris/iris.h>
 #include <iris/domain.h>
 #include <iris/utils.h>
-#include <iris/mpi_tags.h>
+#include <iris/event_codes.h>
 
 #define NSTEPS 1
 
@@ -166,7 +166,7 @@ void __send_atoms(MPI_Comm mycomm, int rank,
 
     for(int i=0;i<nboxes;i++) {
 	MPI_Isend(&(scratch[i][0][0]), counts[i] * 4, IRIS_REAL,
-		  i + iris_offset, IRIS_TAG_ATOMS, MPI_COMM_WORLD,
+		  i + iris_offset, IRIS_EVENT_ATOMS, MPI_COMM_WORLD,
 		  &reqs[i]);
     }
 
@@ -180,7 +180,7 @@ void __send_atoms(MPI_Comm mycomm, int rank,
 	int dummy = 0;
 	for(int i=0;i<nboxes;i++) {
 	    MPI_Send(&dummy, 1, MPI_INT,
-		     i + iris_offset, IRIS_TAG_ATOMS_EOF, MPI_COMM_WORLD);
+		     i + iris_offset, IRIS_EVENT_ATOMS_EOF, MPI_COMM_WORLD);
 	}
     }
 
@@ -216,7 +216,7 @@ main(int argc, char **argv)
 
 	// timesteps
 	for(int i=0;i<NSTEPS;i++) {
-	    x->recv_atoms();
+	    x->run();
 	}
 
 	delete x;
