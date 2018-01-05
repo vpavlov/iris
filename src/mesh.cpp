@@ -30,11 +30,14 @@
 #include <stdexcept>
 #include <vector>
 #include <tuple>
+#include "iris.h"
 #include "mesh.h"
 #include "comm.h"
 #include "memory.h"
 #include "domain.h"
 #include "debug.h"
+#include "event_codes.h"
+#include "event.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -82,27 +85,23 @@ mesh::mesh(iris *obj) : global_state(obj)
 {
     __ca_coeff = NULL;
 
-    this->set_order(2);
+    this->set_order(7);
     this->set_size(1, 1, 1);
     for(int i=0;i<3;i++) {
 	lsize[i] = size[i];
 	loffset[i] = 0;
     }
 
-    memory::create_3d(rho, lsize[0], lsize[1], lsize[2]);
-
-    for(int i=0;i<lsize[0];i++) {
-	for(int j=0;j<lsize[1];j++) {
-	    for(int k=0;k<lsize[2];k++) {
-		rho[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
+    rho = NULL;
 }
 
 mesh::~mesh()
 {
-    memory::destroy_3d(rho);
+    if(rho != NULL) {
+	memory::destroy_3d(rho);
+	MPI_Win_free(&rho_win);
+    }
+    outer_rho.clear();
 }
 
 void mesh::set_order(int in_order)
@@ -176,9 +175,15 @@ void mesh::setup_local()
     loffset[1] = c[1] * lsize[1];
     loffset[2] = c[2] * lsize[2];
 
-    memory::destroy_3d(rho);
+    the_debug->trace("Local mesh size is %d x %d x %d starting at [%d, %d, %d]", lsize[0], lsize[1], lsize[2],
+		     loffset[0], loffset[1], loffset[2]);
     memory::create_3d(rho, lsize[0], lsize[1], lsize[2]);
+    MPI_Win_create(&(rho[0][0][0]), lsize[0]*lsize[1]*lsize[2]*sizeof(iris_real), sizeof(iris_real),
+		   MPI_INFO_NULL, the_comm->iris_comm, &rho_win);
+}
 
+void mesh::reset_rho()
+{
     for(int i=0;i<lsize[0];i++) {
 	for(int j=0;j<lsize[1];j++) {
 	    for(int k=0;k<lsize[2];k++) {
@@ -186,6 +191,7 @@ void mesh::setup_local()
 	    }
 	}
     }
+    outer_rho.clear();
 }
 
 void mesh::__compute_ca_coeff(iris_real dx, iris_real dy, iris_real dz)
@@ -209,12 +215,10 @@ void mesh::__compute_ca_coeff(iris_real dx, iris_real dy, iris_real dz)
 
 void mesh::assign_charges(iris_real *atoms, int natoms)
 {
-    std::map<int, std::map<std::tuple<int, int, int>, iris_real>> outer;
-
     for(int i=0;i<natoms;i++) {
-	iris_real tx = (atoms[i*4 + 0] - the_domain->lbox_sides[0][0]) * hinv[0];
-	iris_real ty = (atoms[i*4 + 1] - the_domain->lbox_sides[0][1]) * hinv[1];
-	iris_real tz = (atoms[i*4 + 2] - the_domain->lbox_sides[0][2]) * hinv[2];
+	iris_real tx = (atoms[i*4 + 0] - the_domain->box_sides[0][0]) * hinv[0] - loffset[0];
+	iris_real ty = (atoms[i*4 + 1] - the_domain->box_sides[0][1]) * hinv[1] - loffset[1];
+	iris_real tz = (atoms[i*4 + 2] - the_domain->box_sides[0][2]) * hinv[2] - loffset[2];
 
 	// the number of the cell that is to the "left" of the atom
 	int nx = (int) (tx + __center);
@@ -225,11 +229,6 @@ void mesh::assign_charges(iris_real *atoms, int natoms)
 	iris_real dx = nx - tx + __shift1;
 	iris_real dy = ny - ty + __shift1;
 	iris_real dz = nz - tz + __shift1;
-
-	// printf("%g %g %g %g | %d %d %d | %g %g %g\n",
-	//        atoms[i][0], atoms[i][1], atoms[i][2], atoms[i][3],
-	//        nx, ny, nz,
-	//        dx, dy, dz);
 
 	__compute_ca_coeff(dx, dy, dz);
 
@@ -254,7 +253,7 @@ void mesh::assign_charges(iris_real *atoms, int natoms)
 
 		    if(the_x < 0) {
 			nidx += 1;
-			ne_x = lsize[0] + 1 + the_x;  // e.g. -1 becomes 128
+			ne_x = lsize[0] + the_x;  // e.g. -1 becomes 127
 		    }else if(the_x >= lsize[0]) {
 			nidx += 2;
 			ne_x = the_x - lsize[0];      // e.g. 128 becomes 0
@@ -262,7 +261,7 @@ void mesh::assign_charges(iris_real *atoms, int natoms)
 
 		    if(the_y < 0) {
 			nidx += 3;
-			ne_y = lsize[1] + 1 + the_y;
+			ne_y = lsize[1] + the_y;
 		    }else if(the_y >= lsize[1]) {
 			nidx += 6;
 			ne_y = the_y - lsize[1];
@@ -270,7 +269,7 @@ void mesh::assign_charges(iris_real *atoms, int natoms)
 
 		    if(the_z < 0) {
 			nidx += 9;
-			ne_z = lsize[2] + 1 + the_z;
+			ne_z = lsize[2] + the_z;
 		    }else if(the_z >= lsize[2]) {
 			nidx += 18;
 			ne_z = the_z - lsize[2];
@@ -278,26 +277,15 @@ void mesh::assign_charges(iris_real *atoms, int natoms)
 
 		    if(the_comm->grid_hood[nidx] != the_comm->iris_rank) {
 			std::tuple<int, int, int> entry = std::make_tuple(ne_x, ne_y, ne_z);
-			outer[the_comm->grid_hood[nidx]][entry] += t3;
+#pragma omp atomic
+			outer_rho[the_comm->grid_hood[nidx]][entry] += t3;
 		    }else {
+#pragma omp atomic
 			rho[ne_x][ne_y][ne_z] += t3;
 		    }
 		}
 	    }
 	}
-    }
-
-    // send out halo elements
-    for(auto it = outer.begin(); it != outer.end(); it++) {
-    	for(auto it2 = it->second.begin(); it2 != it->second.end(); it2++) {
-    	    // printf("%d -> %d[%d %d %d]: %g\n",
-	    // 	   the_comm->iris_rank,
-    	    // 	   it->first,
-    	    // 	   std::get<0>(it2->first),
-    	    // 	   std::get<1>(it2->first),
-    	    // 	   std::get<2>(it2->first),
-    	    // 	   it2->second);
-    	}
     }
 }
 
@@ -313,7 +301,13 @@ void mesh::dump_rho(char *fname)
     
     // 1. write the bov file
     FILE *fp = fopen(values_fname, "wb");
-    fwrite(&(rho[0][0][0]), sizeof(iris_real), lsize[0] * lsize[1] * lsize[2], fp);
+    for(int i=0;i<lsize[2];i++) {
+	for(int j=0;j<lsize[1];j++) {
+	    for(int k=0;k<lsize[0];k++) {
+		fwrite(&(rho[k][j][i]), sizeof(iris_real), 1, fp);
+	    }
+	}
+    }
     fclose(fp);
     
     // 2. write the bov header
@@ -334,4 +328,28 @@ void mesh::dump_rho(char *fname)
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",
 	    the_domain->lbox_size[0], the_domain->lbox_size[1], the_domain->lbox_size[2]);
     fclose(fp);
+}
+
+void mesh::exchange_halo()
+{
+    the_iris->suspend_event_loop = true;
+    MPI_Win_fence(MPI_MODE_NOPRECEDE, rho_win);
+    the_debug->trace("Staring halo exchange...");
+    for(auto it = outer_rho.begin(); it != outer_rho.end(); it++) {
+    	for(std::map<std::tuple<int, int, int>, iris_real>::iterator it2 = it->second.begin();
+    	    it2 != it->second.end();
+    	    it2++)
+    	{
+    	    int x = std::get<0>(it2->first);
+    	    int y = std::get<1>(it2->first);
+    	    int z = std::get<2>(it2->first);
+    	    int disp = z + lsize[2]*(y + lsize[1]*x);  // 3D row major order -> 1D
+
+    	    iris_real q = it2->second;
+    	    MPI_Accumulate(&q, 1, IRIS_REAL, it->first, disp, 1, IRIS_REAL, MPI_SUM, rho_win);
+    	}
+    }
+    MPI_Win_fence((MPI_MODE_NOSTORE | MPI_MODE_NOSUCCEED), rho_win);
+    the_debug->trace("Halo exchange done");
+    the_iris->suspend_event_loop = false;
 }

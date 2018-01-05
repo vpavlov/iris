@@ -2,6 +2,7 @@
 #include <exception>
 #include <stdio.h>
 #include <mpi.h>
+#include <unistd.h>
 #include <iris/real.h>
 #include <iris/memory.h>
 #include <iris/iris.h>
@@ -162,15 +163,18 @@ void __send_atoms(MPI_Comm mycomm, int rank,
 	}
     }
 
-    MPI_Request *reqs = new MPI_Request[nboxes];
+    MPI_Request *reqs1 = new MPI_Request[nboxes];
+    MPI_Request *reqs2 = new MPI_Request[nboxes];
 
     for(int i=0;i<nboxes;i++) {
 	MPI_Isend(&(scratch[i][0][0]), counts[i] * 4, IRIS_REAL,
 		  i + iris_offset, IRIS_EVENT_ATOMS, MPI_COMM_WORLD,
-		  &reqs[i]);
+		  &reqs1[i]);
+	MPI_Irecv(NULL, 0, MPI_INT, i + iris_offset, IRIS_EVENT_ATOMS_ACK, MPI_COMM_WORLD, &reqs2[i]);
     }
 
-    MPI_Waitall(nboxes, reqs, MPI_STATUSES_IGNORE);
+    MPI_Waitall(nboxes, reqs1, MPI_STATUSES_IGNORE);
+    MPI_Waitall(nboxes, reqs2, MPI_STATUSES_IGNORE);
     memory::destroy_3d(scratch);
     memory::destroy_1d(counts);
 
@@ -201,6 +205,12 @@ main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // printf("%d has MPI rank %d\n", getpid(), rank);
+    // if(rank == 0) {
+    // 	getc(stdin);
+    // }
+    // MPI_Barrier(MPI_COMM_WORLD);
+
     int pp_size = size/2;
     int duty = (rank < pp_size)?1:2;
     int iris_size = size - pp_size;
@@ -213,12 +223,7 @@ main(int argc, char **argv)
 			   50.39064,  50.39064,  50.39064);
 	x->mesh_set_size(128, 128, 128);
 	x->apply_conf();
-
-	// timesteps
-	for(int i=0;i<NSTEPS;i++) {
-	    x->run();
-	}
-
+	x->run();
 	delete x;
     }else {
 	// PP nodes
@@ -232,7 +237,7 @@ main(int argc, char **argv)
 			       local_boxes);
 
 	for(int i=0;i<NSTEPS;i++) {
-	    __send_atoms(mycomm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);  // this is to be done for every timestep
+	    __send_atoms(mycomm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);
 	}
 
 	memory::destroy_2d(my_x);

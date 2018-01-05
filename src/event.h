@@ -33,10 +33,11 @@
 namespace ORG_NCSA_IRIS {
 
     struct event_t {
-	int sender;  // MPI_SOURCE (in uber_comm)
-	int code;    // MPI_TAG
-	int size;    // in bytes
-	void *data;  // data allocated with memory::wmalloc
+	MPI_Comm comm;// on which comm this occured
+	int peer;     // MPI_SOURCE (in comm) / MPI_DEST
+	int code;     // MPI_TAG
+	int size;     // in bytes
+	void *data;   // data allocated with memory::wmalloc
     };
     
 }

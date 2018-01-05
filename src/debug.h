@@ -43,6 +43,8 @@ namespace ORG_NCSA_IRIS {
 
 	void trace(const char *str, ...);
 
+    public:
+	double start_time;
     };
 
 }

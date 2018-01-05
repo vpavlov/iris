@@ -37,6 +37,7 @@ using namespace ORG_NCSA_IRIS;
 debug::debug(iris *obj)
     : global_state(obj)
 {
+    start_time = MPI_Wtime();
 }
 
 debug::~debug()
@@ -47,9 +48,10 @@ void debug::trace(const char *fmt, ...)
 {
     char str[1024];
 
+    double time = MPI_Wtime();
     va_list args;
     va_start(args, fmt);
     vsprintf(str, fmt, args);
     va_end(args);
-    printf("[%d:%d] %s\n", the_comm->uber_rank, omp_get_thread_num(), str);
+    printf("[%d:%d:%0.6f] %s\n", the_comm->uber_rank, omp_get_thread_num(), time - start_time, str);
 }

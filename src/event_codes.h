@@ -32,6 +32,8 @@
 
 #define IRIS_EVENT_LOCAL_BOXES  1
 #define IRIS_EVENT_ATOMS        2
-#define IRIS_EVENT_ATOMS_EOF    3
+#define IRIS_EVENT_ATOMS_ACK    3
+#define IRIS_EVENT_ATOMS_EOF    4
+#define IRIS_EVENT_BARRIER      5
 
 #endif

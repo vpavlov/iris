@@ -34,6 +34,13 @@
 
 namespace ORG_NCSA_IRIS {
 
+    struct rho_halo_item_t {
+	int x;
+	int y;
+	int z;
+	iris_real q;
+    };
+
     class mesh : protected global_state {
 
     public:
@@ -43,13 +50,15 @@ namespace ORG_NCSA_IRIS {
 	void set_size(int nx, int ny, int nz);
 	void set_order(int order);
 	void setup_local();
+	void reset_rho();
 	void assign_charges(iris_real *atoms, int natoms);
+	void exchange_halo();
 
 	void box_changed();  // called by the_domain when the box is changed
 	void dump_rho(char *fname);  // dump right-hand-side to a BOV file
     private:
 	void __compute_ca_coeff(iris_real dx, iris_real dy, iris_real dz);
-
+	void *__pack_rho_halo(std::map<std::tuple<int, int, int>, iris_real> halo, int &nbytes);
     public:
 
 	int order;    // charge assignment/interpolation order (from 2 to 7)
@@ -59,7 +68,10 @@ namespace ORG_NCSA_IRIS {
 	int loffset[3];  // lower/left/front of local mesh
 	iris_real hinv[3];  // 1/h for each direction
 	iris_real hinv3;    // 1/dV
+
 	iris_real ***rho;  // values of rho (rhight-hand side) [local]
+	MPI_Win rho_win;
+	std::map<int, std::map<std::tuple<int, int, int>, iris_real>> outer_rho;  // rho halo (for neighbours)
 
     private:
 
@@ -76,6 +88,7 @@ namespace ORG_NCSA_IRIS {
 	static iris_real __5order[5][5];
 	static iris_real __6order[6][6];
 	static iris_real __7order[7][7];
+
     };
 }
 #endif

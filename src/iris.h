@@ -31,9 +31,14 @@
 #define __IRIS_IRIS_H__
 
 #include <mpi.h>
+#include <set>
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {
+
+#define IRIS_STATE_INITIALIZED         0  // intial state when constructed
+#define IRIS_STATE_WAITING_FOR_ATOMS   1  // waiting to receive atoms
+#define IRIS_STATE_HAS_RHO             2  // right-hand side built
 
     class iris {
 
@@ -64,7 +69,17 @@ namespace ORG_NCSA_IRIS {
 
 	void run();
 
+	void set_state(int state);  // set new FSM state
+
+	static void send_event(struct event_t);
+        void post_barrier();
+
+
 	struct event_t poke_event(bool &out_has_event);
+	struct event_t poke_mpi_event(MPI_Comm comm, bool &out_has_event);
+	struct event_t poke_uber_event(bool &out_has_event);
+	struct event_t poke_iris_event(bool &out_has_event);
+	struct event_t poke_barrier_event(bool &out_has_event);
 
 	static void recv_local_boxes(int iris_comm_size,
 				     int rank,
@@ -76,27 +91,30 @@ namespace ORG_NCSA_IRIS {
     private:
 	void __announce_loc_box_info();
 
-
     public:
 	class domain *the_domain;  // Domain of the simulation (box, etc.)
 	class comm *the_comm;      // MPI Comm related stuff
 	class mesh *the_mesh;      // Computational mesh
 	class debug *the_debug;    // Debug helper
 
-
-	// key in atoms: rank (in uber_comm) of the process that sent this
-	// batch. We need to return forces, etc. to the same process
-	std::map<int, double **> atoms_x;  // atom coords local to this proc
-	std::map<int, double *> atoms_q;   // atom charges local to this proc
+	int state;  // the state of the state machine that IRIS is
+	int rest_time;  // amount ot useconds to sleep while nothing to do
+	bool suspend_event_loop;  // temporarily suspend the event loop
 
     private:
+
 	// event handlers
 	bool __quit_event_loop;  // when to break the event loop
+
+	MPI_Request __barrier_req;  // to facilitate barrier events
+	bool __barrier_posted;      // has a posted barrier event
+
 	std::map<int, void (iris::*)(event_t)> __event_handlers;
 	void __handle_event(event_t event);
+	void __handle_unimplemented(event_t event);
 	void __handle_atoms(event_t event);
 	void __handle_atoms_eof(event_t event);
-	void __handle_unimplemented(event_t event);
+	void __handle_barrier(event_t event);
     };
 }
 #endif

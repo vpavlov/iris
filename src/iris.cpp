@@ -51,6 +51,11 @@ iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
 
     __event_handlers[IRIS_EVENT_ATOMS] = &iris::__handle_atoms;
     __event_handlers[IRIS_EVENT_ATOMS_EOF] = &iris::__handle_atoms_eof;
+    __event_handlers[IRIS_EVENT_BARRIER] = &iris::__handle_barrier;
+
+    rest_time = 100;  // sleep for 100 microseconds if there's nothing to do
+    set_state(IRIS_STATE_INITIALIZED);
+    __barrier_posted = false;
 }
 
 iris::~iris()
@@ -89,6 +94,9 @@ void iris::apply_conf()
     the_comm->setup_grid();
     the_domain->setup_local();
     the_mesh->setup_local();
+    the_mesh->reset_rho();
+
+    set_state(IRIS_STATE_WAITING_FOR_ATOMS);
     __announce_loc_box_info();
 }
 
@@ -146,33 +154,6 @@ void iris::recv_local_boxes(int iris_comm_size,
     MPI_Bcast(out_local_boxes, sz, IRIS_REAL, pp_master, pp_comm);
 }
 
-void iris::__handle_atoms(event_t event)
-{
-    int unit = 4 * sizeof(iris_real);
-    int natoms;
-    if(event.size % unit != 0) {
-	throw std::length_error("Unexpected message size while receiving atoms!");
-    }
-    natoms = event.size / unit;
-    if(natoms != 0) {
-	the_debug->trace("Received %d atoms from %d", natoms, event.sender);
-	the_mesh->assign_charges((iris_real *)event.data, natoms);
-	the_debug->trace("Charge assignment done");
-    }
-}
-
-void iris::__handle_atoms_eof(event_t event)
-{
-    the_debug->trace("All atoms received");
-    the_mesh->dump_rho("NaCl-rho-2");
-    __quit_event_loop = true;
-}
-
-void iris::__handle_unimplemented(event_t event)
-{
-    the_debug->trace("Unimplemented event: %d\n", event.code);
-}
-
 typedef void (iris::*event_handler_t)(event_t);
 
 void iris::__handle_event(event_t event)
@@ -186,7 +167,7 @@ void iris::__handle_event(event_t event)
     memory::wfree(event.data);
 }
 
-event_t iris::poke_event(bool &out_has_event)
+event_t iris::poke_mpi_event(MPI_Comm comm, bool &out_has_event)
 {
     MPI_Status status;
     int nbytes;
@@ -194,15 +175,14 @@ event_t iris::poke_event(bool &out_has_event)
     event_t retval;
     int has_event;
 
-    // block until we receive an MPI message
-    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, the_comm->uber_comm,
-	       &has_event, &status);
+    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &has_event, &status);
     if(has_event) {
 	MPI_Get_count(&status, MPI_BYTE, &nbytes);
 	msg = memory::wmalloc(nbytes);
 	MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
-		 the_comm->uber_comm, MPI_STATUS_IGNORE);
-	retval.sender = status.MPI_SOURCE;
+		 comm, MPI_STATUS_IGNORE);
+	retval.comm = comm;
+	retval.peer = status.MPI_SOURCE;
 	retval.code = status.MPI_TAG;
 	retval.size = nbytes;
 	retval.data = msg;
@@ -213,26 +193,162 @@ event_t iris::poke_event(bool &out_has_event)
     return retval;
 }
 
+void iris::send_event(event_t event)
+{
+    MPI_Send(event.data, event.size, MPI_BYTE, event.peer, event.code, event.comm);
+}
+
+event_t iris::poke_uber_event(bool &out_has_event)
+{
+    return poke_mpi_event(the_comm->uber_comm, out_has_event);
+}
+
+event_t iris::poke_iris_event(bool &out_has_event)
+{
+    return poke_mpi_event(the_comm->iris_comm, out_has_event);
+}
+
+event_t iris::poke_barrier_event(bool &out_has_event)
+{
+    event_t ev;
+
+    out_has_event = false;
+    if(__barrier_posted) {
+	int has_event;
+	MPI_Status status;
+	MPI_Test(&__barrier_req, &has_event, &status);
+	if(has_event) {
+	    MPI_Status status;
+	    MPI_Wait(&__barrier_req, MPI_STATUS_IGNORE);
+	    MPI_Barrier(the_comm->iris_comm);
+	    the_debug->trace("----------");
+
+	    ev.comm = the_comm->iris_comm;
+	    ev.peer = -1;
+	    ev.code = IRIS_EVENT_BARRIER;
+	    ev.size = 0;
+	    ev.data = NULL;
+	    out_has_event = true;
+	    __barrier_posted = false;
+	}
+    }
+    return ev;
+}
+
+event_t iris::poke_event(bool &out_has_event)
+{
+    event_t event;
+
+    event = poke_uber_event(out_has_event);
+    if(out_has_event) {
+	return event;
+    }
+
+    event = poke_iris_event(out_has_event);
+    if(out_has_event) {
+	return event;
+    }
+
+    event = poke_barrier_event(out_has_event);
+
+    return event;
+}
+
 void iris::run()
 {
 #pragma omp parallel
-    {
 #pragma omp single
-	{
-	    __quit_event_loop = false;
-	    while(!__quit_event_loop) {
+    {
+	__quit_event_loop = false;
+	suspend_event_loop = false;
+	while(!__quit_event_loop) {
+	    if(!suspend_event_loop) {
 		bool has_event;
 		event_t event = poke_event(has_event);
-
+#pragma omp task default(none) firstprivate(has_event, event)
 		if(has_event) {
-#pragma omp task default(none) firstprivate(event)
 		    __handle_event(event);
 		}else {
-		    usleep(100);  // suspend for some time so others can work
+		    usleep(rest_time);  // suspend for some time so others can work
 		}
 	    }
 	}
     }
 }
 
+void iris::set_state(int in_state)
+{
+    if(in_state != IRIS_STATE_INITIALIZED) {
+	the_debug->trace("Changing state %d -> %d", state, in_state);
+    }else {
+	the_debug->trace("Initializing state to %d", in_state);
+    }
+    state = in_state;
 
+    switch(state) {
+
+    case IRIS_STATE_HAS_RHO:
+	__quit_event_loop = true;
+	break;
+    }
+}
+
+void iris::post_barrier()
+{
+    MPI_Ibarrier(the_comm->iris_comm, &__barrier_req);
+    __barrier_posted = true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Event handlers
+////////////////////////////////////////////////////////////////////////////////
+
+void iris::__handle_unimplemented(event_t event)
+{
+    the_debug->trace("Unimplemented event: %d", event.code);
+}
+
+void iris::__handle_atoms(event_t event)
+{
+    if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
+	throw std::logic_error("Receiving atoms while in un-configured state!");
+    }
+
+    int unit = 4 * sizeof(iris_real);
+    if(event.size % unit != 0) {
+	throw std::length_error("Unexpected message size while receiving atoms!");
+    }
+
+    int natoms = event.size / unit;
+    if(natoms != 0) {
+	the_debug->trace("Received %d atoms from %d", natoms, event.peer);
+	the_mesh->assign_charges((iris_real *)event.data, natoms);
+	the_debug->trace("Charge assignment from %d done", event.peer);
+	MPI_Request req;
+	MPI_Isend(NULL, 0, MPI_INT, event.peer, IRIS_EVENT_ATOMS_ACK, event.comm, &req);
+    }
+
+}
+
+void iris::__handle_atoms_eof(event_t event)
+{
+    if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
+	throw std::logic_error("Receiving atoms EOF while in un-configured state!");
+    }
+
+    the_debug->trace("All atoms received");
+    post_barrier();
+}
+
+void iris::__handle_barrier(event_t ev)
+{
+    if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
+	the_mesh->exchange_halo();
+
+	char fname[256];
+	sprintf(fname, "NaCl-rho-%d-%d-%d-%d", the_comm->uber_size, omp_get_num_threads(), the_comm->uber_rank, omp_get_thread_num());
+	the_mesh->dump_rho(fname);
+
+	set_state(IRIS_STATE_HAS_RHO);
+    }
+}
