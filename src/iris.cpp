@@ -345,9 +345,9 @@ void iris::__handle_barrier(event_t ev)
     if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
 	the_mesh->exchange_halo();
 
-	char fname[256];
-	sprintf(fname, "NaCl-rho-%d-%d-%d-%d", the_comm->uber_size, omp_get_num_threads(), the_comm->uber_rank, omp_get_thread_num());
-	the_mesh->dump_rho(fname);
+	// char fname[256];
+	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", the_comm->uber_size, omp_get_num_threads(), the_comm->uber_rank, omp_get_thread_num());
+	// the_mesh->dump_rho(fname);
 
 	set_state(IRIS_STATE_HAS_RHO);
     }

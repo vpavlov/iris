@@ -104,7 +104,7 @@ namespace ORG_NCSA_IRIS {
     private:
 
 	// event handlers
-	bool __quit_event_loop;  // when to break the event loop
+	bool volatile __quit_event_loop;  // when to break the event loop
 
 	MPI_Request __barrier_req;  // to facilitate barrier events
 	bool __barrier_posted;      // has a posted barrier event
