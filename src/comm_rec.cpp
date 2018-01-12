@@ -27,39 +27,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
+#include <set>
+#include <mpi.h>
+#include "iris.h"
+#include "comm_rec.h"
+#include "comm_driver.h"
 
-#include "state_accessor.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
-
-    class mesh : protected state_accessor {
-
-    public:
-	mesh(class iris *obj);
-	~mesh();
-
-	void set_size(int nx, int ny, int nz);
-
-	// commit configuration. Perform all preliminary calculations based on
-	// configuration and prepare all that is needed in order to
-	// start solving
-	void commit();
-	void dump_rho(char *in_fname);
-
-    public:
-	bool      m_initialized;
-	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
-	iris_real m_hinv[3];  // 1/h in each direction
-	iris_real m_h3inv;    // 1/dV
-	int       m_own_size[3];    // local mesh size: my portion only
-	int       m_own_offset[3];  // where does my mesh start from 
-
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-
-    private:
-	bool      m_dirty;  // if we need to re-calculate upon commit
-    };
+comm_rec::comm_rec(iris *in_obj, MPI_Comm in_comm)
+    : state_accessor(in_obj), m_comm(in_comm)
+{
+    MPI_Comm_rank(m_comm, &m_rank);
+    MPI_Comm_size(m_comm, &m_size);
+    m_driver = new comm_driver(m_comm, m_queue);
 }
-#endif
+
+comm_rec::~comm_rec()
+{
+    delete m_driver;
+    // although we are not creating the communicator, we are freeing it.
+    // This is done because iris::init allocates the communicators BEFORE
+    // creating the drivers and event_queue to prevent the drivers from picking
+    // up the event from the intercomm_create. Otherwise we could comm_dup the
+    // comms in constructor and thus create them here.
+    MPI_Comm_free(&m_comm);
+}
+

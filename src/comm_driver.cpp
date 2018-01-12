@@ -27,39 +27,53 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
+#include "comm_driver.h"
+#include "memory.h"
+#include "event.h"
+#include "event_queue.h"
 
-#include "state_accessor.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
-
-    class mesh : protected state_accessor {
-
-    public:
-	mesh(class iris *obj);
-	~mesh();
-
-	void set_size(int nx, int ny, int nz);
-
-	// commit configuration. Perform all preliminary calculations based on
-	// configuration and prepare all that is needed in order to
-	// start solving
-	void commit();
-	void dump_rho(char *in_fname);
-
-    public:
-	bool      m_initialized;
-	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
-	iris_real m_hinv[3];  // 1/h in each direction
-	iris_real m_h3inv;    // 1/dV
-	int       m_own_size[3];    // local mesh size: my portion only
-	int       m_own_offset[3];  // where does my mesh start from 
-
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-
-    private:
-	bool      m_dirty;  // if we need to re-calculate upon commit
-    };
+static void *p2p_loop_start(void *thread_arg)
+{
+    comm_driver *obj = (comm_driver *)thread_arg;
+    return obj->p2p_loop();
 }
-#endif
+
+comm_driver::comm_driver(MPI_Comm in_comm, event_queue *in_queue)
+{
+    m_comm = in_comm;
+    m_queue = in_queue;
+    pthread_create(&m_p2p_loop_thread, NULL, &p2p_loop_start, this);
+}
+
+comm_driver::~comm_driver()
+{
+    void *retval;
+
+    pthread_cancel(m_p2p_loop_thread);
+    pthread_join(m_p2p_loop_thread, &retval);
+}
+
+void *comm_driver::p2p_loop()
+{
+    while(42) {
+	int nbytes;
+	MPI_Status status;
+	int has_event;
+	int old_cancel_state;
+	
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancel_state);
+	MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
+	if(has_event) {
+	    MPI_Get_count(&status, MPI_BYTE, &nbytes);
+	    void *msg = memory::wmalloc(nbytes);
+	    MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
+		     m_comm, MPI_STATUS_IGNORE);
+	    m_queue->post_event(m_comm, status.MPI_SOURCE,
+				status.MPI_TAG, nbytes, msg);
+	}
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_cancel_state);
+	pthread_testcancel();  // make sure the thread can be cancelled
+    }
+}

@@ -9,6 +9,9 @@
 #include <iris/domain.h>
 #include <iris/utils.h>
 #include <iris/event_codes.h>
+#include <iris/comm_driver.h>
+#include <iris/event_queue.h>
+#include <iris/logger.h>
 
 #define NSTEPS 1
 
@@ -84,7 +87,7 @@ void read_nacl(char *fname, iris_real **&x, iris_real *&q)
     fclose(fp);
 }
 
-void __read_atoms(char *fname, int rank, int pp_size, MPI_Comm mycomm,
+void __read_atoms(char *fname, int rank, int pp_size, MPI_Comm local_comm,
 		  iris_real **&my_x, iris_real *&my_q)
 {
     iris_real **x;
@@ -104,11 +107,11 @@ void __read_atoms(char *fname, int rank, int pp_size, MPI_Comm mycomm,
     
     MPI_Scatter(fromx, 27000*3/pp_size, IRIS_REAL,
 		&(my_x[0][0]), 27000*3/pp_size, IRIS_REAL,
-		0, mycomm);
+		0, local_comm);
 
     MPI_Scatter(fromq, 27000/pp_size, IRIS_REAL,
 		&(my_q[0]), 27000/pp_size, IRIS_REAL,
-		0, mycomm);
+		0, local_comm);
     
     if(rank == 0) {
 	memory::destroy_2d(x);
@@ -116,7 +119,7 @@ void __read_atoms(char *fname, int rank, int pp_size, MPI_Comm mycomm,
     }
 }
 
-void __send_atoms(MPI_Comm mycomm, int rank,
+void __send_atoms(MPI_Comm local_comm, int rank,
 		  iris_real **my_x,
 		  iris_real *my_q,
 		  size_t natoms,
@@ -178,7 +181,7 @@ void __send_atoms(MPI_Comm mycomm, int rank,
     memory::destroy_3d(scratch);
     memory::destroy_1d(counts);
 
-    MPI_Barrier(mycomm);
+    MPI_Barrier(local_comm);
 
     if(rank == 0) {
 	int dummy = 0;
@@ -197,53 +200,87 @@ main(int argc, char **argv)
 	exit(-1);
     }
 
-    MPI_Init(&argc, &argv);
-
     int rank, size;
-    MPI_Comm mycomm;
-
+    MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+
+    //This code here facilitates debugging with gdb
     // printf("%d has MPI rank %d\n", getpid(), rank);
     // if(rank == 0) {
     // 	getc(stdin);
     // }
     // MPI_Barrier(MPI_COMM_WORLD);
 
+
+    // split the world communicator in two groups:
+    // - client group: the one that "uses" IRIS. It provides atom coords and
+    //                 charges to IRIS and receives forces, energies, etc. back
+    // - server group: the processes that IRIS can use to do its calculations
+    //
+    // In this example only, we decide to split the world comm in two mostly
+    // equal parts. The first part is the client, the second -- the server.
+    // If the world comm has odd number of procs, client will receive one less
+    // procs than the server. (E.g. if nprocs = 3, we have:
+    // 0 - client
+    // 1 - server
+    // 2 - server
+    MPI_Comm local_comm;
     int pp_size = size/2;
-    int duty = (rank < pp_size)?1:2;
-    int iris_size = size - pp_size;
-    MPI_Comm_split(MPI_COMM_WORLD, duty, rank, &mycomm);
-    
-    if(duty == 2) {
-	// IRIS nodes
-	iris *x = new iris(MPI_COMM_WORLD, mycomm, 0);
-	x->domain_set_box(-50.39064, -50.39064, -50.39064,
-			   50.39064,  50.39064,  50.39064);
-	x->mesh_set_size(128, 128, 128);
-	x->apply_conf();
-	x->run();
-	delete x;
-    }else {
-	// PP nodes
-	iris_real **my_x;
-	iris_real *my_q;
-	iris_real *local_boxes;
-	size_t natoms = 27000/pp_size;
+    int role = (rank < pp_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
+    MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
 
-	__read_atoms(argv[1], rank, pp_size, mycomm, my_x, my_q);
-	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, mycomm,
-			       local_boxes);
 
-	for(int i=0;i<NSTEPS;i++) {
-	    __send_atoms(mycomm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);
-	}
+    // figure out the remote leader
+    // In this example only:
+    // - the client's remote leader is server's rank 0, which = pp_size
+    // - the server's remote leader is client's rank 0, which is 0
+    int remote_leader = (role==IRIS_ROLE_SERVER)?0:pp_size;
 
-	memory::destroy_2d(my_x);
-	memory::destroy_1d(my_q);
-	memory::destroy_1d(local_boxes);
-    }
+
+    //iris *x = new iris(MPI_COMM_WORLD);
+    iris *x = new iris(role, local_comm, MPI_COMM_WORLD, remote_leader);
+    x->set_global_box(-50.39064, -50.39064, -50.39064,
+    		      50.39064,  50.39064,  50.39064);
+    x->set_mesh_size(128, 128, 128);
+    x->set_order(3);
+    x->commit();
+    delete x;
+
+    MPI_Finalize();
+    exit(0);
+
+
+    // if(role == 2) {
+    // 	// IRIS nodes
+    // 	iris *x = new iris(MPI_COMM_WORLD, local_comm, 0);
+    // 	x->set_global_box(-50.39064, -50.39064, -50.39064,
+    // 		   50.39064,  50.39064,  50.39064);
+    // 	x->mesh_set_size(128, 128, 128);
+    // 	x->apply_conf();
+    // 	x->run();
+    // 	delete x;
+    // }else {
+    // 	// PP nodes
+    // 	iris_real **my_x;
+    // 	iris_real *my_q;
+    // 	iris_real *local_boxes;
+    // 	size_t natoms = 27000/pp_size;
+
+    // 	__read_atoms(argv[1], rank, pp_size, local_comm, my_x, my_q);
+    // 	int iris_size = size - pp_size;
+    // 	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, local_comm,
+    // 			       local_boxes);
+
+    // 	for(int i=0;i<NSTEPS;i++) {
+    // 	    __send_atoms(local_comm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);
+    // 	}
+
+    // 	memory::destroy_2d(my_x);
+    // 	memory::destroy_1d(my_q);
+    // 	memory::destroy_1d(local_boxes);
+    // }
 
     MPI_Finalize();
 }

@@ -30,43 +30,50 @@
 #ifndef __IRIS_DOMAIN_H__
 #define __IRIS_DOMAIN_H__
 
-#include "global_state.h"
+#include "state_accessor.h"
+#include "box.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class domain : protected global_state {
+    class domain : protected state_accessor {
 
     public:
 	domain(class iris *obj);
 	~domain();
 
-	void set_dimensions(int in_dim);
-	void set_box(iris_real x0, iris_real y0, iris_real z0,
-		     iris_real x1, iris_real y1, iris_real z1);
-	void setup_local();
+	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
+			    iris_real x1, iris_real y1, iris_real z1);
+
+	void set_periodicity(int dir, int in_value)
+	{
+	    if(dir < 0 || dir > 2) {
+		throw std::invalid_argument("Invalid direction for periodicity!");
+	    }
+
+	    if(in_value < 0 || in_value > 1) {
+		throw std::invalid_argument("Invalid periodicity!");
+	    }
+
+	    m_pbc[dir] = in_value;
+	}
+
+	void set_periodocity(int in_x, int in_y, int in_z)
+	{
+	    set_periodicity(0, in_x);
+	    set_periodicity(1, in_y);
+	    set_periodicity(2, in_z);
+	}
+
+	void commit();
 
     public:
-	int  dimensions;  // # of dimensions of the domain, default 3
+	bool m_initialized;
+	int m_pbc[3];   // periodicity of the box for each direction
+	box_t<iris_real> m_global_box;
+	box_t<iris_real> m_local_box;
 
-	// Global and local cartesian boxes are described by the 6 coordinates
-	// of each of the sides (which are parallel to the coordinate axis)
-	//
-	// box_sides[0][0] - x coord of left side
-	// box_sides[0][1] - y coord of bottom side
-	// box_sides[0][2] - z coord of front side
-	// box_sides[1][0] - x coord of right side
-	// box_sides[1][1] - y coord of top side
-	// box_sides[1][2] - z coord of back side
-	//
-	// Another way to put it:
-	// box_sides[0] are the coordinates of the left/bottom/front corner;
-	// box_sides[1] are the coordinates of the right/top/back corner;
-	//
-	iris_real box_sides[2][3];
-	iris_real box_size[3];  // size in every direction
-
-	iris_real lbox_sides[2][3];
-	iris_real lbox_size[3];
+    private:
+	bool m_dirty;
     };
 }
 #endif

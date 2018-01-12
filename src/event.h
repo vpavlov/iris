@@ -30,7 +30,12 @@
 #ifndef __IRIS_EVENT_H__
 #define __IRIS_EVENT_H__
 
+#include <mpi.h>
+
 namespace ORG_NCSA_IRIS {
+
+#define IRIS_EVENT_QUIT              1
+#define IRIS_EVENT_INTERCOMM_CREATE  2
 
     struct event_t {
 	MPI_Comm comm;// on which comm this occured
@@ -38,6 +43,13 @@ namespace ORG_NCSA_IRIS {
 	int code;     // MPI_TAG
 	int size;     // in bytes
 	void *data;   // data allocated with memory::wmalloc
+
+	event_t() = default;
+
+	event_t(MPI_Comm in_comm, int in_peer, int in_code,
+		int in_size, void *in_data) :
+	    comm(in_comm), peer(in_peer), code(in_code), size(in_size),
+	    data(in_data) {};
     };
     
 }

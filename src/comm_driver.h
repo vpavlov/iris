@@ -27,24 +27,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_DEBUG_H__
-#define __IRIS_DEBUG_H__
+#ifndef __COMM_DRIVER_H__
+#define __COMM_DRIVER_H__
 
-#include "global_state.h"
+#include <mpi.h>
 
 namespace ORG_NCSA_IRIS {
 
-    class debug : protected global_state {
+    class comm_driver {
 
     public:
 
-	debug(class iris *obj);
-	~debug();
+	comm_driver(MPI_Comm in_comm, class event_queue *in_queue);
+	~comm_driver();
 
-	void trace(const char *str, ...);
+	void *p2p_loop();
 
-    public:
-	double start_time;
+    private:
+	MPI_Comm m_comm;
+	class event_queue *m_queue;
+	pthread_t m_p2p_loop_thread;
     };
 
 }

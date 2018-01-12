@@ -31,10 +31,14 @@
 #define __IRIS_IRIS_H__
 
 #include <mpi.h>
-#include <set>
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {
+
+    // Role of this IRIS node.
+    // Internal note: coded in binary to underline the fact that it is a bitmask
+#define IRIS_ROLE_CLIENT 0b01
+#define IRIS_ROLE_SERVER 0b10
 
 #define IRIS_STATE_INITIALIZED         0  // intial state when constructed
 #define IRIS_STATE_WAITING_FOR_ATOMS   1  // waiting to receive atoms
@@ -44,28 +48,58 @@ namespace ORG_NCSA_IRIS {
 
     public:
 
+	// Use this constructor when in dual (client+server) mode and
+	// the master process is rank 0
+	iris(MPI_Comm in_uber_comm);
+
+	// Use this constructor when in dual (client+server) mode and
+	// you want to specify a different master process
+	iris(MPI_Comm in_uber_comm, int in_leader);
+
+	// Use this constructor when in separation (client/server) mode
+	// and the local leader of each group is its respective rank 0
+	iris(int in_role, MPI_Comm in_local_comm,
+	     MPI_Comm in_uber_comm, int in_remote_leader);
+
+	// Use this constructor when in separation (client/server) mode
+	// and you want to specify a local leader != 0
+	iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
+	     MPI_Comm in_uber_comm, int in_remote_leader);
+
 	// API: create the iris object through wich all further API calls 
 	// are made
 	// Example: iris *hiris = new iris(MPI_COMM_WORLD, mycomm, 0)
 	iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master);
 
-	// API: release resources
 	~iris();
 
-	// API: set the number of dimentions of the domain of the problem
-	// Example: hiris->domain_set_exceptions(3)
-	void domain_set_dimensions(int in_dimensions);
-	void domain_set_box(iris_real x0, iris_real y0, iris_real z0,
+	bool is_client() { return m_role & IRIS_ROLE_CLIENT; };
+	bool is_server() { return m_role & IRIS_ROLE_SERVER; };
+	bool is_both() { return is_client() && is_server(); };
+	bool is_leader();
+
+	// Sets or resets the simulation box extents. Has no effect if called
+	// from a purely client node.
+	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
 			    iris_real x1, iris_real y1, iris_real z1);
 
-	void mesh_set_size(int nx, int ny, int nz);
+	// Sets or resets the mesh size (how many points in each direction
+	// the discretization grid will have). Has no effect if called from a
+	// purely client node.
+	void set_mesh_size(int nx, int ny, int nz);
 
-	// API: set preferences about domain decomposition (e.g. 3x4x5 procs)
-	void comm_set_grid_pref(int x, int y, int z);
+	// Sets or resets the interpolation/stencil order
+	void set_order(int order);
 
-	// API: call this after all user settings has been set in order to
-	// apply the configuration and prepare for the actual calculations
-	void apply_conf();
+	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
+	void set_grid_pref(int x, int y, int z);
+
+	// Call this when all configuration is done. When called, it will
+	// signal all internal components to:
+	//   - set default configuration not explicitly set by the user;
+	//   - verify the configuration for any missing mandatory items;
+	//   - perform any preliminary calculations necessary for the solving;
+	void commit();
 
 	void run();
 
@@ -89,13 +123,25 @@ namespace ORG_NCSA_IRIS {
 				     iris_real *&out_local_boxes);
 
     private:
+	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
+
 	void __announce_loc_box_info();
 
     public:
-	class domain *the_domain;  // Domain of the simulation (box, etc.)
-	class comm *the_comm;      // MPI Comm related stuff
-	class mesh *the_mesh;      // Computational mesh
-	class debug *the_debug;    // Debug helper
+	int m_role;                    // is this node client or server or both
+	int m_local_leader;            // rank in local_comm of local leader
+	int m_remote_leader;           // rank in uber_comm of remote leader
+
+	class event_queue *m_queue;       // IRIS event queue
+	class comm_rec    *m_uber_comm;   // to facilitate comm with world
+	class comm_rec    *m_local_comm;  // ...within group (client OR server)
+	class comm_rec    *m_inter_comm;  // ...between groups
+	class logger      *m_logger;      // Logger
+
+	class domain *m_domain;            // Domain of the simulation
+	class proc_grid *m_proc_grid;      // MPI Comm related stuff
+	class mesh *m_mesh;                // Computational mesh
+	class charge_assigner *m_chass;    // Charge assignmen machinery
 
 	int state;  // the state of the state machine that IRIS is
 	int rest_time;  // amount ot useconds to sleep while nothing to do

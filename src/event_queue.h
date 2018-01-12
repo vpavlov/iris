@@ -27,32 +27,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_GLOBAL_STATE_H__
-#define __IRIS_GLOBAL_STATE_H__
+#ifndef __EVENT_QUEUE_H__
+#define __EVENT_QUEUE_H__
 
-#include "iris.h"
+#include <deque>
+#include <pthread.h>
+#include "state_accessor.h"
+#include "event.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class global_state {
+    class event_queue : protected state_accessor {
 
     public:
-	global_state(iris *obj) :
-	    the_iris(obj),
-	    the_domain(obj->the_domain),
-	    the_comm(obj->the_comm),
-	    the_mesh(obj->the_mesh),
-	    the_debug(obj->the_debug)
-	{};
+	event_queue(class iris *in_obj);
+	~event_queue();
 
-	virtual ~global_state() {};
+	bool get_event(event_t &out_event);
+	void post_event(MPI_Comm in_comm, int in_peer, int in_code,
+			int in_size, void *in_data);
+	void post_quit_event_self();
 
-    protected:
-	iris *the_iris;
-	domain *&the_domain;
-	comm *&the_comm;
-	mesh *&the_mesh;
-	debug *&the_debug;
+    private:
+	std::deque<struct event_t> m_queue;
+	pthread_mutex_t m_qmutex;
+	pthread_cond_t m_qcond;
     };
 
 }

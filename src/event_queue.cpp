@@ -27,39 +27,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
+#include "event_queue.h"
 
-#include "state_accessor.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
-
-    class mesh : protected state_accessor {
-
-    public:
-	mesh(class iris *obj);
-	~mesh();
-
-	void set_size(int nx, int ny, int nz);
-
-	// commit configuration. Perform all preliminary calculations based on
-	// configuration and prepare all that is needed in order to
-	// start solving
-	void commit();
-	void dump_rho(char *in_fname);
-
-    public:
-	bool      m_initialized;
-	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
-	iris_real m_hinv[3];  // 1/h in each direction
-	iris_real m_h3inv;    // 1/dV
-	int       m_own_size[3];    // local mesh size: my portion only
-	int       m_own_offset[3];  // where does my mesh start from 
-
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-
-    private:
-	bool      m_dirty;  // if we need to re-calculate upon commit
-    };
+event_queue::event_queue(iris *obj)
+    :state_accessor(obj)
+{
+    pthread_mutex_init(&m_qmutex, NULL);
+    pthread_cond_init(&m_qcond, NULL);
 }
-#endif
+
+event_queue::~event_queue()
+{
+    pthread_cond_destroy(&m_qcond);
+    pthread_mutex_destroy(&m_qmutex);
+}
+
+void event_queue::post_event(MPI_Comm comm, int peer, int code,
+			     int size, void *data)
+{
+    pthread_mutex_lock(&m_qmutex);
+    m_queue.emplace_back(comm, peer, code, size, data);
+    pthread_cond_signal(&m_qcond);
+    pthread_mutex_unlock(&m_qmutex);
+}
+
+void event_queue::post_quit_event_self()
+{
+    post_event(0, 0, IRIS_EVENT_QUIT, 0, NULL);
+}
+
+
+bool event_queue::get_event(event_t &event)
+{
+    pthread_mutex_lock(&m_qmutex);
+    while(m_queue.empty()) {
+	pthread_cond_wait(&m_qcond, &m_qmutex);
+    }
+
+    event = m_queue.front();
+    m_queue.pop_front();
+    pthread_mutex_unlock(&m_qmutex);
+    return event.code != IRIS_EVENT_QUIT;
+}

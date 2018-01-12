@@ -20,46 +20,24 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
-
-#include "state_accessor.h"
+#ifndef __IRIS_FACTORIZER_H__
+#define __IRIS_FACTORIZER_H__
 
 namespace ORG_NCSA_IRIS {
 
-    class mesh : protected state_accessor {
+    int factorize(int n, int **factors, int **powers);
+    int **grid_factorizations(int n, int *count);
+    int filter_factors_exact(int n, int **factors, int *filter);
+    int filter_factors_mod(int n, int **factors, int *filter);
 
-    public:
-	mesh(class iris *obj);
-	~mesh();
-
-	void set_size(int nx, int ny, int nz);
-
-	// commit configuration. Perform all preliminary calculations based on
-	// configuration and prepare all that is needed in order to
-	// start solving
-	void commit();
-	void dump_rho(char *in_fname);
-
-    public:
-	bool      m_initialized;
-	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
-	iris_real m_hinv[3];  // 1/h in each direction
-	iris_real m_h3inv;    // 1/dV
-	int       m_own_size[3];    // local mesh size: my portion only
-	int       m_own_offset[3];  // where does my mesh start from 
-
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-
-    private:
-	bool      m_dirty;  // if we need to re-calculate upon commit
-    };
 }
+
 #endif

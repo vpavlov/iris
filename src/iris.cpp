@@ -31,74 +31,203 @@
 #include <mpi.h>
 #include <omp.h>
 #include "iris.h"
+#include "logger.h"
+#include "event_queue.h"
+#include "comm_rec.h"
 #include "domain.h"
-#include "comm.h"
+#include "mesh.h"
+#include "charge_assigner.h"
+#include "proc_grid.h"
+
 #include "event_codes.h"
 #include "memory.h"
-#include "mesh.h"
 #include "event.h"
-#include "debug.h"
 
 using namespace ORG_NCSA_IRIS;
 
-iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
+iris::iris(MPI_Comm in_uber_comm)
+    :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
+     m_remote_leader(-1)
 {
-    the_mesh = NULL;  // to prevent domain from notifying the mesh for box changed
-    the_debug = new debug(this);
-    the_comm = new comm(this, uber_comm, iris_comm, sim_master);
-    the_domain = new domain(this);
-    the_mesh = new mesh(this);
+    init(in_uber_comm, in_uber_comm);
+}
 
-    __event_handlers[IRIS_EVENT_ATOMS] = &iris::__handle_atoms;
-    __event_handlers[IRIS_EVENT_ATOMS_EOF] = &iris::__handle_atoms_eof;
-    __event_handlers[IRIS_EVENT_BARRIER] = &iris::__handle_barrier;
+iris::iris(MPI_Comm in_uber_comm, int in_leader)
+    :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
+     m_remote_leader(-1)
+{
+    init(in_uber_comm, in_uber_comm);
+}
 
-    rest_time = 100;  // sleep for 100 microseconds if there's nothing to do
-    set_state(IRIS_STATE_INITIALIZED);
-    __barrier_posted = false;
+iris::iris(int in_role, MPI_Comm in_local_comm,
+	   MPI_Comm in_uber_comm, int in_remote_leader)
+    :m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+{
+    init(in_local_comm, in_uber_comm);
+}
+
+iris::iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
+	   MPI_Comm in_uber_comm, int in_remote_leader)
+    :m_role(in_role), m_local_leader(in_local_leader),
+     m_remote_leader(in_remote_leader)
+{
+    init(in_local_comm, in_uber_comm);
+}
+
+void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
+{
+    // first duplicate incoming communicators (to be safe) and 
+    // create the intercomm
+    MPI_Comm local_comm, uber_comm, inter_comm;  // will get free'd in ~comm_rec
+    MPI_Comm_dup(in_local_comm, &local_comm);
+    MPI_Comm_dup(in_uber_comm, &uber_comm);
+    if(!is_both()) {
+	// For the intercomm to be created, the two groups must be disjoint, and
+	// this is not the case when nodes are client/server.
+	MPI_Intercomm_create(local_comm,
+			     m_local_leader,
+			     uber_comm,
+			     m_remote_leader,
+			     IRIS_EVENT_INTERCOMM_CREATE,
+			     &inter_comm);
+    }
+    
+    // now we can setup event queue, comm_drivers, etc.
+    m_queue = new event_queue(this);
+    m_local_comm = new comm_rec(this, local_comm);
+    m_uber_comm = new comm_rec(this, uber_comm);
+    if(!is_both()) {
+	m_inter_comm = new comm_rec(this, inter_comm);
+    }else {
+	m_inter_comm = NULL;
+    }
+
+    m_logger = new logger(this);
+
+    m_mesh = NULL;
+    m_domain = NULL;
+    m_chass = NULL;
+
+    if(is_server()) {
+	m_domain = new domain(this);
+	m_mesh = new mesh(this);
+	m_chass = new charge_assigner(this);
+	m_proc_grid = new proc_grid(this);
+    }
+
+    m_logger->trace("Node initialized as %s %d %s",
+		    is_server()?(is_client()?"client/server":"server"):"client",
+		   m_local_comm->m_rank,
+		   is_leader()?"(leader)":"");
 }
 
 iris::~iris()
 {
-    delete the_comm;
-    delete the_domain;
-    delete the_mesh;
-    delete the_debug;
+    if(m_proc_grid != NULL) {
+	delete m_proc_grid;
+    }
+
+    if(m_chass != NULL) {
+	delete m_chass;
+    }
+
+    if(m_mesh != NULL) {
+	delete m_mesh;
+    }
+
+    if(m_domain != NULL) {
+	delete m_domain;
+    }
+
+    if(m_inter_comm != NULL) {
+	delete m_inter_comm;
+    }
+
+    delete m_local_comm;
+
+    m_logger->trace("Shutting down node");  // before m_uber_comm
+    delete m_logger;
+
+    delete m_uber_comm;
+    delete m_queue;
 }
 
-void iris::domain_set_dimensions(int in_dimensions)
+bool iris::is_leader()
 {
-    the_domain->set_dimensions(in_dimensions);
+    return m_local_comm->m_rank == m_local_leader;
+};
+
+void iris::set_global_box(iris_real x0, iris_real y0, iris_real z0,
+				 iris_real x1, iris_real y1, iris_real z1)
+{
+    if(is_server()) {
+	m_domain->set_global_box(x0, y0, z0, x1, y1, z1);
+    }
 }
 
-void iris::domain_set_box(iris_real x0, iris_real y0, iris_real z0,
-			  iris_real x1, iris_real y1, iris_real z1)
+void iris::set_mesh_size(int nx, int ny, int nz)
 {
-    the_domain->set_box(x0, y0, z0, x1, y1, z1);
+    if(is_server()) {
+	m_mesh->set_size(nx, ny, nz);
+    }
 }
 
-void iris::comm_set_grid_pref(int x, int y, int z)
+void iris::set_order(int in_order)
 {
-    the_comm->set_grid_pref(x, y, z);
+    if(is_server()) {
+	m_chass->set_order(in_order);
+    }
 }
 
-void iris::mesh_set_size(int nx, int ny, int nz)
+void iris::set_grid_pref(int x, int y, int z)
 {
-    the_mesh->set_size(nx, ny, nz);
+    m_proc_grid->set_pref(x, y, z);
 }
+
+
+void iris::commit()
+{
+    if(is_server()) {
+	// Beware: order is important. Some configurations depend on other
+	// being already performed
+	m_chass->commit();      // does not depend on anything being commited
+	m_proc_grid->commit();  // does not depend on anything being comitted
+	m_domain->commit();     // depends on m_proc_grid->commit()
+	m_mesh->commit();       // depends on m_proc_grid->commit()
+    }
+}
+
+
+
+// iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
+// {
+//     m_mesh = NULL;  // to prevent domain from notifying the mesh for box changed
+//     m_logger = new logger(this);
+//     m_proc_grid = new proc_grid(this, uber_comm, iris_comm, sim_master);
+//     m_domain = new domain(this);
+//     m_mesh = new mesh(this);
+
+//     __event_handlers[IRIS_EVENT_ATOMS] = &iris::__handle_atoms;
+//     __event_handlers[IRIS_EVENT_ATOMS_EOF] = &iris::__handle_atoms_eof;
+//     __event_handlers[IRIS_EVENT_BARRIER] = &iris::__handle_barrier;
+
+//     rest_time = 100;  // sleep for 100 microseconds if there's nothing to do
+//     set_state(IRIS_STATE_INITIALIZED);
+//     __barrier_posted = false;
+// }
 
 // call this after all user-configuration is set so we can calculate whatever
 // we need in order to start looping
-void iris::apply_conf()
-{
-    the_comm->setup_grid();
-    the_domain->setup_local();
-    the_mesh->setup_local();
-    the_mesh->reset_rho();
+// void iris::apply_conf()
+// {
+//     m_proc_grid->setup_grid();
+//     m_domain->set_local_box();
+//     m_mesh->setup_local();
+//     m_mesh->reset_rho();
 
-    set_state(IRIS_STATE_WAITING_FOR_ATOMS);
-    __announce_loc_box_info();
-}
+//     set_state(IRIS_STATE_WAITING_FOR_ATOMS);
+//     __announce_loc_box_info();
+// }
 
 // This gathers the local boxes of all IRIS procs and sends them to proc 0
 // of the uber comm (e.g. simulation master). It can then re-distribute this
@@ -106,24 +235,25 @@ void iris::apply_conf()
 // IRIS procs.
 void iris::__announce_loc_box_info()
 {
-    iris_real *local_boxes;
-    int sz = 6 * the_comm->iris_size;
+    // TODO: redo this with m_inter_comm
 
-    if(the_comm->iris_rank == 0) {
-	memory::create_1d(local_boxes, sz);
-    }
+    // iris_real *local_boxes;
+    // int sz = 6 * m_local_comm->m_size;
+
+    // if(m_local_comm->m_rank == 0) {
+    // 	memory::create_1d(local_boxes, sz);
+    // }
     
-    MPI_Gather(the_domain->lbox_sides, 6, IRIS_REAL,
-	       local_boxes, 6, IRIS_REAL,
-	       0, the_comm->iris_comm);
+    // MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
+    // 	       local_boxes, 6, IRIS_REAL,
+    // 	       0, m_local_comm->m_comm);
 
-    if(the_comm->iris_rank == 0) {
-	MPI_Send(local_boxes, sz, IRIS_REAL, the_comm->sim_master,
-		 IRIS_EVENT_LOCAL_BOXES,
-		 the_comm->uber_comm);
-	memory::destroy_1d(local_boxes);
-    }
-
+    // if(m_local_comm->m_rank == 0) {
+    // 	MPI_Send(local_boxes, sz, IRIS_REAL, m_proc_grid->sim_master,
+    // 		 IRIS_EVENT_LOCAL_BOXES,
+    // 		 m_uber_comm->comm);
+    // 	memory::destroy_1d(local_boxes);
+    // }
 }
 
 // Receive IRIS local boxes in all procs in pp_comm
@@ -200,12 +330,12 @@ void iris::send_event(event_t event)
 
 event_t iris::poke_uber_event(bool &out_has_event)
 {
-    return poke_mpi_event(the_comm->uber_comm, out_has_event);
+    //    return poke_mpi_event(m_proc_grid->uber_comm, out_has_event);
 }
 
 event_t iris::poke_iris_event(bool &out_has_event)
 {
-    return poke_mpi_event(the_comm->iris_comm, out_has_event);
+    //    return poke_mpi_event(m_proc_grid->iris_comm, out_has_event);
 }
 
 event_t iris::poke_barrier_event(bool &out_has_event)
@@ -220,10 +350,10 @@ event_t iris::poke_barrier_event(bool &out_has_event)
 	if(has_event) {
 	    MPI_Status status;
 	    MPI_Wait(&__barrier_req, MPI_STATUS_IGNORE);
-	    MPI_Barrier(the_comm->iris_comm);
-	    the_debug->trace("----------");
+	    //MPI_Barrier(m_proc_grid->iris_comm);
+	    m_logger->trace("----------");
 
-	    ev.comm = the_comm->iris_comm;
+	    //ev.comm = m_proc_grid->iris_comm;
 	    ev.peer = -1;
 	    ev.code = IRIS_EVENT_BARRIER;
 	    ev.size = 0;
@@ -279,9 +409,9 @@ void iris::run()
 void iris::set_state(int in_state)
 {
     if(in_state != IRIS_STATE_INITIALIZED) {
-	the_debug->trace("Changing state %d -> %d", state, in_state);
+	m_logger->trace("Changing state %d -> %d", state, in_state);
     }else {
-	the_debug->trace("Initializing state to %d", in_state);
+	m_logger->trace("Initializing state to %d", in_state);
     }
     state = in_state;
 
@@ -295,7 +425,7 @@ void iris::set_state(int in_state)
 
 void iris::post_barrier()
 {
-    MPI_Ibarrier(the_comm->iris_comm, &__barrier_req);
+    //MPI_Ibarrier(m_proc_grid->iris_comm, &__barrier_req);
     __barrier_posted = true;
 }
 
@@ -305,7 +435,7 @@ void iris::post_barrier()
 
 void iris::__handle_unimplemented(event_t event)
 {
-    the_debug->trace("Unimplemented event: %d", event.code);
+    m_logger->trace("Unimplemented event: %d", event.code);
 }
 
 void iris::__handle_atoms(event_t event)
@@ -321,9 +451,9 @@ void iris::__handle_atoms(event_t event)
 
     int natoms = event.size / unit;
     if(natoms != 0) {
-	the_debug->trace("Received %d atoms from %d", natoms, event.peer);
-	the_mesh->assign_charges((iris_real *)event.data, natoms);
-	the_debug->trace("Charge assignment from %d done", event.peer);
+	m_logger->trace("Received %d atoms from %d", natoms, event.peer);
+	m_chass->assign_charges((iris_real *)event.data, natoms);
+	m_logger->trace("Charge assignment from %d done", event.peer);
 	MPI_Request req;
 	MPI_Isend(NULL, 0, MPI_INT, event.peer, IRIS_EVENT_ATOMS_ACK, event.comm, &req);
     }
@@ -336,18 +466,18 @@ void iris::__handle_atoms_eof(event_t event)
 	throw std::logic_error("Receiving atoms EOF while in un-configured state!");
     }
 
-    the_debug->trace("All atoms received");
+    m_logger->trace("All atoms received");
     post_barrier();
 }
 
 void iris::__handle_barrier(event_t ev)
 {
     if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
-	the_mesh->exchange_halo();
+	//m_chass->exchange_halo();
 
 	// char fname[256];
-	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", the_comm->uber_size, omp_get_num_threads(), the_comm->uber_rank, omp_get_thread_num());
-	// the_mesh->dump_rho(fname);
+	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", m_proc_grid->uber_size, omp_get_num_threads(), m_proc_grid->uber_rank, omp_get_thread_num());
+	// m_mesh->dump_rho(fname);
 
 	set_state(IRIS_STATE_HAS_RHO);
     }

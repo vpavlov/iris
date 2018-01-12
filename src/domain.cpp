@@ -28,94 +28,94 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <stdexcept>
-#include "domain.h"
 #include "iris.h"
-#include "comm.h"
-#include "mesh.h"
+#include "domain.h"
+#include "logger.h"
+#include "proc_grid.h"
 
 using namespace ORG_NCSA_IRIS;
 
-domain::domain(iris *obj) : global_state(obj)
+domain::domain(iris *obj)
+    :state_accessor(obj), m_initialized(false), m_dirty(true),
+     m_pbc{true, true, true}
 {
-    dimensions = 3;
-    this->set_box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
-
-    for(int j=0;j<3;j++) {
-	for(int i=0;i<2;i++) {
-	    lbox_sides[i][j] = box_sides[i][j];
-	}
-	lbox_size[j] = box_size[j];
-    }
 }
 
 domain::~domain()
 {
 }
 
-void domain::set_dimensions(int in_dimensions)
-{
-    if(in_dimensions != 2 && in_dimensions != 3) {
-	throw std::invalid_argument("Unsupported number of dimensions!");
-    }
-
-    dimensions = in_dimensions;
-}
-
-void domain::set_box(iris_real x0, iris_real y0, iris_real z0,
-		     iris_real x1, iris_real y1, iris_real z1)
+void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
+			    iris_real x1, iris_real y1, iris_real z1)
 {
     if(x0 >= x1 || y0 >= y1 || z0 >= z1)
     {
-	throw std::domain_error("Invalid bounding box!");
+	throw std::domain_error("Invalid global bounding box!");
     }
 
-    box_sides[0][0] = x0;
-    box_sides[0][1] = y0;
-    box_sides[0][2] = z0;
+    m_global_box.xlo = x0;
+    m_global_box.ylo = y0;
+    m_global_box.zlo = z0;
 
-    box_sides[1][0] = x1;
-    box_sides[1][1] = y1;
-    box_sides[1][2] = z1;
+    m_global_box.xhi = x1;
+    m_global_box.yhi = y1;
+    m_global_box.zhi = z1;
 
-    box_size[0] = box_sides[1][0] - box_sides[0][0];
-    box_size[1] = box_sides[1][1] - box_sides[0][1];
-    box_size[2] = box_sides[1][2] - box_sides[0][2];
+    m_global_box.xsize = x1 - x0;
+    m_global_box.ysize = y1 - y0;
+    m_global_box.zsize = z1 - z0;
 
-    if(the_mesh != NULL) {
-	the_mesh->box_changed();
-    }
+    m_initialized = true;
+    m_dirty = true;
+
+    m_logger->trace("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+		    m_global_box.xsize, m_global_box.ysize,
+		    m_global_box.zsize,
+		    m_global_box.xlo, m_global_box.xhi,
+		    m_global_box.ylo, m_global_box.yhi,
+		    m_global_box.zlo, m_global_box.zhi);
+    m_logger->trace("Global box periodicity is %d, %d, %d",
+		    m_pbc[0], m_pbc[1], m_pbc[2]);
 }
 
-void domain::setup_local()
+void domain::commit()
 {
-    iris_real *xsplit = the_comm->xsplit;
-    iris_real *ysplit = the_comm->ysplit;
-    iris_real *zsplit = the_comm->zsplit;
-    int *c = the_comm->grid_coords;
-    int *size = the_comm->grid_size;
-
-    lbox_sides[0][0] = box_sides[0][0] + box_size[0] * xsplit[c[0]];
-    if(c[0] < size[0] - 1) {
-	lbox_sides[1][0] = box_sides[0][0] + box_size[0] * xsplit[c[0] + 1];
-    }else {
-	lbox_sides[1][0] = box_sides[1][0];
+    if(!m_initialized) {
+	throw std::logic_error("domain commit called without global box being initialized!");
     }
 
-    lbox_sides[0][1] = box_sides[0][1] + box_size[1] * ysplit[c[1]];
-    if(c[1] < size[1] - 1) {
-	lbox_sides[1][1] = box_sides[0][1] + box_size[1] * ysplit[c[1] + 1];
-    }else {
-	lbox_sides[1][1] = box_sides[1][1];
-    }
+    if(m_dirty) {
+	iris_real *xsplit = m_proc_grid->m_xsplit;
+	iris_real *ysplit = m_proc_grid->m_ysplit;
+	iris_real *zsplit = m_proc_grid->m_zsplit;
+	int *c = m_proc_grid->m_coords;
+	int *size = m_proc_grid->m_size;
 
-    lbox_sides[0][2] = box_sides[0][2] + box_size[2] * zsplit[c[2]];
-    if(c[2] < size[2] - 1) {
-	lbox_sides[1][2] = box_sides[0][2] + box_size[2] * zsplit[c[2] + 1];
-    }else {
-	lbox_sides[1][2] = box_sides[1][2];
+	// OAOO helper
+#define CALC_LOCAL(ILO, IHI, ISIZE, I)					\
+    m_local_box.ILO = m_global_box.ILO + m_global_box.ISIZE * xsplit[c[I]]; \
+    if(c[I] < size[I] - 1) {					\
+	m_local_box.IHI = m_global_box.ILO + m_global_box.ISIZE * xsplit[c[I] + 1]; \
+    }else {								\
+	m_local_box.IHI = m_global_box.IHI;				\
     }
+	
+	CALC_LOCAL(xlo, xhi, xsize, 0);
+	CALC_LOCAL(ylo, yhi, ysize, 1);
+	CALC_LOCAL(zlo, zhi, zsize, 2);
 
-    lbox_size[0] = lbox_sides[1][0] - lbox_sides[0][0];
-    lbox_size[1] = lbox_sides[1][1] - lbox_sides[0][1];
-    lbox_size[2] = lbox_sides[1][2] - lbox_sides[0][2];
+#undef CALC_LOCAL
+	
+	m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
+	m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
+	m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
+
+	m_logger->trace("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+			m_local_box.xsize, m_local_box.ysize,
+			m_local_box.zsize,
+			m_local_box.xlo, m_local_box.xhi,
+			m_local_box.ylo, m_local_box.yhi,
+			m_local_box.zlo, m_local_box.zhi);
+	m_dirty = false;
+    }
 }
