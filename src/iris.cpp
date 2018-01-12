@@ -107,6 +107,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_mesh = NULL;
     m_domain = NULL;
     m_chass = NULL;
+    m_proc_grid = NULL;
 
     if(is_server()) {
 	m_domain = new domain(this);
