@@ -31,6 +31,7 @@
 #define __IRIS_IRIS_H__
 
 #include <mpi.h>
+#include <map>
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {

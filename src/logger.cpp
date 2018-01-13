@@ -29,6 +29,7 @@
 //==============================================================================
 #include <cstdio>
 #include <cstdlib>
+#include <stdarg.h>
 #include <string>
 #include <omp.h>
 #include "logger.h"

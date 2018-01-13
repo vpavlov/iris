@@ -27,6 +27,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <string.h>
+#include <stdio.h>
 #include "iris.h"
 #include "mesh.h"
 #include "proc_grid.h"

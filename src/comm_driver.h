@@ -31,6 +31,7 @@
 #define __COMM_DRIVER_H__
 
 #include <mpi.h>
+#include <pthread.h>
 
 namespace ORG_NCSA_IRIS {
 

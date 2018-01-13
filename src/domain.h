@@ -30,6 +30,7 @@
 #ifndef __IRIS_DOMAIN_H__
 #define __IRIS_DOMAIN_H__
 
+#include <stdexcept>
 #include "state_accessor.h"
 #include "box.h"
 

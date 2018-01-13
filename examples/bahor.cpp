@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <mpi.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <string.h>
 #include <iris/real.h>
 #include <iris/memory.h>
 #include <iris/iris.h>
