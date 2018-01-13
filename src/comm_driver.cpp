@@ -42,19 +42,32 @@ static void *p2p_loop_start(void *thread_arg)
 }
 
 comm_driver::comm_driver(MPI_Comm in_comm, event_queue *in_queue)
+    : m_comm(in_comm), m_queue(in_queue), m_quit(false),
+      m_p2p_loop_thread_running(false)
 {
-    m_comm = in_comm;
-    m_queue = in_queue;
-    m_quit = false;
-    pthread_create(&m_p2p_loop_thread, NULL, &p2p_loop_start, this);
 }
 
 comm_driver::~comm_driver()
 {
-    void *retval;
+    stop_event_source();
+}
 
-    m_quit = true;
-    pthread_join(m_p2p_loop_thread, &retval);
+void comm_driver::start_event_source()
+{
+    if(!m_p2p_loop_thread_running) {
+	pthread_create(&m_p2p_loop_thread, NULL, &p2p_loop_start, this);
+	m_p2p_loop_thread_running = true;
+    }
+}
+
+void comm_driver::stop_event_source()
+{
+    if(m_p2p_loop_thread_running) {
+	void *retval;
+	m_quit = true;
+	pthread_join(m_p2p_loop_thread, &retval);
+	m_p2p_loop_thread_running = false;
+    }
 }
 
 void *comm_driver::p2p_loop()

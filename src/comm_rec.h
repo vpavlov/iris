@@ -41,12 +41,12 @@ namespace ORG_NCSA_IRIS {
 	~comm_rec();
 
     public:
+
 	MPI_Comm m_comm;
 	int m_rank;
 	int m_size;
-
-    private:
 	class comm_driver *m_driver;
+
     };
 }
 

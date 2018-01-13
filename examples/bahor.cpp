@@ -89,8 +89,8 @@ void read_nacl(char *fname, iris_real **&x, iris_real *&q)
     fclose(fp);
 }
 
-void __read_atoms(char *fname, int rank, int pp_size, MPI_Comm local_comm,
-		  iris_real **&my_x, iris_real *&my_q)
+void read_atoms(char *fname, int rank, int pp_size, MPI_Comm local_comm,
+		iris_real **&my_x, iris_real *&my_q)
 {
     iris_real **x;
     iris_real *q;
@@ -204,6 +204,10 @@ main(int argc, char **argv)
 	exit(-1);
     }
 
+    // handle arguments
+    char *fname = argv[1];
+    int mode = atoi(argv[2]);
+
     int rank, size;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -218,13 +222,20 @@ main(int argc, char **argv)
     // MPI_Barrier(MPI_COMM_WORLD);
     
 
-    int mode = atoi(argv[2]);
     int role;
     iris *x;
     MPI_Comm local_comm;
-    int pp_size = size/2;
+    int pp_size;
+    iris_real **my_x;
+    iris_real *my_q;
 
     if(mode == 0) {
+	// In mode 0, all nodes are both client and server. Thus pp_size
+	// (the size of the client nodes) = size and local_comm is just a 
+	// copy of MPI_COMM_WORLD
+	pp_size = size;
+	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
+
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(MPI_COMM_WORLD);
     }else if(mode == 1) {
@@ -240,6 +251,7 @@ main(int argc, char **argv)
 	// 0 - client
 	// 1 - server
 	// 2 - server
+	pp_size = size/2;
 	role = (rank < pp_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
 	MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
 
@@ -257,23 +269,22 @@ main(int argc, char **argv)
 	exit(-1);
     }
 
+    // Client nodes must somehow have aquired knowledge about atoms. In this
+    // example, we read them from a DL_POLY CONFIG file.
+    if(x->is_client()) {
+	read_atoms(fname, rank, pp_size, local_comm, my_x, my_q);
+    }
 
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
     x->set_order(3);
     x->commit();
+    x->run();
     delete x;
 
     MPI_Finalize();
     exit(0);
-
-
-    //    read_atoms(argv[1], rank, pp_size, local_comm, my_x, my_q);
-
-
-
-
 
 
     // if(role == 2) {

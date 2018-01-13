@@ -31,6 +31,7 @@
 #define __IRIS_IRIS_H__
 
 #include <mpi.h>
+#include <pthread.h>
 #include <map>
 #include "real.h"
 
@@ -102,7 +103,16 @@ namespace ORG_NCSA_IRIS {
 	//   - perform any preliminary calculations necessary for the solving;
 	void commit();
 
+	// Call this to run the event loop (in a separate thread)
 	void run();
+
+	// This is not part of the API, but needs to be public, so the
+	// static thread function can call it
+	void *event_loop();
+
+
+
+
 
 	void set_state(int state);  // set new FSM state
 
@@ -125,6 +135,9 @@ namespace ORG_NCSA_IRIS {
 
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
+	void start_event_sink();
+	void stop_event_sink();
+
 
 	void __announce_loc_box_info();
 
@@ -149,6 +162,11 @@ namespace ORG_NCSA_IRIS {
 	bool suspend_event_loop;  // temporarily suspend the event loop
 
     private:
+	pthread_t m_main_thread;
+	bool m_main_thread_running;
+
+
+
 
 	// event handlers
 	bool volatile __quit_event_loop;  // when to break the event loop

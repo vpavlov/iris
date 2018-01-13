@@ -38,6 +38,7 @@
 #include "mesh.h"
 #include "charge_assigner.h"
 #include "proc_grid.h"
+#include "comm_driver.h"
 
 #include "event_codes.h"
 #include "memory.h"
@@ -76,6 +77,8 @@ iris::iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+    m_main_thread_running = false;
+
     // first duplicate incoming communicators (to be safe) and 
     // create the intercomm
     MPI_Comm local_comm, uber_comm, inter_comm;  // will get free'd in ~comm_rec
@@ -124,6 +127,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris::~iris()
 {
+    stop_event_sink();
+
     if(m_proc_grid != NULL) {
 	delete m_proc_grid;
     }
@@ -198,6 +203,48 @@ void iris::commit()
     }
 }
 
+// Run the main event queue
+void iris::run()
+{
+    m_uber_comm->m_driver->start_event_source();
+    m_local_comm->m_driver->start_event_source();
+    if(m_inter_comm != NULL) {
+	m_inter_comm->m_driver->start_event_source();
+    }
+
+    start_event_sink();
+}
+
+static void *main_thread_start(void *thread_arg)
+{
+    iris *obj = (iris *)thread_arg;
+    return obj->event_loop();
+}
+
+void iris::start_event_sink()
+{
+    if(!m_main_thread_running) {
+	pthread_create(&m_main_thread, NULL, &main_thread_start, this);
+	m_main_thread_running = true;
+    }
+}
+
+void iris::stop_event_sink()
+{
+    if(m_main_thread_running) {
+	m_queue->post_quit_event_self();
+	void *retval;
+	pthread_join(m_main_thread, &retval);
+	m_main_thread_running = false;
+    }
+}
+
+void *iris::event_loop()
+{
+    event_t event;
+    while(m_queue->get_event(event)) {
+    }
+}
 
 
 // iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
@@ -385,27 +432,27 @@ event_t iris::poke_event(bool &out_has_event)
     return event;
 }
 
-void iris::run()
-{
-#pragma omp parallel
-#pragma omp single
-    {
-	__quit_event_loop = false;
-	suspend_event_loop = false;
-	while(!__quit_event_loop) {
-	    if(!suspend_event_loop) {
-		bool has_event;
-		event_t event = poke_event(has_event);
-#pragma omp task default(none) firstprivate(has_event, event)
-		if(has_event) {
-		    __handle_event(event);
-		}else {
-		    usleep(rest_time);  // suspend for some time so others can work
-		}
-	    }
-	}
-    }
-}
+// void iris::run()
+// {
+// #pragma omp parallel
+// #pragma omp single
+//     {
+// 	__quit_event_loop = false;
+// 	suspend_event_loop = false;
+// 	while(!__quit_event_loop) {
+// 	    if(!suspend_event_loop) {
+// 		bool has_event;
+// 		event_t event = poke_event(has_event);
+// #pragma omp task default(none) firstprivate(has_event, event)
+// 		if(has_event) {
+// 		    __handle_event(event);
+// 		}else {
+// 		    usleep(rest_time);  // suspend for some time so others can work
+// 		}
+// 	    }
+// 	}
+//     }
+// }
 
 void iris::set_state(int in_state)
 {

@@ -42,13 +42,18 @@ namespace ORG_NCSA_IRIS {
 	comm_driver(MPI_Comm in_comm, class event_queue *in_queue);
 	~comm_driver();
 
+	void start_event_source();  // start the event loop
+	void stop_event_source();   // stop the event loop
 	void *p2p_loop();
 
     private:
+
+
 	MPI_Comm m_comm;
 	volatile bool m_quit;
 	class event_queue *m_queue;
 	pthread_t m_p2p_loop_thread;
+	bool m_p2p_loop_thread_running;
     };
 
 }
