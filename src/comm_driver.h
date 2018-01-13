@@ -45,6 +45,7 @@ namespace ORG_NCSA_IRIS {
 
     private:
 	MPI_Comm m_comm;
+	volatile bool m_quit;
 	class event_queue *m_queue;
 	pthread_t m_p2p_loop_thread;
     };

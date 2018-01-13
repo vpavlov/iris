@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <unistd.h>
 #include "comm_driver.h"
 #include "memory.h"
 #include "event.h"
@@ -44,6 +45,7 @@ comm_driver::comm_driver(MPI_Comm in_comm, event_queue *in_queue)
 {
     m_comm = in_comm;
     m_queue = in_queue;
+    m_quit = false;
     pthread_create(&m_p2p_loop_thread, NULL, &p2p_loop_start, this);
 }
 
@@ -51,21 +53,20 @@ comm_driver::~comm_driver()
 {
     void *retval;
 
-    pthread_cancel(m_p2p_loop_thread);
+    m_quit = true;
     pthread_join(m_p2p_loop_thread, &retval);
 }
 
 void *comm_driver::p2p_loop()
 {
-    while(42) {
+    while(!m_quit) {
 	int nbytes;
 	MPI_Status status;
 	int has_event;
-	int old_cancel_state;
 	
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancel_state);
 	MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
 	if(has_event) {
+	    printf("has_event\n");
 	    MPI_Get_count(&status, MPI_BYTE, &nbytes);
 	    void *msg = memory::wmalloc(nbytes);
 	    MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
@@ -73,7 +74,5 @@ void *comm_driver::p2p_loop()
 	    m_queue->post_event(m_comm, status.MPI_SOURCE,
 				status.MPI_TAG, nbytes, msg);
 	}
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_cancel_state);
-	pthread_testcancel();  // make sure the thread can be cancelled
     }
 }

@@ -195,8 +195,10 @@ void __send_atoms(MPI_Comm local_comm, int rank,
 
 main(int argc, char **argv)
 {
-    if(argc < 2) {
-	printf("Usage: %s <path-to-NaCl.data>\n", argv[0]);
+    if(argc < 3) {
+	printf("Usage: %s <path-to-NaCl.data> <mode>\n", argv[0]);
+	printf("  mode = 0 is all nodes are client/server\n");
+	printf("  mode = 1 is half nodes are clients, half nodes are server\n");
 	exit(-1);
     }
 
@@ -212,35 +214,48 @@ main(int argc, char **argv)
     // 	getc(stdin);
     // }
     // MPI_Barrier(MPI_COMM_WORLD);
+    
 
-
-    // split the world communicator in two groups:
-    // - client group: the one that "uses" IRIS. It provides atom coords and
-    //                 charges to IRIS and receives forces, energies, etc. back
-    // - server group: the processes that IRIS can use to do its calculations
-    //
-    // In this example only, we decide to split the world comm in two mostly
-    // equal parts. The first part is the client, the second -- the server.
-    // If the world comm has odd number of procs, client will receive one less
-    // procs than the server. (E.g. if nprocs = 3, we have:
-    // 0 - client
-    // 1 - server
-    // 2 - server
+    int mode = atoi(argv[2]);
+    int role;
+    iris *x;
     MPI_Comm local_comm;
     int pp_size = size/2;
-    int role = (rank < pp_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
-    MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
+
+    if(mode == 0) {
+	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
+	x = new iris(MPI_COMM_WORLD);
+    }else if(mode == 1) {
+	// split the world communicator in two groups:
+	// - client group: the one that "uses" IRIS. It provides atom coords and
+	//                 charges to IRIS and receives forces, energies, etc. back
+	// - server group: the processes that IRIS can use to do its calculations
+	//
+	// In this example only, we decide to split the world comm in two mostly
+	// equal parts. The first part is the client, the second -- the server.
+	// If the world comm has odd number of procs, client will receive one less
+	// procs than the server. (E.g. if nprocs = 3, we have:
+	// 0 - client
+	// 1 - server
+	// 2 - server
+	role = (rank < pp_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
+	MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
 
 
-    // figure out the remote leader
-    // In this example only:
-    // - the client's remote leader is server's rank 0, which = pp_size
-    // - the server's remote leader is client's rank 0, which is 0
-    int remote_leader = (role==IRIS_ROLE_SERVER)?0:pp_size;
+	// figure out the remote leader
+	// In this example only:
+	// - the client's remote leader is server's rank 0, which = pp_size
+	// - the server's remote leader is client's rank 0, which is 0
+	int remote_leader = (role==IRIS_ROLE_SERVER)?0:pp_size;
 
 
-    //iris *x = new iris(MPI_COMM_WORLD);
-    iris *x = new iris(role, local_comm, MPI_COMM_WORLD, remote_leader);
+	x = new iris(role, local_comm, MPI_COMM_WORLD, remote_leader);
+    }else {
+	printf("Unknown mode. Only 0 and 1 are supported\n");
+	exit(-1);
+    }
+
+
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
@@ -250,6 +265,13 @@ main(int argc, char **argv)
 
     MPI_Finalize();
     exit(0);
+
+
+    //    read_atoms(argv[1], rank, pp_size, local_comm, my_x, my_q);
+
+
+
+
 
 
     // if(role == 2) {
