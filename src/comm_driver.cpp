@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <stdexcept>
 #include <unistd.h>
 #include "comm_driver.h"
 #include "memory.h"
@@ -79,8 +80,11 @@ void *comm_driver::p2p_loop()
 	MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
 	if(has_event) {
 	    int nbytes;
+	    void *msg = NULL;
 	    MPI_Get_count(&status, MPI_BYTE, &nbytes);
-	    void *msg = memory::wmalloc(nbytes);
+	    if(nbytes != 0) {
+		msg = memory::wmalloc(nbytes);
+	    }
 	    MPI_Recv(msg, nbytes, MPI_BYTE,
 		     status.MPI_SOURCE,
 		     status.MPI_TAG,
@@ -97,3 +101,4 @@ void *comm_driver::p2p_loop()
 	usleep(10);
     }
 }
+

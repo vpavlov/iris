@@ -53,6 +53,8 @@ namespace ORG_NCSA_IRIS {
 	void warn(const char *str, ...);
 	void error(const char *str, ...);
 
+	void trace_event(event_t *ev);
+	void trace_mem(void *addr);
     private:
 	double m_log_level;
 	double m_start_time;

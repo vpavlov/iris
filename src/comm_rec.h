@@ -41,6 +41,7 @@ namespace ORG_NCSA_IRIS {
 	~comm_rec();
 
 	void post_event(void *data, int size, int code, int peer);
+	void send_event(void *data, int size, int code, int peer);
 
     public:
 

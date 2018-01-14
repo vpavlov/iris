@@ -98,3 +98,15 @@ void logger::error(const char *fmt, ...)
 {
     DO_LOG(IRIS_LOG_LEVEL_ERROR, "ERROR");
 }
+
+void logger::trace_event(event_t *ev)
+{
+    trace("Event %x %d %d %d %p", ev->comm, ev->peer, ev->code, ev->size, ev->data);
+}
+
+void logger::trace_mem(void *in_ptr)
+{
+    unsigned char *ptr = (unsigned char *)in_ptr;
+    trace("Memory @ %p starts with: 0x%02x%02x%02x%02x 0x%02x%02x%02x%02x", ptr,
+	  ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], ptr[6], ptr[7]);
+}

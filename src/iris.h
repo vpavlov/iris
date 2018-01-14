@@ -34,8 +34,11 @@
 #include <pthread.h>
 #include <map>
 #include "real.h"
+#include "event.h"
 
 namespace ORG_NCSA_IRIS {
+
+    void __sync_handler(class iris *obj, struct event_t event);
 
     // Role of this IRIS node.
     // Internal note: coded in binary to underline the fact that it is a bitmask
@@ -44,6 +47,9 @@ namespace ORG_NCSA_IRIS {
 
 #define IRIS_STATE_INITIALIZED         0  // intial state when constructed
 #define IRIS_STATE_COMMITED            1  // configuration commited
+
+    typedef void (*event_handler_t)(class iris *obj, struct event_t);
+
 
     class iris {
 
@@ -119,11 +125,20 @@ namespace ORG_NCSA_IRIS {
 	void *event_loop();
 
 
+	// Register event handler
+	void register_event_handler(int in_event_code,
+				    event_handler_t in_callback)
+	{
+	    m_event_handlers[in_event_code] = in_callback;
+	}
+
+	void sync_handler(event_t event);
+	void wait_event(event_t &out_event);
+
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void start_event_sink();
 	void stop_event_sink();
-
 
     public:
 	int m_state;                   // FSM state
@@ -145,6 +160,14 @@ namespace ORG_NCSA_IRIS {
     private:
 	pthread_t m_main_thread;
 	bool      m_main_thread_running;
+
+	// to facilitate blocking waiting for event from the main thread
+	pthread_mutex_t m_sync_mutex;
+	pthread_cond_t  m_sync_cond;
+	bool            m_has_sync_event;
+	event_t         m_sync_event;
+
+	std::map<int, event_handler_t> m_event_handlers;
     };
 }
 #endif

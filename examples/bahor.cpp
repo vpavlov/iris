@@ -234,6 +234,7 @@ main(int argc, char **argv)
 	// In mode 0, all nodes are both client and server.
 	// Thus client_size  = size and local_comm is just MPI_COMM_WORLD
 	client_size = size;
+	server_size = size;
 	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
@@ -307,6 +308,7 @@ main(int argc, char **argv)
     // continue doing whatever they need to do.
     x->run();
 
+
     // Sending atoms from client to server
     //------------------------------------
     // The client needs to know the domain decomposition of the server nodes
@@ -314,14 +316,14 @@ main(int argc, char **argv)
     // So, each client node must ask all server nodes about their local boxes.
     // This must be done once after each commit.
     //
-    // Instead of doing this in all-client x all-server fashion, we do it
-    // all-servers -> server-leader -> client-leader -> all-clients. This
-    // greatly reduces the amount of communications needed.
+    // However, to minimize communication, only the client leader gets the 
+    // server procs' local boxes and must then distribute them by whatever
+    // means it sees fit.
+    // 
+    // In mode 0 this is not really needed, but it still works. No communication
+    // is done in that case, since client and server leader are the same proc.
     iris_real *local_boxes = x->get_local_boxes(server_size);
 
-
-    // simulate some work
-    sleep(1);
 
     // Cleanup
     delete x;

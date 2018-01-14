@@ -32,6 +32,7 @@
 #include "iris.h"
 #include "comm_rec.h"
 #include "comm_driver.h"
+#include "logger.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -59,5 +60,10 @@ void comm_rec::post_event(void *in_data, int in_size, int in_code, int in_peer)
     MPI_Request req;
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_code, m_comm, &req);
     MPI_Request_free(&req);
+}
+
+void comm_rec::send_event(void *in_data, int in_size, int in_code, int in_peer)
+{
+    MPI_Send(in_data, in_size, MPI_BYTE, in_peer, in_code, m_comm);
 }
 

@@ -47,14 +47,14 @@ using namespace ORG_NCSA_IRIS;
 
 iris::iris(MPI_Comm in_uber_comm)
     :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-     m_remote_leader(-1)
+     m_remote_leader(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
 iris::iris(MPI_Comm in_uber_comm, int in_leader)
     :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-     m_remote_leader(-1)
+     m_remote_leader(in_leader)
 {
     init(in_uber_comm, in_uber_comm);
 }
@@ -76,8 +76,16 @@ iris::iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-    m_main_thread_running = false;
+    pthread_mutex_init(&m_sync_mutex, NULL);
+    pthread_cond_init(&m_sync_cond, NULL);
+    m_has_sync_event = false;
+    m_sync_event.data = NULL;
 
+    m_main_thread_running = false;
+    
+    // setup event handlers
+    m_event_handlers.clear();
+    
     // first duplicate incoming communicators (to be safe) and 
     // create the intercomm
     MPI_Comm local_comm, uber_comm, inter_comm;  // will get free'd in ~comm_rec
@@ -118,6 +126,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_proc_grid = new proc_grid(this);
     }
 
+    register_event_handler(IRIS_EVENT_LOCAL_BOXES, __sync_handler);
+
     m_state = IRIS_STATE_INITIALIZED;
 
     m_logger->trace("Node initialized as %s %d %s",
@@ -129,6 +139,9 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 iris::~iris()
 {
     stop_event_sink();
+
+    pthread_mutex_destroy(&m_sync_mutex);
+    pthread_cond_destroy(&m_sync_cond);
 
     if(m_proc_grid != NULL) {
 	delete m_proc_grid;
@@ -245,34 +258,70 @@ void *iris::event_loop()
 {
     event_t event;
     while(m_queue->get_event(event)) {
-	m_logger->trace("got event %d", event.code);
+	auto handler = m_event_handlers.find(event.code);
+	if(handler != m_event_handlers.end()) {
+	    handler->second(this, event);
+	}else {
+	    memory::wfree(event.data);
+	}
     }
 }
 
-
 iris_real *iris::get_local_boxes(int in_server_size)
 {
-    if(m_state != IRIS_STATE_COMMITED) {
-	throw std::logic_error("get_local_boxes called, but configuration not commited!");
-    }
-
-    // only clients need to get local boxes from server
-    if(is_client()) {
-	// there are 6 coordinates (xlo, xhi, ylo, yhi, zlo, zhi) for each
-	// server proc
-	iris_real *retval;
-	int size = in_server_size * 6;
-	memory::create_1d(retval, size);
-
-	// client leader asks server leader for the info
-	if(is_leader()) {
-	    m_uber_comm->post_event(NULL, 0,
-				    IRIS_EVENT_GET_LOCAL_BOXES,
-				    m_remote_leader);
+    if(is_server()) {
+	if(in_server_size != m_local_comm->m_size) {
+	    throw std::invalid_argument("in_server_size is different than the size of the server communicator!");
 	}
-    }else {
+
+	iris_real *local_boxes;
+	int size = 6 * in_server_size;  // 3 directions x (lo, hi)
+	if(is_leader()) {
+	    memory::create_1d(local_boxes, size);
+	}
+
+	MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
+		   local_boxes, 6, IRIS_REAL, m_local_leader,
+		   m_local_comm->m_comm);
+
+	if(is_leader()) {
+	    if(!is_client()) {
+		m_uber_comm->send_event(local_boxes, size*sizeof(IRIS_REAL),
+					IRIS_EVENT_LOCAL_BOXES,
+					m_remote_leader);
+		memory::destroy_1d(local_boxes);
+		return NULL;
+	    }else {
+		return local_boxes;
+	    }
+	}
 	return NULL;
+    }else if(is_leader()) {
+	event_t ev;
+	wait_event(ev);
+	return (iris_real *)ev.data;
     }
+    return NULL;
+}
+
+void iris::sync_handler(event_t event)
+{
+    pthread_mutex_lock(&m_sync_mutex);
+    m_has_sync_event = true;
+    m_sync_event = event;
+    pthread_cond_signal(&m_sync_cond);
+    pthread_mutex_unlock(&m_sync_mutex);
+}
+
+void iris::wait_event(event_t &out_event)
+{
+    pthread_mutex_lock(&m_sync_mutex);
+    while(!m_has_sync_event) {
+	pthread_cond_wait(&m_sync_cond, &m_sync_mutex);
+    }
+    out_event = m_sync_event;
+    pthread_mutex_unlock(&m_sync_mutex);
+}
 
     // For mode 0, each client is also a server, and the atoms from client X
     // belong to the same node. So there is no need to do any of this.
@@ -296,7 +345,6 @@ iris_real *iris::get_local_boxes(int in_server_size)
     // 		 m_uber_comm->comm);
     // 	memory::destroy_1d(local_boxes);
     // }
-}
 
 
 // iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
@@ -582,3 +630,8 @@ iris_real *iris::get_local_boxes(int in_server_size)
 // 	set_state(IRIS_STATE_HAS_RHO);
 //     }
 // }
+
+void ORG_NCSA_IRIS::__sync_handler(iris *obj, event_t event)
+{
+    obj->sync_handler(event);
+}
