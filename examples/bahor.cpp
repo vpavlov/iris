@@ -10,7 +10,6 @@
 #include <iris/iris.h>
 #include <iris/domain.h>
 #include <iris/utils.h>
-#include <iris/event_codes.h>
 #include <iris/comm_driver.h>
 #include <iris/event_queue.h>
 #include <iris/logger.h>
@@ -120,7 +119,7 @@ void read_atoms(char *fname, int rank, int pp_size, MPI_Comm local_comm,
 	memory::destroy_1d(q);
     }
 }
-
+/*
 void __send_atoms(MPI_Comm local_comm, int rank,
 		  iris_real **my_x,
 		  iris_real *my_q,
@@ -194,7 +193,7 @@ void __send_atoms(MPI_Comm local_comm, int rank,
     }
 
 }
-
+*/
 main(int argc, char **argv)
 {
     if(argc < 3) {
@@ -225,42 +224,46 @@ main(int argc, char **argv)
     int role;
     iris *x;
     MPI_Comm local_comm;
-    int pp_size;
+    int client_size;
+    int server_size;
     iris_real **my_x;
     iris_real *my_q;
 
+
     if(mode == 0) {
-	// In mode 0, all nodes are both client and server. Thus pp_size
-	// (the size of the client nodes) = size and local_comm is just a 
-	// copy of MPI_COMM_WORLD
-	pp_size = size;
+	// In mode 0, all nodes are both client and server.
+	// Thus client_size  = size and local_comm is just MPI_COMM_WORLD
+	client_size = size;
 	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(MPI_COMM_WORLD);
     }else if(mode == 1) {
 	// split the world communicator in two groups:
-	// - client group: the one that "uses" IRIS. It provides atom coords and
-	//                 charges to IRIS and receives forces, energies, etc. back
-	// - server group: the processes that IRIS can use to do its calculations
+	// - client group: the one that "uses" IRIS. It provides atom coords
+	//                 and charges to IRIS and receives forces, energies,
+	//                 etc. back
+	// - server group: the processes that IRIS can use to do its
+	//                 calculations of the long-range interactions
 	//
 	// In this example only, we decide to split the world comm in two mostly
 	// equal parts. The first part is the client, the second -- the server.
-	// If the world comm has odd number of procs, client will receive one less
-	// procs than the server. (E.g. if nprocs = 3, we have:
-	// 0 - client
-	// 1 - server
-	// 2 - server
-	pp_size = size/2;
-	role = (rank < pp_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
+	// If the world comm has odd number of procs, client will receive one
+	// less proc than the server. (E.g. if nprocs = 3, we have:
+	//   0 - client
+	//   1 - server
+	//   2 - server
+	client_size = size/2;
+	server_size = size - client_size;
+	role = (rank < client_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
 	MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
 
 
 	// figure out the remote leader
 	// In this example only:
-	// - the client's remote leader is server's rank 0, which = pp_size
+	// - the client's remote leader is server's rank 0, which = client_size
 	// - the server's remote leader is client's rank 0, which is 0
-	int remote_leader = (role==IRIS_ROLE_SERVER)?0:pp_size;
+	int remote_leader = (role==IRIS_ROLE_SERVER)?0:client_size;
 
 
 	x = new iris(role, local_comm, MPI_COMM_WORLD, remote_leader);
@@ -269,22 +272,62 @@ main(int argc, char **argv)
 	exit(-1);
     }
 
-    // Client nodes must somehow have aquired knowledge about atoms. In this
-    // example, we read them from a DL_POLY CONFIG file.
+
+    // Client nodes must have somehow aquired knowledge about atoms. In this
+    // example, we read them from a DL_POLY CONFIG file. For demonstration
+    // purposes we split the atoms between the client processors in a 
+    // straightforward way: first 27000/client_size atoms go to the first
+    // client proc, second -- to the second proc, etc. This is obviously not
+    // optimal or anything, but this is not IRIS's responsibility -- the client
+    // must have already done some kind of domain decomposition and scattering
+    // of the atoms in a way that it thinks is optimal for it.
+    // So this part would have usually been done already in some other way.
     if(x->is_client()) {
-	read_atoms(fname, rank, pp_size, local_comm, my_x, my_q);
+	read_atoms(fname, rank, client_size, local_comm, my_x, my_q);
     }
 
+
+    // Setup IRIS. Although called by both client and server nodes, only
+    // nodes for which this information is meaningful will do something with it
+    // others will just noop.
+    //
+    // At the end of the configuration, call commit in order to apply all
+    // the configuration and make the IRIS server nodes perform any preliminary
+    // calculations in order to prepare for the calculation proper.
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
     x->set_order(3);
     x->commit();
-    x->run();
-    delete x;
+    
 
+    // The run() call spawns a new event looping thread on the node. The thread
+    // blocks waiting for events, so it won't consume resources when there are
+    // no events. The run call returns immediately, so the client nodes can 
+    // continue doing whatever they need to do.
+    x->run();
+
+    // Sending atoms from client to server
+    //------------------------------------
+    // The client needs to know the domain decomposition of the server nodes
+    // so it can know which client node send which atoms to which server node.
+    // So, each client node must ask all server nodes about their local boxes.
+    // This must be done once after each commit.
+    //
+    // Instead of doing this in all-client x all-server fashion, we do it
+    // all-servers -> server-leader -> client-leader -> all-clients. This
+    // greatly reduces the amount of communications needed.
+    iris_real *local_boxes = x->get_local_boxes(server_size);
+
+
+    // simulate some work
+    sleep(1);
+
+    // Cleanup
+    delete x;
     MPI_Finalize();
     exit(0);
+
 
 
     // if(role == 2) {
@@ -301,15 +344,15 @@ main(int argc, char **argv)
     // 	iris_real **my_x;
     // 	iris_real *my_q;
     // 	iris_real *local_boxes;
-    // 	size_t natoms = 27000/pp_size;
+    // 	size_t natoms = 27000/client_size;
 
-    // 	__read_atoms(argv[1], rank, pp_size, local_comm, my_x, my_q);
-    // 	int iris_size = size - pp_size;
+    // 	__read_atoms(argv[1], rank, client_size, local_comm, my_x, my_q);
+    // 	int iris_size = size - client_size;
     // 	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, local_comm,
     // 			       local_boxes);
 
     // 	for(int i=0;i<NSTEPS;i++) {
-    // 	    __send_atoms(local_comm, rank, my_x, my_q, natoms, local_boxes, iris_size, pp_size);
+    // 	    __send_atoms(local_comm, rank, my_x, my_q, natoms, local_boxes, iris_size, client_size);
     // 	}
 
     // 	memory::destroy_2d(my_x);

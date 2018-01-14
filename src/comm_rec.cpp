@@ -54,3 +54,10 @@ comm_rec::~comm_rec()
     MPI_Comm_free(&m_comm);
 }
 
+void comm_rec::post_event(void *in_data, int in_size, int in_code, int in_peer)
+{
+    MPI_Request req;
+    MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_code, m_comm, &req);
+    MPI_Request_free(&req);
+}
+

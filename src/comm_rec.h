@@ -40,6 +40,8 @@ namespace ORG_NCSA_IRIS {
 	comm_rec(class iris *in_obj, MPI_Comm in_comm);
 	~comm_rec();
 
+	void post_event(void *data, int size, int code, int peer);
+
     public:
 
 	MPI_Comm m_comm;

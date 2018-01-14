@@ -39,7 +39,6 @@
 #include "memory.h"
 #include "domain.h"
 #include "logger.h"
-#include "event_codes.h"
 #include "event.h"
 
 using namespace ORG_NCSA_IRIS;

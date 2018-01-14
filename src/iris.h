@@ -43,8 +43,7 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_SERVER 0b10
 
 #define IRIS_STATE_INITIALIZED         0  // intial state when constructed
-#define IRIS_STATE_WAITING_FOR_ATOMS   1  // waiting to receive atoms
-#define IRIS_STATE_HAS_RHO             2  // right-hand side built
+#define IRIS_STATE_COMMITED            1  // configuration commited
 
     class iris {
 
@@ -103,6 +102,15 @@ namespace ORG_NCSA_IRIS {
 	//   - perform any preliminary calculations necessary for the solving;
 	void commit();
 
+	// The client nodes receive an array of xlo,ylo,zlo,xhi,yhi,zhi
+	// for each of the server's local boxes, in the rank order of the
+	// server's local_comm.
+	//
+	// Note that the client passes server_size, because it *knows* it:
+	// after all, it was the client, that allocated our communicator, so
+	// it must know how many processes are assigned to the IRIS server.
+	iris_real *get_local_boxes(int server_size);
+
 	// Call this to run the event loop (in a separate thread)
 	void run();
 
@@ -111,37 +119,14 @@ namespace ORG_NCSA_IRIS {
 	void *event_loop();
 
 
-
-
-
-	void set_state(int state);  // set new FSM state
-
-	static void send_event(struct event_t);
-        void post_barrier();
-
-
-	struct event_t poke_event(bool &out_has_event);
-	struct event_t poke_mpi_event(MPI_Comm comm, bool &out_has_event);
-	struct event_t poke_uber_event(bool &out_has_event);
-	struct event_t poke_iris_event(bool &out_has_event);
-	struct event_t poke_barrier_event(bool &out_has_event);
-
-	static void recv_local_boxes(int iris_comm_size,
-				     int rank,
-				     int pp_master,
-				     MPI_Comm uber_comm, 
-				     MPI_Comm pp_comm,
-				     iris_real *&out_local_boxes);
-
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void start_event_sink();
 	void stop_event_sink();
 
 
-	void __announce_loc_box_info();
-
     public:
+	int m_state;                   // FSM state
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
@@ -151,35 +136,15 @@ namespace ORG_NCSA_IRIS {
 	class comm_rec    *m_local_comm;  // ...within group (client OR server)
 	class comm_rec    *m_inter_comm;  // ...between groups
 	class logger      *m_logger;      // Logger
+	class domain      *m_domain;      // Domain of the simulation
+	class proc_grid   *m_proc_grid;   // MPI Comm related stuff
+	class mesh        *m_mesh;        // Computational mesh
+	class charge_assigner *m_chass;   // Charge assignmen machinery
 
-	class domain *m_domain;            // Domain of the simulation
-	class proc_grid *m_proc_grid;      // MPI Comm related stuff
-	class mesh *m_mesh;                // Computational mesh
-	class charge_assigner *m_chass;    // Charge assignmen machinery
-
-	int state;  // the state of the state machine that IRIS is
-	int rest_time;  // amount ot useconds to sleep while nothing to do
-	bool suspend_event_loop;  // temporarily suspend the event loop
 
     private:
 	pthread_t m_main_thread;
-	bool m_main_thread_running;
-
-
-
-
-	// event handlers
-	bool volatile __quit_event_loop;  // when to break the event loop
-
-	MPI_Request __barrier_req;  // to facilitate barrier events
-	bool __barrier_posted;      // has a posted barrier event
-
-	std::map<int, void (iris::*)(event_t)> __event_handlers;
-	void __handle_event(event_t event);
-	void __handle_unimplemented(event_t event);
-	void __handle_atoms(event_t event);
-	void __handle_atoms_eof(event_t event);
-	void __handle_barrier(event_t event);
+	bool      m_main_thread_running;
     };
 }
 #endif

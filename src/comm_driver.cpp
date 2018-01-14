@@ -73,19 +73,27 @@ void comm_driver::stop_event_source()
 void *comm_driver::p2p_loop()
 {
     while(!m_quit) {
-	int nbytes;
 	MPI_Status status;
 	int has_event;
 	
 	MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
 	if(has_event) {
-	    printf("has_event\n");
+	    int nbytes;
 	    MPI_Get_count(&status, MPI_BYTE, &nbytes);
 	    void *msg = memory::wmalloc(nbytes);
-	    MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
+	    MPI_Recv(msg, nbytes, MPI_BYTE,
+		     status.MPI_SOURCE,
+		     status.MPI_TAG,
 		     m_comm, MPI_STATUS_IGNORE);
 	    m_queue->post_event(m_comm, status.MPI_SOURCE,
 				status.MPI_TAG, nbytes, msg);
 	}
+
+	// Without this, we sometimes get duplicate events. How is this even
+	// possible? Is this a bug in MPI on the AVITOHOL (dev) machine? We
+	// definitely have a single Send, but then we get two events. As if
+	// the Recv is not really blocking and MPI_Iprobe returns has_event
+	// = true second time for the same message?!?!?
+	usleep(10);
     }
 }

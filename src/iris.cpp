@@ -40,7 +40,6 @@
 #include "proc_grid.h"
 #include "comm_driver.h"
 
-#include "event_codes.h"
 #include "memory.h"
 #include "event.h"
 
@@ -94,7 +93,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 			     IRIS_EVENT_INTERCOMM_CREATE,
 			     &inter_comm);
     }
-    
+
     // now we can setup event queue, comm_drivers, etc.
     m_queue = new event_queue(this);
     m_local_comm = new comm_rec(this, local_comm);
@@ -118,6 +117,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_chass = new charge_assigner(this);
 	m_proc_grid = new proc_grid(this);
     }
+
+    m_state = IRIS_STATE_INITIALIZED;
 
     m_logger->trace("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
@@ -201,6 +202,7 @@ void iris::commit()
 	m_domain->commit();     // depends on m_proc_grid->commit()
 	m_mesh->commit();       // depends on m_proc_grid->commit()
     }
+    m_state = IRIS_STATE_COMMITED;
 }
 
 // Run the main event queue
@@ -243,7 +245,57 @@ void *iris::event_loop()
 {
     event_t event;
     while(m_queue->get_event(event)) {
+	m_logger->trace("got event %d", event.code);
     }
+}
+
+
+iris_real *iris::get_local_boxes(int in_server_size)
+{
+    if(m_state != IRIS_STATE_COMMITED) {
+	throw std::logic_error("get_local_boxes called, but configuration not commited!");
+    }
+
+    // only clients need to get local boxes from server
+    if(is_client()) {
+	// there are 6 coordinates (xlo, xhi, ylo, yhi, zlo, zhi) for each
+	// server proc
+	iris_real *retval;
+	int size = in_server_size * 6;
+	memory::create_1d(retval, size);
+
+	// client leader asks server leader for the info
+	if(is_leader()) {
+	    m_uber_comm->post_event(NULL, 0,
+				    IRIS_EVENT_GET_LOCAL_BOXES,
+				    m_remote_leader);
+	}
+    }else {
+	return NULL;
+    }
+
+    // For mode 0, each client is also a server, and the atoms from client X
+    // belong to the same node. So there is no need to do any of this.
+
+    //TODO: redo this with m_inter_comm
+
+    // iris_real *local_boxes;
+    // int sz = 6 * m_local_comm->m_size;
+
+    // if(m_local_comm->m_rank == 0) {
+    // 	memory::create_1d(local_boxes, sz);
+    // }
+    
+    // MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
+    // 	       local_boxes, 6, IRIS_REAL,
+    // 	       0, m_local_comm->m_comm);
+
+    // if(m_local_comm->m_rank == 0) {
+    // 	MPI_Send(local_boxes, sz, IRIS_REAL, m_proc_grid->sim_master,
+    // 		 IRIS_EVENT_LOCAL_BOXES,
+    // 		 m_uber_comm->comm);
+    // 	memory::destroy_1d(local_boxes);
+    // }
 }
 
 
@@ -281,156 +333,156 @@ void *iris::event_loop()
 // of the uber comm (e.g. simulation master). It can then re-distribute this
 // information to PP-only nodes so they know which atoms to send to which
 // IRIS procs.
-void iris::__announce_loc_box_info()
-{
-    // TODO: redo this with m_inter_comm
+// void iris::__announce_loc_box_info()
+// {
+//     // TODO: redo this with m_inter_comm
 
-    // iris_real *local_boxes;
-    // int sz = 6 * m_local_comm->m_size;
+//     // iris_real *local_boxes;
+//     // int sz = 6 * m_local_comm->m_size;
 
-    // if(m_local_comm->m_rank == 0) {
-    // 	memory::create_1d(local_boxes, sz);
-    // }
+//     // if(m_local_comm->m_rank == 0) {
+//     // 	memory::create_1d(local_boxes, sz);
+//     // }
     
-    // MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
-    // 	       local_boxes, 6, IRIS_REAL,
-    // 	       0, m_local_comm->m_comm);
+//     // MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
+//     // 	       local_boxes, 6, IRIS_REAL,
+//     // 	       0, m_local_comm->m_comm);
 
-    // if(m_local_comm->m_rank == 0) {
-    // 	MPI_Send(local_boxes, sz, IRIS_REAL, m_proc_grid->sim_master,
-    // 		 IRIS_EVENT_LOCAL_BOXES,
-    // 		 m_uber_comm->comm);
-    // 	memory::destroy_1d(local_boxes);
-    // }
-}
+//     // if(m_local_comm->m_rank == 0) {
+//     // 	MPI_Send(local_boxes, sz, IRIS_REAL, m_proc_grid->sim_master,
+//     // 		 IRIS_EVENT_LOCAL_BOXES,
+//     // 		 m_uber_comm->comm);
+//     // 	memory::destroy_1d(local_boxes);
+//     // }
+// }
 
-// Receive IRIS local boxes in all procs in pp_comm
-// Paired to the Isends in __announce_local_boxes
-// iris_comm_size: the size of the dedicated IRIS communicator (# of boxes)
-// rank: this proc rank (in uber comm)
-// pp_master: the proc rank (in uber_comm) that will receive the data from IRIS
-// uber_comm: usually MPI_COMM_WORLD
-// pp_comm: communicator for PP procs only (receivers of the data)
-// out_local_boxes: the result
-// 
-// Paired to the send in __announce_local_boxes
-void iris::recv_local_boxes(int iris_comm_size,
-			    int rank,
-			    int pp_master,
-			    MPI_Comm uber_comm, 
-			    MPI_Comm pp_comm,
-			    iris_real *&out_local_boxes)
-{
-    int sz = 6 * iris_comm_size;
-    memory::create_1d(out_local_boxes, sz);
+// // Receive IRIS local boxes in all procs in pp_comm
+// // Paired to the Isends in __announce_local_boxes
+// // iris_comm_size: the size of the dedicated IRIS communicator (# of boxes)
+// // rank: this proc rank (in uber comm)
+// // pp_master: the proc rank (in uber_comm) that will receive the data from IRIS
+// // uber_comm: usually MPI_COMM_WORLD
+// // pp_comm: communicator for PP procs only (receivers of the data)
+// // out_local_boxes: the result
+// // 
+// // Paired to the send in __announce_local_boxes
+// void iris::recv_local_boxes(int iris_comm_size,
+// 			    int rank,
+// 			    int pp_master,
+// 			    MPI_Comm uber_comm, 
+// 			    MPI_Comm pp_comm,
+// 			    iris_real *&out_local_boxes)
+// {
+//     int sz = 6 * iris_comm_size;
+//     memory::create_1d(out_local_boxes, sz);
 
-    if(rank == pp_master) {
-	MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
-		 IRIS_EVENT_LOCAL_BOXES, uber_comm, MPI_STATUS_IGNORE);
-    }
+//     if(rank == pp_master) {
+// 	MPI_Recv(out_local_boxes, sz, IRIS_REAL, MPI_ANY_SOURCE,
+// 		 IRIS_EVENT_LOCAL_BOXES, uber_comm, MPI_STATUS_IGNORE);
+//     }
 
-    MPI_Bcast(out_local_boxes, sz, IRIS_REAL, pp_master, pp_comm);
-}
+//     MPI_Bcast(out_local_boxes, sz, IRIS_REAL, pp_master, pp_comm);
+// }
 
-typedef void (iris::*event_handler_t)(event_t);
+// typedef void (iris::*event_handler_t)(event_t);
 
-void iris::__handle_event(event_t event)
-{
-    event_handler_t fun = __event_handlers[event.code];
-    if(fun) {
-	(this->*fun)(event);
-    }else {
-	__handle_unimplemented(event);
-    }
-    memory::wfree(event.data);
-}
+// void iris::__handle_event(event_t event)
+// {
+//     event_handler_t fun = __event_handlers[event.code];
+//     if(fun) {
+// 	(this->*fun)(event);
+//     }else {
+// 	__handle_unimplemented(event);
+//     }
+//     memory::wfree(event.data);
+// }
 
-event_t iris::poke_mpi_event(MPI_Comm comm, bool &out_has_event)
-{
-    MPI_Status status;
-    int nbytes;
-    void *msg;
-    event_t retval;
-    int has_event;
+// event_t iris::poke_mpi_event(MPI_Comm comm, bool &out_has_event)
+// {
+//     MPI_Status status;
+//     int nbytes;
+//     void *msg;
+//     event_t retval;
+//     int has_event;
 
-    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &has_event, &status);
-    if(has_event) {
-	MPI_Get_count(&status, MPI_BYTE, &nbytes);
-	msg = memory::wmalloc(nbytes);
-	MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
-		 comm, MPI_STATUS_IGNORE);
-	retval.comm = comm;
-	retval.peer = status.MPI_SOURCE;
-	retval.code = status.MPI_TAG;
-	retval.size = nbytes;
-	retval.data = msg;
-	out_has_event = true;
-    }else {
-	out_has_event = false;
-    }
-    return retval;
-}
+//     MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, comm, &has_event, &status);
+//     if(has_event) {
+// 	MPI_Get_count(&status, MPI_BYTE, &nbytes);
+// 	msg = memory::wmalloc(nbytes);
+// 	MPI_Recv(msg, nbytes, MPI_BYTE, status.MPI_SOURCE, status.MPI_TAG,
+// 		 comm, MPI_STATUS_IGNORE);
+// 	retval.comm = comm;
+// 	retval.peer = status.MPI_SOURCE;
+// 	retval.code = status.MPI_TAG;
+// 	retval.size = nbytes;
+// 	retval.data = msg;
+// 	out_has_event = true;
+//     }else {
+// 	out_has_event = false;
+//     }
+//     return retval;
+// }
 
-void iris::send_event(event_t event)
-{
-    MPI_Send(event.data, event.size, MPI_BYTE, event.peer, event.code, event.comm);
-}
+// void iris::send_event(event_t event)
+// {
+//     MPI_Send(event.data, event.size, MPI_BYTE, event.peer, event.code, event.comm);
+// }
 
-event_t iris::poke_uber_event(bool &out_has_event)
-{
-    //    return poke_mpi_event(m_proc_grid->uber_comm, out_has_event);
-}
+// event_t iris::poke_uber_event(bool &out_has_event)
+// {
+//     //    return poke_mpi_event(m_proc_grid->uber_comm, out_has_event);
+// }
 
-event_t iris::poke_iris_event(bool &out_has_event)
-{
-    //    return poke_mpi_event(m_proc_grid->iris_comm, out_has_event);
-}
+// event_t iris::poke_iris_event(bool &out_has_event)
+// {
+//     //    return poke_mpi_event(m_proc_grid->iris_comm, out_has_event);
+// }
 
-event_t iris::poke_barrier_event(bool &out_has_event)
-{
-    event_t ev;
+// event_t iris::poke_barrier_event(bool &out_has_event)
+// {
+//     event_t ev;
 
-    out_has_event = false;
-    if(__barrier_posted) {
-	int has_event;
-	MPI_Status status;
-	MPI_Test(&__barrier_req, &has_event, &status);
-	if(has_event) {
-	    MPI_Status status;
-	    MPI_Wait(&__barrier_req, MPI_STATUS_IGNORE);
-	    //MPI_Barrier(m_proc_grid->iris_comm);
-	    m_logger->trace("----------");
+//     out_has_event = false;
+//     if(__barrier_posted) {
+// 	int has_event;
+// 	MPI_Status status;
+// 	MPI_Test(&__barrier_req, &has_event, &status);
+// 	if(has_event) {
+// 	    MPI_Status status;
+// 	    MPI_Wait(&__barrier_req, MPI_STATUS_IGNORE);
+// 	    //MPI_Barrier(m_proc_grid->iris_comm);
+// 	    m_logger->trace("----------");
 
-	    //ev.comm = m_proc_grid->iris_comm;
-	    ev.peer = -1;
-	    ev.code = IRIS_EVENT_BARRIER;
-	    ev.size = 0;
-	    ev.data = NULL;
-	    out_has_event = true;
-	    __barrier_posted = false;
-	}
-    }
-    return ev;
-}
+// 	    //ev.comm = m_proc_grid->iris_comm;
+// 	    ev.peer = -1;
+// 	    ev.code = IRIS_EVENT_BARRIER;
+// 	    ev.size = 0;
+// 	    ev.data = NULL;
+// 	    out_has_event = true;
+// 	    __barrier_posted = false;
+// 	}
+//     }
+//     return ev;
+// }
 
-event_t iris::poke_event(bool &out_has_event)
-{
-    event_t event;
+// event_t iris::poke_event(bool &out_has_event)
+// {
+//     event_t event;
 
-    event = poke_uber_event(out_has_event);
-    if(out_has_event) {
-	return event;
-    }
+//     event = poke_uber_event(out_has_event);
+//     if(out_has_event) {
+// 	return event;
+//     }
 
-    event = poke_iris_event(out_has_event);
-    if(out_has_event) {
-	return event;
-    }
+//     event = poke_iris_event(out_has_event);
+//     if(out_has_event) {
+// 	return event;
+//     }
 
-    event = poke_barrier_event(out_has_event);
+//     event = poke_barrier_event(out_has_event);
 
-    return event;
-}
+//     return event;
+// }
 
 // void iris::run()
 // {
@@ -454,79 +506,79 @@ event_t iris::poke_event(bool &out_has_event)
 //     }
 // }
 
-void iris::set_state(int in_state)
-{
-    if(in_state != IRIS_STATE_INITIALIZED) {
-	m_logger->trace("Changing state %d -> %d", state, in_state);
-    }else {
-	m_logger->trace("Initializing state to %d", in_state);
-    }
-    state = in_state;
+// void iris::set_state(int in_state)
+// {
+//     if(in_state != IRIS_STATE_INITIALIZED) {
+// 	m_logger->trace("Changing state %d -> %d", state, in_state);
+//     }else {
+// 	m_logger->trace("Initializing state to %d", in_state);
+//     }
+//     state = in_state;
 
-    switch(state) {
+//     switch(state) {
 
-    case IRIS_STATE_HAS_RHO:
-	__quit_event_loop = true;
-	break;
-    }
-}
+//     case IRIS_STATE_HAS_RHO:
+// 	__quit_event_loop = true;
+// 	break;
+//     }
+// }
 
-void iris::post_barrier()
-{
-    //MPI_Ibarrier(m_proc_grid->iris_comm, &__barrier_req);
-    __barrier_posted = true;
-}
+// void iris::post_barrier()
+// {
+//     //MPI_Ibarrier(m_proc_grid->iris_comm, &__barrier_req);
+//     __barrier_posted = true;
+// }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Event handlers
 ////////////////////////////////////////////////////////////////////////////////
 
-void iris::__handle_unimplemented(event_t event)
-{
-    m_logger->trace("Unimplemented event: %d", event.code);
-}
+// void iris::__handle_unimplemented(event_t event)
+// {
+//     m_logger->trace("Unimplemented event: %d", event.code);
+// }
 
-void iris::__handle_atoms(event_t event)
-{
-    if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
-	throw std::logic_error("Receiving atoms while in un-configured state!");
-    }
+// void iris::__handle_atoms(event_t event)
+// {
+//     if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
+// 	throw std::logic_error("Receiving atoms while in un-configured state!");
+//     }
 
-    int unit = 4 * sizeof(iris_real);
-    if(event.size % unit != 0) {
-	throw std::length_error("Unexpected message size while receiving atoms!");
-    }
+//     int unit = 4 * sizeof(iris_real);
+//     if(event.size % unit != 0) {
+// 	throw std::length_error("Unexpected message size while receiving atoms!");
+//     }
 
-    int natoms = event.size / unit;
-    if(natoms != 0) {
-	m_logger->trace("Received %d atoms from %d", natoms, event.peer);
-	m_chass->assign_charges((iris_real *)event.data, natoms);
-	m_logger->trace("Charge assignment from %d done", event.peer);
-	MPI_Request req;
-	MPI_Isend(NULL, 0, MPI_INT, event.peer, IRIS_EVENT_ATOMS_ACK, event.comm, &req);
-    }
+//     int natoms = event.size / unit;
+//     if(natoms != 0) {
+// 	m_logger->trace("Received %d atoms from %d", natoms, event.peer);
+// 	m_chass->assign_charges((iris_real *)event.data, natoms);
+// 	m_logger->trace("Charge assignment from %d done", event.peer);
+// 	MPI_Request req;
+// 	MPI_Isend(NULL, 0, MPI_INT, event.peer, IRIS_EVENT_ATOMS_ACK, event.comm, &req);
+//     }
 
-}
+// }
 
-void iris::__handle_atoms_eof(event_t event)
-{
-    if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
-	throw std::logic_error("Receiving atoms EOF while in un-configured state!");
-    }
+// void iris::__handle_atoms_eof(event_t event)
+// {
+//     if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
+// 	throw std::logic_error("Receiving atoms EOF while in un-configured state!");
+//     }
 
-    m_logger->trace("All atoms received");
-    post_barrier();
-}
+//     m_logger->trace("All atoms received");
+//     post_barrier();
+// }
 
-void iris::__handle_barrier(event_t ev)
-{
-    if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
-	//m_chass->exchange_halo();
+// void iris::__handle_barrier(event_t ev)
+// {
+//     if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
+// 	//m_chass->exchange_halo();
 
-	// char fname[256];
-	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", m_proc_grid->uber_size, omp_get_num_threads(), m_proc_grid->uber_rank, omp_get_thread_num());
-	// m_mesh->dump_rho(fname);
+// 	// char fname[256];
+// 	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", m_proc_grid->uber_size, omp_get_num_threads(), m_proc_grid->uber_rank, omp_get_thread_num());
+// 	// m_mesh->dump_rho(fname);
 
-	set_state(IRIS_STATE_HAS_RHO);
-    }
-}
+// 	set_state(IRIS_STATE_HAS_RHO);
+//     }
+// }
