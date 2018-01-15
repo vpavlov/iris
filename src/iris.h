@@ -34,6 +34,7 @@
 #include <pthread.h>
 #include <map>
 #include "real.h"
+#include "box.h"
 #include "event.h"
 
 namespace ORG_NCSA_IRIS {
@@ -115,7 +116,7 @@ namespace ORG_NCSA_IRIS {
 	// Note that the client passes server_size, because it *knows* it:
 	// after all, it was the client, that allocated our communicator, so
 	// it must know how many processes are assigned to the IRIS server.
-	iris_real *get_local_boxes(int server_size);
+	box_t<iris_real> *get_local_boxes(int in_server_size);
 
 	// Call this to run the event loop (in a separate thread)
 	void run();

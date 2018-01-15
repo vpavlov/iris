@@ -37,6 +37,7 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_EVENT_QUIT              1
 #define IRIS_EVENT_INTERCOMM_CREATE  2
 #define IRIS_EVENT_LOCAL_BOXES       3
+#define IRIS_EVENT_ATOMS             4
 
     struct event_t {
 	MPI_Comm comm;// on which comm this occured

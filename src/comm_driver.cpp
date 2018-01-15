@@ -76,7 +76,7 @@ void *comm_driver::p2p_loop()
     while(!m_quit) {
 	MPI_Status status;
 	int has_event;
-	
+
 	MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
 	if(has_event) {
 	    int nbytes;
@@ -98,7 +98,7 @@ void *comm_driver::p2p_loop()
 	// definitely have a single Send, but then we get two events. As if
 	// the Recv is not really blocking and MPI_Iprobe returns has_event
 	// = true second time for the same message?!?!?
-	usleep(10);
+	// usleep(100);
     }
 }
 

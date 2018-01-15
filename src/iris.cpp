@@ -258,6 +258,7 @@ void *iris::event_loop()
 {
     event_t event;
     while(m_queue->get_event(event)) {
+	m_logger->trace_event(&event);
 	auto handler = m_event_handlers.find(event.code);
 	if(handler != m_event_handlers.end()) {
 	    handler->second(this, event);
@@ -267,41 +268,51 @@ void *iris::event_loop()
     }
 }
 
-iris_real *iris::get_local_boxes(int in_server_size)
+box_t<iris_real> *iris::get_local_boxes(int in_server_size)
 {
+    box_t<iris_real> *local_boxes;
+    int size = sizeof(box_t<iris_real>) * in_server_size;
+
     if(is_server()) {
 	if(in_server_size != m_local_comm->m_size) {
 	    throw std::invalid_argument("in_server_size is different than the size of the server communicator!");
 	}
 
-	iris_real *local_boxes;
-	int size = 6 * in_server_size;  // 3 directions x (lo, hi)
 	if(is_leader()) {
-	    memory::create_1d(local_boxes, size);
+	    local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
 	}
 
-	MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
-		   local_boxes, 6, IRIS_REAL, m_local_leader,
+	MPI_Gather(&(m_domain->m_local_box),
+		   sizeof(box_t<iris_real>)/sizeof(iris_real), IRIS_REAL,
+		   local_boxes,
+		   sizeof(box_t<iris_real>)/sizeof(iris_real), IRIS_REAL,
+		   m_local_leader,
 		   m_local_comm->m_comm);
 
-	if(is_leader()) {
-	    if(!is_client()) {
-		m_uber_comm->send_event(local_boxes, size*sizeof(IRIS_REAL),
+	if(!is_client()) {
+	    if(is_leader()) {
+		m_uber_comm->send_event(local_boxes, size,
 					IRIS_EVENT_LOCAL_BOXES,
 					m_remote_leader);
-		memory::destroy_1d(local_boxes);
-		return NULL;
-	    }else {
-		return local_boxes;
+		memory::wfree(local_boxes);
 	    }
+	    return NULL;
+	}else {
+	    return local_boxes;
 	}
-	return NULL;
-    }else if(is_leader()) {
+    }else {
+	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
 	event_t ev;
-	wait_event(ev);
-	return (iris_real *)ev.data;
+	if(is_leader()) {
+	    wait_event(ev);
+	    memcpy(local_boxes, ev.data, size);
+	    memory::wfree(ev.data);
+	}
+	
+	MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader,
+		  m_local_comm->m_comm);
+	return local_boxes;
     }
-    return NULL;
 }
 
 void iris::sync_handler(event_t event)

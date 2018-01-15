@@ -101,7 +101,7 @@ void logger::error(const char *fmt, ...)
 
 void logger::trace_event(event_t *ev)
 {
-    trace("Event %x %d %d %d %p", ev->comm, ev->peer, ev->code, ev->size, ev->data);
+    trace("<EVENT COMM 0x%x PEER %d CODE %d SIZE %d DATA %p>", ev->comm, ev->peer, ev->code, ev->size, ev->data);
 }
 
 void logger::trace_mem(void *in_ptr)

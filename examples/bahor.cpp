@@ -1,4 +1,5 @@
 #include <new>
+#include <vector>
 #include <exception>
 #include <stdio.h>
 #include <mpi.h>
@@ -13,6 +14,7 @@
 #include <iris/comm_driver.h>
 #include <iris/event_queue.h>
 #include <iris/logger.h>
+#include <iris/comm_rec.h>
 
 #define NSTEPS 1
 
@@ -33,7 +35,7 @@ char **split(char *line, int max)
     return tokens;
 }
 
-void read_nacl(char *fname, iris_real **&x, iris_real *&q)
+void read_nacl(char *fname, iris_real **&atoms)
 {
 
     FILE *fp = fopen(fname, "r");
@@ -42,8 +44,7 @@ void read_nacl(char *fname, iris_real **&x, iris_real *&q)
 	return;
     }
 
-    memory::create_2d(x, 27000, 3);
-    memory::create_1d(q, 27000);
+    memory::create_2d(atoms, 27000, 4);
 
     char *line = NULL;
     size_t sz = 0;
@@ -68,16 +69,16 @@ void read_nacl(char *fname, iris_real **&x, iris_real *&q)
 	}
 	atom_id = atoi(tokens[1]);
 	if(atom_id != 0) {
-	    q[atom_id-1] = charge;
+	    atoms[atom_id-1][3] = charge;
 	}
 	delete [] tokens;
 
 	// read coords
 	getline(&line, &sz, fp);
 	tokens = split(line, 3);
-	x[atom_id-1][0] = (iris_real) atof(tokens[0]);
-	x[atom_id-1][1] = (iris_real) atof(tokens[1]);
-	x[atom_id-1][2] = (iris_real) atof(tokens[2]);
+	atoms[atom_id-1][0] = (iris_real) atof(tokens[0]);
+	atoms[atom_id-1][1] = (iris_real) atof(tokens[1]);
+	atoms[atom_id-1][2] = (iris_real) atof(tokens[2]);
 	delete [] tokens;
 
 	getline(&line, &sz, fp);  // skip next two lines
@@ -88,70 +89,126 @@ void read_nacl(char *fname, iris_real **&x, iris_real *&q)
     fclose(fp);
 }
 
-void read_atoms(char *fname, int rank, int pp_size, MPI_Comm local_comm,
-		iris_real **&my_x, iris_real *&my_q)
+void read_atoms(iris *in_iris, char *fname, int rank, int pp_size,
+		MPI_Comm local_comm,
+		iris_real **&out_my_atoms, int &out_my_count)
 {
-    iris_real **x;
-    iris_real *q;
-    
-    memory::create_2d(my_x, 27000/pp_size, 3);
-    memory::create_1d(my_q, 27000/pp_size);
-    
-    void *fromx = NULL;
-    void *fromq = NULL;
-
     if(rank == 0) {
-	read_nacl(fname, x, q);
-	fromx = &(x[0][0]);
-	fromq = &(q[0]);
-    }
-    
-    MPI_Scatter(fromx, 27000*3/pp_size, IRIS_REAL,
-		&(my_x[0][0]), 27000*3/pp_size, IRIS_REAL,
-		0, local_comm);
 
-    MPI_Scatter(fromq, 27000/pp_size, IRIS_REAL,
-		&(my_q[0]), 27000/pp_size, IRIS_REAL,
-		0, local_comm);
-    
-    if(rank == 0) {
-	memory::destroy_2d(x);
-	memory::destroy_1d(q);
+	// the global box; for simplicity, hardcoded in this example
+	box_t<iris_real> gb {
+	    -50.39064, -50.39064, -50.39064,
+		50.39064,  50.39064,  50.39064,
+		100.78128, 100.78128, 100.78128};
+
+	// read the atoms from the input file
+	iris_real **atoms;
+	read_nacl(fname, atoms);
+
+	// "domain decomposition" in the client. In this example, we use a
+	// simple domain decomposition in X direction: each client proc gets a
+	// strip in X direction and contains all atoms in the YZ planes that
+	// fall into that strip. This is obviously not the proper way to do it,
+	// but since this is outside IRIS and in the domain of the client, it
+	// is supposed that a proper MD package will do its own DD
+	iris_real *xmin;
+	iris_real *xmax;
+	memory::create_1d(xmin, pp_size);
+	memory::create_1d(xmax, pp_size);
+	for(int i=0;i<pp_size;i++) {
+	    iris_real xsplit1 = i * 1.0 / pp_size;
+	    iris_real xsplit2 = (i+1) * 1.0 / pp_size;
+	    xmin[i] = gb.xlo + gb.xsize * xsplit1;
+	    if(i < pp_size - 1) {
+		xmax[i] = gb.xlo + gb.xsize * xsplit2;
+	    }else {
+		xmax[i] = gb.xhi;
+	    }
+	}
+	
+	// Figure out which atoms go to which client processor. Again, this
+	// is maybe not the best way to do it, but this is outside IRIS and the
+	// client MD code should have already have mechanisms for this in place.
+	std::vector<int> *vatoms = new std::vector<int>[pp_size];
+	for(int i=0;i<27000;i++) {
+	    for(int j=0;j<pp_size;j++) {
+		if(atoms[i][0] >= xmin[j] && atoms[i][0] < xmax[j]) {
+		    vatoms[j].push_back(i);
+		    break;
+		}
+	    }
+	}
+	
+	memory::destroy_1d(xmin);
+	memory::destroy_1d(xmax);
+	
+	// Package and send the atoms for each target client node
+	for(int i=0;i<pp_size;i++) {
+	    iris_real **sendbuf;
+	    memory::create_2d(sendbuf, vatoms[i].size(), 4);
+	    int j = 0;
+	    for(auto it = vatoms[i].begin(); it != vatoms[i].end(); it++) {
+		sendbuf[j][0] = atoms[*it][0];
+		sendbuf[j][1] = atoms[*it][1];
+		sendbuf[j][2] = atoms[*it][2];
+		sendbuf[j][3] = atoms[*it][3];
+		j++;
+	    }
+
+	    if(i != 0) {
+		MPI_Send(&(sendbuf[0][0]), 4*vatoms[i].size(), IRIS_REAL,
+			 i, 1, local_comm);
+	    }else {
+		memory::create_2d(out_my_atoms, vatoms[i].size(), 4);
+		memcpy(&(out_my_atoms[0][0]), &(sendbuf[0][0]),
+		       4*vatoms[i].size());
+		out_my_count = vatoms[i].size();
+	    }
+	    memory::destroy_2d(sendbuf);
+	}
+
+	delete [] vatoms;
+	memory::destroy_2d(atoms);
+	    
+    }else {
+	MPI_Status status;
+	MPI_Probe(0, 1, local_comm, &status);
+	int nreals;
+	MPI_Get_count(&status, IRIS_REAL, &nreals);
+	int natoms = nreals / 4;
+	memory::create_2d(out_my_atoms, natoms, 4);
+	MPI_Recv(&(out_my_atoms[0][0]), nreals, IRIS_REAL, 0, 1, local_comm,
+		 MPI_STATUS_IGNORE);
+	out_my_count = natoms;
     }
 }
-/*
-void __send_atoms(MPI_Comm local_comm, int rank,
-		  iris_real **my_x,
-		  iris_real *my_q,
-		  size_t natoms,
-		  iris_real *local_boxes,
-		  int nboxes,
-		  int iris_offset)
+
+void send_atoms(iris *in_iris, iris_real **in_my_atoms, size_t in_my_count,
+		box_t<iris_real> *in_local_boxes, int in_server_size)
 {
     iris_real ***scratch;
     size_t *counts;
 
-    memory::create_3d(scratch, nboxes, natoms, 4);
-    memory::create_1d(counts, nboxes);
+    memory::create_3d(scratch, in_server_size, in_my_count, 4);
+    memory::create_1d(counts, in_server_size);
 
-    for(int j=0;j<nboxes;j++) {
+    for(int j=0;j<in_server_size;j++) {
 	counts[j] = 0;
     }
     
-    for(int i=0;i<natoms;i++) {
-	iris_real x = my_x[i][0];
-	iris_real y = my_x[i][1];
-	iris_real z = my_x[i][2];
-	iris_real q = my_q[i];
+    for(int i=0;i<in_my_count;i++) {
+	iris_real x = in_my_atoms[i][0];
+	iris_real y = in_my_atoms[i][1];
+	iris_real z = in_my_atoms[i][2];
+	iris_real q = in_my_atoms[i][3];
 
-	for(int j=0;j<nboxes;j++) {
-	    iris_real x0, y0, z0, x1, y1, z1;
-	    x0 = local_boxes[j*6 + 0];
-	    y0 = local_boxes[j*6 + 1];
-	    z0 = local_boxes[j*6 + 2];
-	    x1 = local_boxes[j*6 + 3];
-	    y1 = local_boxes[j*6 + 4];
-	    z1 = local_boxes[j*6 + 5];
+	for(int j=0;j<in_server_size;j++) {
+	    int x0 = in_local_boxes[j].xlo;
+	    int y0 = in_local_boxes[j].ylo;
+	    int z0 = in_local_boxes[j].zlo;
+	    int x1 = in_local_boxes[j].xhi;
+	    int y1 = in_local_boxes[j].yhi;
+	    int z1 = in_local_boxes[j].zhi;
 
 	    if(x >= x0 && x < x1 &&
 	       y >= y0 && y < y1 &&
@@ -167,33 +224,32 @@ void __send_atoms(MPI_Comm local_comm, int rank,
 	}
     }
 
-    MPI_Request *reqs1 = new MPI_Request[nboxes];
-    MPI_Request *reqs2 = new MPI_Request[nboxes];
+    MPI_Request *reqs1 = new MPI_Request[in_server_size];
 
-    for(int i=0;i<nboxes;i++) {
-	MPI_Isend(&(scratch[i][0][0]), counts[i] * 4, IRIS_REAL,
-		  i + iris_offset, IRIS_EVENT_ATOMS, MPI_COMM_WORLD,
-		  &reqs1[i]);
-	MPI_Irecv(NULL, 0, MPI_INT, i + iris_offset, IRIS_EVENT_ATOMS_ACK, MPI_COMM_WORLD, &reqs2[i]);
+    for(int i=0;i<in_server_size;i++) {
+	in_iris->m_inter_comm->send_event(&(scratch[i][0][0]),
+					  counts[i] * 4 * sizeof(iris_real),
+					  IRIS_EVENT_ATOMS, i);
     }
 
-    MPI_Waitall(nboxes, reqs1, MPI_STATUSES_IGNORE);
-    MPI_Waitall(nboxes, reqs2, MPI_STATUSES_IGNORE);
+    //MPI_Waitall(in_server_size, reqs1, MPI_STATUSES_IGNORE);
     memory::destroy_3d(scratch);
     memory::destroy_1d(counts);
 
-    MPI_Barrier(local_comm);
 
-    if(rank == 0) {
-	int dummy = 0;
-	for(int i=0;i<nboxes;i++) {
-	    MPI_Send(&dummy, 1, MPI_INT,
-		     i + iris_offset, IRIS_EVENT_ATOMS_EOF, MPI_COMM_WORLD);
-	}
-    }
+    // MPI_Barrier(local_comm);
+
+    // if(rank == 0) {
+    // 	int dummy = 0;
+    // 	for(int i=0;i<in_server_size;i++) {
+    // 	    MPI_Send(&dummy, 1, MPI_INT,
+    // 		     i + iris_offset, IRIS_EVENT_ATOMS_EOF, MPI_COMM_WORLD);
+    // 	}
+    // }
 
 }
-*/
+
+
 main(int argc, char **argv)
 {
     if(argc < 3) {
@@ -207,8 +263,9 @@ main(int argc, char **argv)
     char *fname = argv[1];
     int mode = atoi(argv[2]);
 
-    int rank, size;
-    MPI_Init(&argc, &argv);
+    int rank, size, required = MPI_THREAD_MULTIPLE, provided;
+    MPI_Init_thread(&argc, &argv, required, &provided);
+    printf("required = %d, provided = %d\n", required, provided);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -226,8 +283,6 @@ main(int argc, char **argv)
     MPI_Comm local_comm;
     int client_size;
     int server_size;
-    iris_real **my_x;
-    iris_real *my_q;
 
 
     if(mode == 0) {
@@ -283,8 +338,11 @@ main(int argc, char **argv)
     // must have already done some kind of domain decomposition and scattering
     // of the atoms in a way that it thinks is optimal for it.
     // So this part would have usually been done already in some other way.
+    iris_real **my_atoms = NULL;
+    int my_count = 0;
     if(x->is_client()) {
-	read_atoms(fname, rank, client_size, local_comm, my_x, my_q);
+	read_atoms(x, fname, rank, client_size, local_comm, my_atoms, my_count);
+	x->m_logger->trace("Client has %d atoms", my_count);
     }
 
 
@@ -300,7 +358,7 @@ main(int argc, char **argv)
     x->set_mesh_size(128, 128, 128);
     x->set_order(3);
     x->commit();
-    
+        
 
     // The run() call spawns a new event looping thread on the node. The thread
     // blocks waiting for events, so it won't consume resources when there are
@@ -309,8 +367,6 @@ main(int argc, char **argv)
     x->run();
 
 
-    // Sending atoms from client to server
-    //------------------------------------
     // The client needs to know the domain decomposition of the server nodes
     // so it can know which client node send which atoms to which server node.
     // So, each client node must ask all server nodes about their local boxes.
@@ -322,8 +378,20 @@ main(int argc, char **argv)
     // 
     // In mode 0 this is not really needed, but it still works. No communication
     // is done in that case, since client and server leader are the same proc.
-    iris_real *local_boxes = x->get_local_boxes(server_size);
+    box_t<iris_real> *local_boxes = x->get_local_boxes(server_size);
 
+    // Main simulation loop in the client
+    if(x->is_client()) {
+	// On each step...
+	for(int i=0;i<NSTEPS;i++) {
+
+	    // The client must send the atoms which befall into the server
+	    // procs' local boxes to the corrseponding server node.
+	    send_atoms(x, my_atoms, my_count, local_boxes, server_size);
+	}
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
     // Cleanup
     delete x;
