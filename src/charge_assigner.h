@@ -35,13 +35,6 @@
 
 namespace ORG_NCSA_IRIS {
 
-    // struct rho_halo_item_t {
-    // 	int x;
-    // 	int y;
-    // 	int z;
-    // 	iris_real q;
-    // };
-
     class charge_assigner : protected state_accessor {
 
     public:
@@ -51,15 +44,7 @@ namespace ORG_NCSA_IRIS {
 	void set_order(int in_order);
 	void commit();
 
-
-	void assign_charges(iris_real *atoms, int natoms);
-	void exchange_halo();
-
-    private:
 	void compute_weights(iris_real dx, iris_real dy, iris_real dz);
-
-
-	void *__pack_rho_halo(std::map<std::tuple<int, int, int>, iris_real> halo, int &nbytes);
 
     private:
 
@@ -73,6 +58,7 @@ namespace ORG_NCSA_IRIS {
 	// direction (total of 2^3 = 8 points). If order = 3, then a charge is
 	// distributed to the nearest 3 points of the charge_assigner in each direction
 	// (total of 3^3 = 27 points). Orders between 2 and 7 are supported.
+    public:
 	int m_order;         // charge assignment/interpolation order
 
 
@@ -113,10 +99,11 @@ namespace ORG_NCSA_IRIS {
 	iris_real m_ics_center;  // even orders: 0.5; odd order: 0.0
 	iris_real m_ics_bump;    // even orders: 0.0; odd orders: 0.5
 
-	iris_real *m_coeff;      // interpolation coefficients, depend on order
 	iris_real **m_weights;   // interpolation weights, depend on charge pos
 
-	std::map<int, std::map<std::tuple<int, int, int>, iris_real>> m_halo;
+    private:
+	iris_real *m_coeff;      // interpolation coefficients, depend on order
+
     };
 }
 #endif

@@ -34,6 +34,15 @@
 
 namespace ORG_NCSA_IRIS {
 
+    // An item of halo: x, y, z coords in the local mesh and v to contribute
+    // to the rho at that point
+    struct iris_halo_item_t {
+	iris_real v;
+	int x;
+	int y;
+	int z;
+    };
+
     class mesh : protected state_accessor {
 
     public:
@@ -46,6 +55,10 @@ namespace ORG_NCSA_IRIS {
 	// configuration and prepare all that is needed in order to
 	// start solving
 	void commit();
+
+	void assign_charges(iris_real *in_charges, int ncharges);
+	void exchange_halo();
+	void add_halo_items(iris_halo_item_t *in_items, int in_nitems);
 	void dump_rho(char *in_fname);
 
     public:
@@ -57,6 +70,7 @@ namespace ORG_NCSA_IRIS {
 	int       m_own_offset[3];  // where does my mesh start from 
 
 	iris_real ***m_rho;  // right hand side of the Poisson equation
+	std::map<std::tuple<int, int, int>, iris_real> *m_halo;
 
     private:
 	bool      m_dirty;  // if we need to re-calculate upon commit

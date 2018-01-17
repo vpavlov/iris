@@ -14,6 +14,7 @@
 #include <iris/logger.h>
 #include <iris/comm_rec.h>
 #include <iris/tags.h>
+#include <iris/mesh.h>
 
 #define NSTEPS 1
 
@@ -186,11 +187,9 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 		  box_t<iris_real> *in_local_boxes)
 {
-    iris_real ***scratch;
-    int *counts;
-
-    memory::create_3d(scratch, in_iris->m_server_size, in_my_count, 4);
-    memory::create_1d(counts, in_iris->m_server_size);
+    int       *counts  = (int *)memory::wmalloc(in_iris->m_server_size * sizeof(int));
+    iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 4 * sizeof(iris_real));
+    int idx = 0;
 
     for(int j=0;j<in_iris->m_server_size;j++) {
 	counts[j] = 0;
@@ -201,7 +200,6 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 	iris_real y = in_my_charges[i][1];
 	iris_real z = in_my_charges[i][2];
 	iris_real q = in_my_charges[i][3];
-
 	for(int j=0;j<in_iris->m_server_size;j++) {
 	    iris_real x0 = in_local_boxes[j].xlo;
 	    iris_real y0 = in_local_boxes[j].ylo;
@@ -214,20 +212,20 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 	       y >= y0 && y < y1 &&
 	       z >= z0 && z < z1)
 	    {
-		scratch[j][counts[j]][0] = x;
-		scratch[j][counts[j]][1] = y;
-		scratch[j][counts[j]][2] = z;
-		scratch[j][counts[j]][3] = q;
+		sendbuf[idx++] = x;
+		sendbuf[idx++] = y;
+		sendbuf[idx++] = z;
+		sendbuf[idx++] = q;
 		counts[j]++;
 		break;
 	    }
 	}
     }
 
-    in_iris->bcast_charges_to_servers(&(counts[0]), &(scratch[0][0][0]));
+    in_iris->broadcast_charges(counts, sendbuf);
 
-    memory::destroy_3d(scratch);
-    memory::destroy_1d(counts);
+    memory::wfree(sendbuf);
+    memory::wfree(counts);
 }
 
 
@@ -347,65 +345,38 @@ main(int argc, char **argv)
     // This must be called on both clients and servers collectively.
     box_t<iris_real> *local_boxes = x->get_local_boxes();
 
-    // Main simulation loop in the client
+
+    // Main simulation loop in the clients
     if(x->is_client()) {
 
 	// On each step...
 	for(int i=0;i<NSTEPS;i++) {
 	    // The client must send the charges which befall into the server
 	    // procs' local boxes to the corrseponding server node.
+	    // It finds out which client sends which charges to which server
+	    // by whatever means it wants, and at the end it calls IRIS's
+	    // broadcast_charges()
 	    send_charges(x, my_charges, my_count, local_boxes);
 
-	    // Let the servers know that there are no more charges
-	    x->bcast_charges_eof_to_servers();
+	    // Let the servers know that there are no more charges, so it can
+	    // go on and start calculating
+	    x->commit_charges();
 	}
 
-	x->bcast_quit_to_servers();  // this will break server loop
+	x->quit();  // this will break server loop
 
     }else if(x->is_server()) {
-	// Meanwhile, on the server: an endless loop that is broken by
-	// bcast_quit_event_to_servers()
+	// Meanwhile, on the servers: an endless loop that is broken by
+	// the quit() above
 	x->run();
     }
 
+    if(x->is_server()) {
+	x->m_mesh->dump_rho("nacl");
+    }
 
     // Cleanup
     memory::wfree(local_boxes);
     delete x;
-    MPI_Finalize();
-    exit(0);
-
-
-
-    // if(role == 2) {
-    // 	// IRIS nodes
-    // 	iris *x = new iris(MPI_COMM_WORLD, local_comm, 0);
-    // 	x->set_global_box(-50.39064, -50.39064, -50.39064,
-    // 		   50.39064,  50.39064,  50.39064);
-    // 	x->mesh_set_size(128, 128, 128);
-    // 	x->apply_conf();
-    // 	x->run();
-    // 	delete x;
-    // }else {
-    // 	// PP nodes
-    // 	iris_real **my_x;
-    // 	iris_real *my_q;
-    // 	iris_real *local_boxes;
-    // 	size_t ncharges = 27000/client_size;
-
-    // 	__read_charges(argv[1], rank, client_size, local_comm, my_x, my_q);
-    // 	int iris_size = size - client_size;
-    // 	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, local_comm,
-    // 			       local_boxes);
-
-    // 	for(int i=0;i<NSTEPS;i++) {
-    // 	    __send_charges(local_comm, rank, my_x, my_q, ncharges, local_boxes, iris_size, client_size);
-    // 	}
-
-    // 	memory::destroy_2d(my_x);
-    // 	memory::destroy_1d(my_q);
-    // 	memory::destroy_1d(local_boxes);
-    // }
-
     MPI_Finalize();
 }

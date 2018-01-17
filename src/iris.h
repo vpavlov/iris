@@ -133,13 +133,25 @@ namespace ORG_NCSA_IRIS {
 	//               x10, y10, z10, c10,    // proc 1, charge 0
 	//               x11, y11, z11, c11,    // proc 1, charge 1
 	//               x12, y12, z12, c12};   // proc 1, charge 2
-	void bcast_charges_to_servers(int *in_count, iris_real *in_charges);
-	void bcast_charges_eof_to_servers();
-	void bcast_quit_to_servers();
+	void broadcast_charges(int *in_count, iris_real *in_charges);
+	void commit_charges();
+	void quit();
+
+	// Helpers used in internode communication
+	MPI_Comm server_comm();
+	int *stos_fence_pending(MPI_Win *out_win);
+	void stos_process_pending(int *in_pending, MPI_Win in_win);
+	void send_event(MPI_Comm in_comm, int in_peer, int in_tag,
+			int in_size, void *in_data, MPI_Request *req,
+			MPI_Win in_pending_win);
 
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
+
+	void handle_charges(struct event_t *in_event);
+	void handle_commit_charges();
+	void handle_rho_halo(struct event_t *in_event);
 
     public:
 	int m_client_size;             // # of client nodes
@@ -161,8 +173,6 @@ namespace ORG_NCSA_IRIS {
 
     private:
 	volatile bool m_quit;  // quit the main loop
-	int *m_mixed_mode_pending;  // pending recvs in mixed mode (no loop!)
-	MPI_Win m_mixed_mode_pending_win;  // Window for remote access to them
     };
 }
 #endif
