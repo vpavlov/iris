@@ -99,9 +99,11 @@ void logger::error(const char *fmt, ...)
     DO_LOG(IRIS_LOG_LEVEL_ERROR, "ERROR");
 }
 
-void logger::trace_event(event_t *ev)
+void logger::trace_event(event_t *in_event)
 {
-    trace("<EVENT COMM 0x%x PEER %d CODE %d SIZE %d DATA %p>", ev->comm, ev->peer, ev->code, ev->size, ev->data);
+    trace("<EVENT COMM %x PEER %d TAG %d SIZE %d DATA %p>",
+	  in_event->comm, in_event->peer, in_event->tag, in_event->size,
+	  in_event->data);
 }
 
 void logger::trace_mem(void *in_ptr)

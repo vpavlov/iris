@@ -40,16 +40,13 @@ namespace ORG_NCSA_IRIS {
 	comm_rec(class iris *in_obj, MPI_Comm in_comm);
 	~comm_rec();
 
-	MPI_Request post_event(void *data, int size, int code, int peer);
-	void send_event(void *data, int size, int code, int peer);
+	bool peek_event(struct event_t &out_event);
+	void get_event(struct event_t &out_event);
 
     public:
-
 	MPI_Comm m_comm;
 	int m_rank;
 	int m_size;
-	class comm_driver *m_driver;
-
     };
 }
 

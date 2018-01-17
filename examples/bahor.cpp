@@ -11,10 +11,9 @@
 #include <iris/iris.h>
 #include <iris/domain.h>
 #include <iris/utils.h>
-#include <iris/comm_driver.h>
-#include <iris/event_queue.h>
 #include <iris/logger.h>
 #include <iris/comm_rec.h>
+#include <iris/tags.h>
 
 #define NSTEPS 1
 
@@ -35,7 +34,7 @@ char **split(char *line, int max)
     return tokens;
 }
 
-void read_nacl(char *fname, iris_real **&atoms)
+void read_nacl(char *fname, iris_real **&charges)
 {
 
     FILE *fp = fopen(fname, "r");
@@ -44,7 +43,7 @@ void read_nacl(char *fname, iris_real **&atoms)
 	return;
     }
 
-    memory::create_2d(atoms, 27000, 4);
+    memory::create_2d(charges, 27000, 4);
 
     char *line = NULL;
     size_t sz = 0;
@@ -69,16 +68,16 @@ void read_nacl(char *fname, iris_real **&atoms)
 	}
 	atom_id = atoi(tokens[1]);
 	if(atom_id != 0) {
-	    atoms[atom_id-1][3] = charge;
+	    charges[atom_id-1][3] = charge;
 	}
 	delete [] tokens;
 
 	// read coords
 	getline(&line, &sz, fp);
 	tokens = split(line, 3);
-	atoms[atom_id-1][0] = (iris_real) atof(tokens[0]);
-	atoms[atom_id-1][1] = (iris_real) atof(tokens[1]);
-	atoms[atom_id-1][2] = (iris_real) atof(tokens[2]);
+	charges[atom_id-1][0] = (iris_real) atof(tokens[0]);
+	charges[atom_id-1][1] = (iris_real) atof(tokens[1]);
+	charges[atom_id-1][2] = (iris_real) atof(tokens[2]);
 	delete [] tokens;
 
 	getline(&line, &sz, fp);  // skip next two lines
@@ -89,9 +88,9 @@ void read_nacl(char *fname, iris_real **&atoms)
     fclose(fp);
 }
 
-void read_atoms(iris *in_iris, char *fname, int rank, int pp_size,
-		MPI_Comm local_comm,
-		iris_real **&out_my_atoms, int &out_my_count)
+void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
+		  MPI_Comm local_comm,
+		  iris_real **&out_my_charges, int &out_my_count)
 {
     if(rank == 0) {
 
@@ -101,13 +100,14 @@ void read_atoms(iris *in_iris, char *fname, int rank, int pp_size,
 		50.39064,  50.39064,  50.39064,
 		100.78128, 100.78128, 100.78128};
 
-	// read the atoms from the input file
-	iris_real **atoms;
-	read_nacl(fname, atoms);
+	// read the charges from the input file
+	iris_real **charges;
+	read_nacl(fname, charges);
+
 
 	// "domain decomposition" in the client. In this example, we use a
 	// simple domain decomposition in X direction: each client proc gets a
-	// strip in X direction and contains all atoms in the YZ planes that
+	// strip in X direction and contains all charges in the YZ planes that
 	// fall into that strip. This is obviously not the proper way to do it,
 	// but since this is outside IRIS and in the domain of the client, it
 	// is supposed that a proper MD package will do its own DD
@@ -125,15 +125,15 @@ void read_atoms(iris *in_iris, char *fname, int rank, int pp_size,
 		xmax[i] = gb.xhi;
 	    }
 	}
-	
-	// Figure out which atoms go to which client processor. Again, this
+
+	// Figure out which charges go to which client processor. Again, this
 	// is maybe not the best way to do it, but this is outside IRIS and the
 	// client MD code should have already have mechanisms for this in place.
-	std::vector<int> *vatoms = new std::vector<int>[pp_size];
+	std::vector<int> *vcharges = new std::vector<int>[pp_size];
 	for(int i=0;i<27000;i++) {
 	    for(int j=0;j<pp_size;j++) {
-		if(atoms[i][0] >= xmin[j] && atoms[i][0] < xmax[j]) {
-		    vatoms[j].push_back(i);
+		if(charges[i][0] >= xmin[j] && charges[i][0] < xmax[j]) {
+		    vcharges[j].push_back(i);
 		    break;
 		}
 	    }
@@ -141,74 +141,74 @@ void read_atoms(iris *in_iris, char *fname, int rank, int pp_size,
 	
 	memory::destroy_1d(xmin);
 	memory::destroy_1d(xmax);
-	
-	// Package and send the atoms for each target client node
+
+	// Package and send the charges for each target client node
 	for(int i=0;i<pp_size;i++) {
 	    iris_real **sendbuf;
-	    memory::create_2d(sendbuf, vatoms[i].size(), 4);
+	    memory::create_2d(sendbuf, vcharges[i].size(), 4);
 	    int j = 0;
-	    for(auto it = vatoms[i].begin(); it != vatoms[i].end(); it++) {
-		sendbuf[j][0] = atoms[*it][0];
-		sendbuf[j][1] = atoms[*it][1];
-		sendbuf[j][2] = atoms[*it][2];
-		sendbuf[j][3] = atoms[*it][3];
+	    for(auto it = vcharges[i].begin(); it != vcharges[i].end(); it++) {
+		sendbuf[j][0] = charges[*it][0];
+		sendbuf[j][1] = charges[*it][1];
+		sendbuf[j][2] = charges[*it][2];
+		sendbuf[j][3] = charges[*it][3];
 		j++;
 	    }
 
 	    if(i != 0) {
-		MPI_Send(&(sendbuf[0][0]), 4*vatoms[i].size(), IRIS_REAL,
+		MPI_Send(&(sendbuf[0][0]), 4*vcharges[i].size(), IRIS_REAL,
 			 i, 1, local_comm);
 	    }else {
-		memory::create_2d(out_my_atoms, vatoms[i].size(), 4);
-		memcpy(&(out_my_atoms[0][0]), &(sendbuf[0][0]),
-		       4*vatoms[i].size());
-		out_my_count = vatoms[i].size();
+		memory::create_2d(out_my_charges, vcharges[i].size(), 4);
+		memcpy(&(out_my_charges[0][0]), &(sendbuf[0][0]),
+		       4*vcharges[i].size()*sizeof(iris_real));
+		out_my_count = vcharges[i].size();
 	    }
 	    memory::destroy_2d(sendbuf);
 	}
 
-	delete [] vatoms;
-	memory::destroy_2d(atoms);
+	delete [] vcharges;
+	memory::destroy_2d(charges);
 	    
     }else {
 	MPI_Status status;
 	MPI_Probe(0, 1, local_comm, &status);
 	int nreals;
 	MPI_Get_count(&status, IRIS_REAL, &nreals);
-	int natoms = nreals / 4;
-	memory::create_2d(out_my_atoms, natoms, 4);
-	MPI_Recv(&(out_my_atoms[0][0]), nreals, IRIS_REAL, 0, 1, local_comm,
+	int ncharges = nreals / 4;
+	memory::create_2d(out_my_charges, ncharges, 4);
+	MPI_Recv(&(out_my_charges[0][0]), nreals, IRIS_REAL, 0, 1, local_comm,
 		 MPI_STATUS_IGNORE);
-	out_my_count = natoms;
+	out_my_count = ncharges;
     }
 }
 
-void send_atoms(iris *in_iris, iris_real **in_my_atoms, size_t in_my_count,
-		box_t<iris_real> *in_local_boxes, int in_server_size)
+void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
+		  box_t<iris_real> *in_local_boxes)
 {
     iris_real ***scratch;
-    size_t *counts;
+    int *counts;
 
-    memory::create_3d(scratch, in_server_size, in_my_count, 4);
-    memory::create_1d(counts, in_server_size);
+    memory::create_3d(scratch, in_iris->m_server_size, in_my_count, 4);
+    memory::create_1d(counts, in_iris->m_server_size);
 
-    for(int j=0;j<in_server_size;j++) {
+    for(int j=0;j<in_iris->m_server_size;j++) {
 	counts[j] = 0;
     }
-    
-    for(int i=0;i<in_my_count;i++) {
-	iris_real x = in_my_atoms[i][0];
-	iris_real y = in_my_atoms[i][1];
-	iris_real z = in_my_atoms[i][2];
-	iris_real q = in_my_atoms[i][3];
 
-	for(int j=0;j<in_server_size;j++) {
-	    int x0 = in_local_boxes[j].xlo;
-	    int y0 = in_local_boxes[j].ylo;
-	    int z0 = in_local_boxes[j].zlo;
-	    int x1 = in_local_boxes[j].xhi;
-	    int y1 = in_local_boxes[j].yhi;
-	    int z1 = in_local_boxes[j].zhi;
+    for(int i=0;i<in_my_count;i++) {
+	iris_real x = in_my_charges[i][0];
+	iris_real y = in_my_charges[i][1];
+	iris_real z = in_my_charges[i][2];
+	iris_real q = in_my_charges[i][3];
+
+	for(int j=0;j<in_iris->m_server_size;j++) {
+	    iris_real x0 = in_local_boxes[j].xlo;
+	    iris_real y0 = in_local_boxes[j].ylo;
+	    iris_real z0 = in_local_boxes[j].zlo;
+	    iris_real x1 = in_local_boxes[j].xhi;
+	    iris_real y1 = in_local_boxes[j].yhi;
+	    iris_real z1 = in_local_boxes[j].zhi;
 
 	    if(x >= x0 && x < x1 &&
 	       y >= y0 && y < y1 &&
@@ -224,29 +224,10 @@ void send_atoms(iris *in_iris, iris_real **in_my_atoms, size_t in_my_count,
 	}
     }
 
-    MPI_Request *reqs1 = new MPI_Request[in_server_size];
+    in_iris->bcast_charges_to_servers(&(counts[0]), &(scratch[0][0][0]));
 
-    for(int i=0;i<in_server_size;i++) {
-	in_iris->m_inter_comm->send_event(&(scratch[i][0][0]),
-					  counts[i] * 4 * sizeof(iris_real),
-					  IRIS_EVENT_ATOMS, i);
-    }
-
-    //MPI_Waitall(in_server_size, reqs1, MPI_STATUSES_IGNORE);
     memory::destroy_3d(scratch);
     memory::destroy_1d(counts);
-
-
-    // MPI_Barrier(local_comm);
-
-    // if(rank == 0) {
-    // 	int dummy = 0;
-    // 	for(int i=0;i<in_server_size;i++) {
-    // 	    MPI_Send(&dummy, 1, MPI_INT,
-    // 		     i + iris_offset, IRIS_EVENT_ATOMS_EOF, MPI_COMM_WORLD);
-    // 	}
-    // }
-
 }
 
 
@@ -263,19 +244,10 @@ main(int argc, char **argv)
     char *fname = argv[1];
     int mode = atoi(argv[2]);
 
-    int rank, size, required = MPI_THREAD_MULTIPLE, provided;
-    MPI_Init_thread(&argc, &argv, required, &provided);
-    printf("required = %d, provided = %d\n", required, provided);
+    int rank, size;
+    MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-
-    //This code here facilitates debugging with gdb
-    // printf("%d has MPI rank %d\n", getpid(), rank);
-    // if(rank == 0) {
-    // 	getc(stdin);
-    // }
-    // MPI_Barrier(MPI_COMM_WORLD);
     
 
     int role;
@@ -294,10 +266,11 @@ main(int argc, char **argv)
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(MPI_COMM_WORLD);
+	x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
     }else if(mode == 1) {
 	// split the world communicator in two groups:
-	// - client group: the one that "uses" IRIS. It provides atom coords
-	//                 and charges to IRIS and receives forces, energies,
+	// - client group: the one that "uses" IRIS. It provides charge coords
+	//                 and values to IRIS and receives forces, energies,
 	//                 etc. back
 	// - server group: the processes that IRIS can use to do its
 	//                 calculations of the long-range interactions
@@ -322,27 +295,28 @@ main(int argc, char **argv)
 	int remote_leader = (role==IRIS_ROLE_SERVER)?0:client_size;
 
 
-	x = new iris(role, local_comm, MPI_COMM_WORLD, remote_leader);
+	x = new iris(client_size, server_size, role, local_comm,
+		     MPI_COMM_WORLD, remote_leader);
     }else {
 	printf("Unknown mode. Only 0 and 1 are supported\n");
 	exit(-1);
     }
 
 
-    // Client nodes must have somehow aquired knowledge about atoms. In this
+    // Client nodes must have somehow aquired knowledge about charges. In this
     // example, we read them from a DL_POLY CONFIG file. For demonstration
-    // purposes we split the atoms between the client processors in a 
-    // straightforward way: first 27000/client_size atoms go to the first
+    // purposes we split the charges between the client processors in a 
+    // straightforward way: first 27000/client_size charges go to the first
     // client proc, second -- to the second proc, etc. This is obviously not
     // optimal or anything, but this is not IRIS's responsibility -- the client
     // must have already done some kind of domain decomposition and scattering
-    // of the atoms in a way that it thinks is optimal for it.
+    // of the charges in a way that it thinks is optimal for it.
     // So this part would have usually been done already in some other way.
-    iris_real **my_atoms = NULL;
+    iris_real **my_charges = NULL;
     int my_count = 0;
     if(x->is_client()) {
-	read_atoms(x, fname, rank, client_size, local_comm, my_atoms, my_count);
-	x->m_logger->trace("Client has %d atoms", my_count);
+	read_charges(x, fname, rank, client_size, local_comm, my_charges, my_count);
+	x->m_logger->trace("Client has %d charges", my_count);
     }
 
 
@@ -358,42 +332,45 @@ main(int argc, char **argv)
     x->set_mesh_size(128, 128, 128);
     x->set_order(3);
     x->commit();
-        
-
-    // The run() call spawns a new event looping thread on the node. The thread
-    // blocks waiting for events, so it won't consume resources when there are
-    // no events. The run call returns immediately, so the client nodes can 
-    // continue doing whatever they need to do.
-    x->run();
 
 
-    // The client needs to know the domain decomposition of the server nodes
-    // so it can know which client node send which atoms to which server node.
-    // So, each client node must ask all server nodes about their local boxes.
-    // This must be done once after each commit.
+    // The client needs to know the domain decomposition of the server
+    // nodes so it can know which client node send which charges to which
+    // server node. So, each client node must ask all server nodes about
+    // their local boxes. This must be done once after each commit
+    // (e.g. after global box changed)
     //
-    // However, to minimize communication, only the client leader gets the 
-    // server procs' local boxes and must then distribute them by whatever
-    // means it sees fit.
-    // 
-    // In mode 0 this is not really needed, but it still works. No communication
-    // is done in that case, since client and server leader are the same proc.
-    box_t<iris_real> *local_boxes = x->get_local_boxes(server_size);
+    // In shared mode this is not really needed, but it still works.
+    // No communication between the groups is done in that case, since
+    // client and server leader are the same proc.
+    //
+    // This must be called on both clients and servers collectively.
+    box_t<iris_real> *local_boxes = x->get_local_boxes();
 
     // Main simulation loop in the client
     if(x->is_client()) {
+
 	// On each step...
 	for(int i=0;i<NSTEPS;i++) {
-
-	    // The client must send the atoms which befall into the server
+	    // The client must send the charges which befall into the server
 	    // procs' local boxes to the corrseponding server node.
-	    send_atoms(x, my_atoms, my_count, local_boxes, server_size);
+	    send_charges(x, my_charges, my_count, local_boxes);
+
+	    // Let the servers know that there are no more charges
+	    x->bcast_charges_eof_to_servers();
 	}
+
+	x->bcast_quit_to_servers();  // this will break server loop
+
+    }else if(x->is_server()) {
+	// Meanwhile, on the server: an endless loop that is broken by
+	// bcast_quit_event_to_servers()
+	x->run();
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
 
     // Cleanup
+    memory::wfree(local_boxes);
     delete x;
     MPI_Finalize();
     exit(0);
@@ -414,15 +391,15 @@ main(int argc, char **argv)
     // 	iris_real **my_x;
     // 	iris_real *my_q;
     // 	iris_real *local_boxes;
-    // 	size_t natoms = 27000/client_size;
+    // 	size_t ncharges = 27000/client_size;
 
-    // 	__read_atoms(argv[1], rank, client_size, local_comm, my_x, my_q);
+    // 	__read_charges(argv[1], rank, client_size, local_comm, my_x, my_q);
     // 	int iris_size = size - client_size;
     // 	iris::recv_local_boxes(iris_size, rank, 0, MPI_COMM_WORLD, local_comm,
     // 			       local_boxes);
 
     // 	for(int i=0;i<NSTEPS;i++) {
-    // 	    __send_atoms(local_comm, rank, my_x, my_q, natoms, local_boxes, iris_size, client_size);
+    // 	    __send_charges(local_comm, rank, my_x, my_q, ncharges, local_boxes, iris_size, client_size);
     // 	}
 
     // 	memory::destroy_2d(my_x);

@@ -39,45 +39,40 @@
 
 namespace ORG_NCSA_IRIS {
 
-    void __sync_handler(class iris *obj, struct event_t event);
-
     // Role of this IRIS node.
     // Internal note: coded in binary to underline the fact that it is a bitmask
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
 
-#define IRIS_STATE_INITIALIZED         0  // intial state when constructed
-#define IRIS_STATE_COMMITED            1  // configuration commited
-
-    typedef void (*event_handler_t)(class iris *obj, struct event_t);
-
+#define IRIS_STATE_INITIALIZED  1
+#define IRIS_STATE_COMMITED     2
 
     class iris {
 
     public:
 
-	// Use this constructor when in dual (client+server) mode and
-	// the master process is rank 0
+	// IRIS works in two modes:
+	//   - shared mode: every node is both client and server
+	//   - distributed mode: every node is either client XOR server
+
+	// Use this constructor when for shared mode and rank 0 is the leader
 	iris(MPI_Comm in_uber_comm);
 
-	// Use this constructor when in dual (client+server) mode and
-	// you want to specify a different master process
+	// Use this constructor when for shared mode and you want to specify
+	// a different leader
 	iris(MPI_Comm in_uber_comm, int in_leader);
 
-	// Use this constructor when in separation (client/server) mode
-	// and the local leader of each group is its respective rank 0
-	iris(int in_role, MPI_Comm in_local_comm,
+	// Use this constructor when in distributed mode and the local leader
+	// of each group is its respective rank 0
+	iris(int in_client_size, int in_server_size,
+	     int in_role, MPI_Comm in_local_comm,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
 
-	// Use this constructor when in separation (client/server) mode
-	// and you want to specify a local leader != 0
-	iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
+	// Use this constructor when in distributed  mode and you want to
+	// specify a local leader != 0
+	iris(int in_client_size, int in_server_size,
+	     int in_role, MPI_Comm in_local_comm, int in_local_leader,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
-
-	// API: create the iris object through wich all further API calls 
-	// are made
-	// Example: iris *hiris = new iris(MPI_COMM_WORLD, mycomm, 0)
-	iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master);
 
 	~iris();
 
@@ -109,43 +104,50 @@ namespace ORG_NCSA_IRIS {
 	//   - perform any preliminary calculations necessary for the solving;
 	void commit();
 
+	// Call this to run the event loop
+	void run();
+
 	// The client nodes receive an array of xlo,ylo,zlo,xhi,yhi,zhi
 	// for each of the server's local boxes, in the rank order of the
 	// server's local_comm.
+	box_t<iris_real> *get_local_boxes();
+
+	// Use this to broadcast charges to servers
 	//
-	// Note that the client passes server_size, because it *knows* it:
-	// after all, it was the client, that allocated our communicator, so
-	// it must know how many processes are assigned to the IRIS server.
-	box_t<iris_real> *get_local_boxes(int in_server_size);
-
-	// Call this to run the event loop (in a separate thread)
-	void run();
-
-	// This is not part of the API, but needs to be public, so the
-	// static thread function can call it
-	void *event_loop();
-
-
-	// Register event handler
-	void register_event_handler(int in_event_code,
-				    event_handler_t in_callback)
-	{
-	    m_event_handlers[in_event_code] = in_callback;
-	}
-
-	void sync_handler(event_t event);
-	void wait_event(event_t &out_event);
+	// in_counts is an array (of m_server_size size) whose I-th element
+	// contains the number of charges to be sent to rank I of the intercomm
+	//
+	// in_charges can be viewed as a 3D staggered array. The array size
+	// must = sum(all elements of in_counts). The first N = in_count(0)
+	// items of 4 iris_reals (x, y, z, q) each are charges to be sent to
+	// rank 0 in the intercomm. The second M = in_count(1) items of 4
+	// iris_reals each are the charges to be sent to rank 1, etc.
+	//
+	// For example:
+	//
+	// in_counts = {2, 3}
+	//
+	// in_charges = {x00, y00, z00, c00,    // proc 0, charge 0
+	//               x01, y01, z01, c01,    // proc 0, charge 1
+	//
+	//               x10, y10, z10, c10,    // proc 1, charge 0
+	//               x11, y11, z11, c11,    // proc 1, charge 1
+	//               x12, y12, z12, c12};   // proc 1, charge 2
+	void bcast_charges_to_servers(int *in_count, iris_real *in_charges);
+	void bcast_charges_eof_to_servers();
+	void bcast_quit_to_servers();
 
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
-	void start_event_sink();
-	void stop_event_sink();
+	void process_event(struct event_t *in_event);
 
     public:
-	int m_state;                   // FSM state
+	int m_client_size;             // # of client nodes
+	int m_server_size;             // # of server nodes
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
+	int m_state;                   // State of the solver (FSM)
 
 	class event_queue *m_queue;       // IRIS event queue
 	class comm_rec    *m_uber_comm;   // to facilitate comm with world
@@ -157,18 +159,10 @@ namespace ORG_NCSA_IRIS {
 	class mesh        *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;   // Charge assignmen machinery
 
-
     private:
-	pthread_t m_main_thread;
-	bool      m_main_thread_running;
-
-	// to facilitate blocking waiting for event from the main thread
-	pthread_mutex_t m_sync_mutex;
-	pthread_cond_t  m_sync_cond;
-	bool            m_has_sync_event;
-	event_t         m_sync_event;
-
-	std::map<int, event_handler_t> m_event_handlers;
+	volatile bool m_quit;  // quit the main loop
+	int *m_mixed_mode_pending;  // pending recvs in mixed mode (no loop!)
+	MPI_Win m_mixed_mode_pending_win;  // Window for remote access to them
     };
 }
 #endif

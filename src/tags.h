@@ -27,35 +27,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __COMM_DRIVER_H__
-#define __COMM_DRIVER_H__
 
-#include <mpi.h>
-#include <pthread.h>
-
-namespace ORG_NCSA_IRIS {
-
-    class comm_driver {
-
-    public:
-
-	comm_driver(MPI_Comm in_comm, class event_queue *in_queue);
-	~comm_driver();
-
-	void start_event_source();  // start the event loop
-	void stop_event_source();   // stop the event loop
-	void *p2p_loop();
-
-    private:
-
-
-	MPI_Comm m_comm;
-	volatile bool m_quit;
-	class event_queue *m_queue;
-	pthread_t m_p2p_loop_thread;
-	bool m_p2p_loop_thread_running;
-    };
-
-}
-
-#endif
+#define IRIS_TAG_INTERCOMM_CREATE 1
+#define IRIS_TAG_LOCAL_BOXES      2
+#define IRIS_TAG_CHARGES          3
+#define IRIS_TAG_CHARGES_EOF      4
+#define IRIS_TAG_QUIT             5

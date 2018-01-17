@@ -27,89 +27,91 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <stdexcept>
 #include <unistd.h>
 #include <mpi.h>
 #include <omp.h>
 #include "iris.h"
 #include "logger.h"
-#include "event_queue.h"
 #include "comm_rec.h"
 #include "domain.h"
 #include "mesh.h"
 #include "charge_assigner.h"
 #include "proc_grid.h"
-#include "comm_driver.h"
-
 #include "memory.h"
-#include "event.h"
+#include "tags.h"
 
 using namespace ORG_NCSA_IRIS;
 
 iris::iris(MPI_Comm in_uber_comm)
     :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-     m_remote_leader(0)
+     m_remote_leader(0), m_client_size(0), m_server_size(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
 iris::iris(MPI_Comm in_uber_comm, int in_leader)
     :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-     m_remote_leader(in_leader)
+     m_remote_leader(in_leader), m_client_size(0), m_server_size(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(int in_role, MPI_Comm in_local_comm,
+iris::iris(int in_client_size, int in_server_size,
+	   int in_role, MPI_Comm in_local_comm,
 	   MPI_Comm in_uber_comm, int in_remote_leader)
-    :m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+    :m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader),
+     m_client_size(in_client_size), m_server_size(in_server_size)
 {
     init(in_local_comm, in_uber_comm);
 }
 
-iris::iris(int in_role, MPI_Comm in_local_comm, int in_local_leader,
+iris::iris(int in_client_size, int in_server_size,
+	   int in_role, MPI_Comm in_local_comm, int in_local_leader,
 	   MPI_Comm in_uber_comm, int in_remote_leader)
     :m_role(in_role), m_local_leader(in_local_leader),
-     m_remote_leader(in_remote_leader)
+     m_remote_leader(in_remote_leader), m_client_size(in_client_size),
+     m_server_size(in_server_size)
 {
     init(in_local_comm, in_uber_comm);
 }
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-    pthread_mutex_init(&m_sync_mutex, NULL);
-    pthread_cond_init(&m_sync_cond, NULL);
-    m_has_sync_event = false;
-    m_sync_event.data = NULL;
+    m_quit = false;
+    m_inter_comm = NULL;
+    m_local_comm = new comm_rec(this, in_local_comm);
+    m_uber_comm = new comm_rec(this, in_uber_comm);
 
-    m_main_thread_running = false;
-    
-    // setup event handlers
-    m_event_handlers.clear();
-    
-    // first duplicate incoming communicators (to be safe) and 
-    // create the intercomm
-    MPI_Comm local_comm, uber_comm, inter_comm;  // will get free'd in ~comm_rec
-    MPI_Comm_dup(in_local_comm, &local_comm);
-    MPI_Comm_dup(in_uber_comm, &uber_comm);
     if(!is_both()) {
 	// For the intercomm to be created, the two groups must be disjoint, and
 	// this is not the case when nodes are client/server.
-	MPI_Intercomm_create(local_comm,
+	MPI_Comm inter_comm;
+	MPI_Intercomm_create(m_local_comm->m_comm,
 			     m_local_leader,
-			     uber_comm,
+			     m_uber_comm->m_comm,
 			     m_remote_leader,
-			     IRIS_EVENT_INTERCOMM_CREATE,
+			     IRIS_TAG_INTERCOMM_CREATE,
 			     &inter_comm);
+	m_inter_comm = new comm_rec(this, inter_comm);
+	MPI_Comm_free(&inter_comm);
+    }else {
+	m_client_size = m_server_size = m_local_comm->m_size;
+	m_mixed_mode_pending = new int[m_server_size];
+	for(int i=0;i<m_server_size;i++) {
+	    m_mixed_mode_pending[i] = 0;
+	}
+	MPI_Win_create(m_mixed_mode_pending, m_server_size, sizeof(int),
+		       MPI_INFO_NULL, m_local_comm->m_comm,
+		       &m_mixed_mode_pending_win);
     }
 
-    // now we can setup event queue, comm_drivers, etc.
-    m_queue = new event_queue(this);
-    m_local_comm = new comm_rec(this, local_comm);
-    m_uber_comm = new comm_rec(this, uber_comm);
-    if(!is_both()) {
-	m_inter_comm = new comm_rec(this, inter_comm);
-    }else {
-	m_inter_comm = NULL;
+    if(is_server() && m_server_size != m_local_comm->m_size) {
+	throw std::invalid_argument("Inconsistent server size!");
+    }
+
+    if(is_client() && m_client_size != m_local_comm->m_size) {
+	throw std::invalid_argument("Inconsistent client size!");
     }
 
     m_logger = new logger(this);
@@ -126,10 +128,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_proc_grid = new proc_grid(this);
     }
 
-    register_event_handler(IRIS_EVENT_LOCAL_BOXES, __sync_handler);
-
     m_state = IRIS_STATE_INITIALIZED;
-
     m_logger->trace("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
@@ -138,11 +137,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris::~iris()
 {
-    stop_event_sink();
-
-    pthread_mutex_destroy(&m_sync_mutex);
-    pthread_cond_destroy(&m_sync_cond);
-
     if(m_proc_grid != NULL) {
 	delete m_proc_grid;
     }
@@ -159,8 +153,14 @@ iris::~iris()
 	delete m_domain;
     }
 
-    if(m_inter_comm != NULL) {
-	delete m_inter_comm;
+
+    if(is_both()) {
+	delete [] m_mixed_mode_pending;
+	MPI_Win_free(&m_mixed_mode_pending_win);
+    }else {
+	if(m_inter_comm != NULL) {
+	    delete m_inter_comm;
+	}
     }
 
     delete m_local_comm;
@@ -169,7 +169,6 @@ iris::~iris()
     delete m_logger;
 
     delete m_uber_comm;
-    delete m_queue;
 }
 
 bool iris::is_leader()
@@ -178,7 +177,7 @@ bool iris::is_leader()
 };
 
 void iris::set_global_box(iris_real x0, iris_real y0, iris_real z0,
-				 iris_real x1, iris_real y1, iris_real z1)
+			  iris_real x1, iris_real y1, iris_real z1)
 {
     if(is_server()) {
 	m_domain->set_global_box(x0, y0, z0, x1, y1, z1);
@@ -218,70 +217,144 @@ void iris::commit()
     m_state = IRIS_STATE_COMMITED;
 }
 
-// Run the main event queue
+// run the main server loop
 void iris::run()
 {
-    m_uber_comm->m_driver->start_event_source();
-    m_local_comm->m_driver->start_event_source();
-    if(m_inter_comm != NULL) {
-	m_inter_comm->m_driver->start_event_source();
-    }
-
-    start_event_sink();
-}
-
-static void *main_thread_start(void *thread_arg)
-{
-    iris *obj = (iris *)thread_arg;
-    return obj->event_loop();
-}
-
-void iris::start_event_sink()
-{
-    if(!m_main_thread_running) {
-	pthread_create(&m_main_thread, NULL, &main_thread_start, this);
-	m_main_thread_running = true;
-    }
-}
-
-void iris::stop_event_sink()
-{
-    if(m_main_thread_running) {
-	m_queue->post_quit_event_self();
-	void *retval;
-	pthread_join(m_main_thread, &retval);
-	m_main_thread_running = false;
-    }
-}
-
-void *iris::event_loop()
-{
-    event_t event;
-    while(m_queue->get_event(event)) {
-	m_logger->trace_event(&event);
-	auto handler = m_event_handlers.find(event.code);
-	if(handler != m_event_handlers.end()) {
-	    handler->second(this, event);
-	}else {
-	    memory::wfree(event.data);
+    if(is_server() && !is_client()) {
+	while(!m_quit) {
+	    event_t event;
+	    if(m_uber_comm->peek_event(event) ||
+	       m_local_comm->peek_event(event) ||
+	       m_inter_comm->peek_event(event))
+	    {
+		process_event(&event);
+		memory::wfree(event.data);
+	    }
 	}
     }
 }
 
-box_t<iris_real> *iris::get_local_boxes(int in_server_size)
+void iris::process_event(event_t *event)
 {
-    box_t<iris_real> *local_boxes;
-    int size = sizeof(box_t<iris_real>) * in_server_size;
+    //m_logger->trace_event(event);
+    switch(event->tag) {
+    case IRIS_TAG_QUIT:
+	m_logger->trace("Quit event received");
+	m_quit = true;
+	break;
+
+    case IRIS_TAG_CHARGES:
+	m_logger->trace_event(event);
+	break;
+    }
+}
+
+
+void iris::bcast_charges_to_servers(int *in_counts, iris_real *in_charges)
+{
+    if(!is_client()) {
+	throw std::logic_error("bcast_charges_to_servers may only be called from client nodes!");
+    }
+
+    // in shared mode we only have m_local_comm; in SOC mode we use intercomm
+    MPI_Comm comm = is_server()?m_local_comm->m_comm:m_inter_comm->m_comm;
+
+    int offset = 0;
+    MPI_Request *req = new MPI_Request[m_server_size];
 
     if(is_server()) {
-	if(in_server_size != m_local_comm->m_size) {
-	    throw std::invalid_argument("in_server_size is different than the size of the server communicator!");
-	}
+	MPI_Win_fence(MPI_MODE_NOPRECEDE, m_mixed_mode_pending_win);
+    }
 
+    for(int i=0;i<m_server_size;i++) {
+	req[i] = MPI_REQUEST_NULL;
+	if(in_counts[i] != 0) {
+	    if(is_server() && i == m_local_comm->m_rank) {
+		event_t ev;
+		ev.comm = comm;
+		ev.peer = i;
+		ev.tag = IRIS_TAG_CHARGES;
+		ev.size = 4*in_counts[i]*sizeof(iris_real);
+		ev.data = in_charges + offset;
+		process_event(&ev);
+	    }else {
+		MPI_Isend(in_charges + offset,  4*in_counts[i], IRIS_REAL, i,
+			  IRIS_TAG_CHARGES, comm, &req[i]);
+		if(is_server()) {
+		    int one = 1;
+		    MPI_Put(&one, 1, MPI_INT, i, m_local_comm->m_rank,
+			    1, MPI_INT, m_mixed_mode_pending_win);
+		}
+	    }
+	}
+	offset += 4*in_counts[i];
+    }
+
+
+    if(is_server()) {
+	MPI_Barrier(m_local_comm->m_comm);
+	MPI_Win_fence(MPI_MODE_NOSUCCEED | MPI_MODE_NOSTORE,
+		      m_mixed_mode_pending_win);
+	for(int i=0;i<m_server_size;i++) {
+	    if(m_mixed_mode_pending[i] == 1) {
+		m_mixed_mode_pending[i] = 0;
+		event_t ev;
+		m_local_comm->get_event(ev);
+		process_event(&ev);
+	    }
+	}
+    }
+
+    MPI_Waitall(m_server_size, req, MPI_STATUSES_IGNORE);
+
+}
+
+void iris::bcast_charges_eof_to_servers()
+{
+    if(is_client() && !is_server()) {
+	// Make sure all clients have already sent their atoms before notifying
+	// the server that there are no more atoms.
+	MPI_Barrier(m_local_comm->m_comm);
 	if(is_leader()) {
-	    local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
+	    MPI_Request *req = new MPI_Request[m_server_size];
+	    for(int i=0;i<m_server_size;i++) {
+		MPI_Isend(NULL, 0, MPI_BYTE, i, IRIS_TAG_CHARGES_EOF,
+			  m_inter_comm->m_comm,
+			  &req[i]);
+	    }
+	    MPI_Waitall(m_server_size, req, MPI_STATUSES_IGNORE);
 	}
+    }	
+}
 
+void iris::bcast_quit_to_servers()
+{
+    MPI_Request *req = new MPI_Request[m_server_size];
+
+    if(is_client() && !is_server() && is_leader()) {
+	for(int i=0;i<m_server_size;i++) {
+	    MPI_Isend(NULL, 0, MPI_BYTE, i, IRIS_TAG_QUIT,
+		      m_inter_comm->m_comm,
+		      &req[i]);
+	}
+	MPI_Waitall(m_server_size, req, MPI_STATUSES_IGNORE);
+    }	
+}
+
+
+
+box_t<iris_real> *iris::get_local_boxes()
+{
+    box_t<iris_real> *local_boxes = NULL;
+    int size = sizeof(box_t<iris_real>) * m_server_size;
+
+    // Output need to be allocated by everybody except pure-server non-leaders,
+    // which doesn't need it.
+    if(!is_server() || is_client() || is_leader()) {
+	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
+    }
+
+    if(is_server()) {
 	MPI_Gather(&(m_domain->m_local_box),
 		   sizeof(box_t<iris_real>)/sizeof(iris_real), IRIS_REAL,
 		   local_boxes,
@@ -291,71 +364,29 @@ box_t<iris_real> *iris::get_local_boxes(int in_server_size)
 
 	if(!is_client()) {
 	    if(is_leader()) {
-		m_uber_comm->send_event(local_boxes, size,
-					IRIS_EVENT_LOCAL_BOXES,
-					m_remote_leader);
+		MPI_Send(local_boxes, size, MPI_BYTE, m_remote_leader,
+			 IRIS_TAG_LOCAL_BOXES, m_uber_comm->m_comm);
 		memory::wfree(local_boxes);
 	    }
+
 	    return NULL;
-	}else {
-	    return local_boxes;
 	}
-    }else {
-	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-	event_t ev;
-	if(is_leader()) {
-	    wait_event(ev);
-	    memcpy(local_boxes, ev.data, size);
-	    memory::wfree(ev.data);
+    }
+
+    // intentional fall-through (no else if) to handle mixed mode cases
+
+    if(is_client()) {
+	if(!is_server() && is_leader()) {
+	    MPI_Recv(local_boxes, size, MPI_BYTE, m_remote_leader,
+		     IRIS_TAG_LOCAL_BOXES, m_uber_comm->m_comm,
+		     MPI_STATUS_IGNORE);
 	}
-	
 	MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader,
 		  m_local_comm->m_comm);
 	return local_boxes;
     }
 }
 
-void iris::sync_handler(event_t event)
-{
-    pthread_mutex_lock(&m_sync_mutex);
-    m_has_sync_event = true;
-    m_sync_event = event;
-    pthread_cond_signal(&m_sync_cond);
-    pthread_mutex_unlock(&m_sync_mutex);
-}
-
-void iris::wait_event(event_t &out_event)
-{
-    pthread_mutex_lock(&m_sync_mutex);
-    while(!m_has_sync_event) {
-	pthread_cond_wait(&m_sync_cond, &m_sync_mutex);
-    }
-    out_event = m_sync_event;
-    pthread_mutex_unlock(&m_sync_mutex);
-}
-
-    // For mode 0, each client is also a server, and the atoms from client X
-    // belong to the same node. So there is no need to do any of this.
-
-    //TODO: redo this with m_inter_comm
-
-    // iris_real *local_boxes;
-    // int sz = 6 * m_local_comm->m_size;
-
-    // if(m_local_comm->m_rank == 0) {
-    // 	memory::create_1d(local_boxes, sz);
-    // }
-    
-    // MPI_Gather(&(m_domain->m_local_box), 6, IRIS_REAL,
-    // 	       local_boxes, 6, IRIS_REAL,
-    // 	       0, m_local_comm->m_comm);
-
-    // if(m_local_comm->m_rank == 0) {
-    // 	MPI_Send(local_boxes, sz, IRIS_REAL, m_proc_grid->sim_master,
-    // 		 IRIS_EVENT_LOCAL_BOXES,
-    // 		 m_uber_comm->comm);
-    // 	memory::destroy_1d(local_boxes);
-    // }
 
 
 // iris::iris(MPI_Comm uber_comm, MPI_Comm iris_comm, int sim_master)
@@ -641,8 +672,3 @@ void iris::wait_event(event_t &out_event)
 // 	set_state(IRIS_STATE_HAS_RHO);
 //     }
 // }
-
-void ORG_NCSA_IRIS::__sync_handler(iris *obj, event_t event)
-{
-    obj->sync_handler(event);
-}
