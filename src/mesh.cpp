@@ -65,7 +65,7 @@ void mesh::set_size(int nx, int ny, int nz)
 
     m_initialized = true;
     m_dirty = true;
-    m_logger->trace("Discretization mesh is %d x %d x %d",
+    m_logger->info("Discretization mesh is %d x %d x %d",
 		    m_size[0], m_size[1], m_size[2]);
 }
 
@@ -112,7 +112,7 @@ void mesh::commit()
 
 	m_dirty = false;
 
-	m_logger->trace("Local discretization mesh is %d x %d x %d starting at [%d, %d, %d]",
+	m_logger->info("Local discretization mesh is %d x %d x %d starting at [%d, %d, %d]",
 			m_own_size[0], m_own_size[1], m_own_size[2],
 			m_own_offset[0], m_own_offset[1], m_own_offset[2]);
     }

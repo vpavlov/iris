@@ -130,7 +130,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     }
 
     m_state = IRIS_STATE_INITIALIZED;
-    m_logger->trace("Node initialized as %s %d %s",
+    m_logger->info("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
 		   is_leader()?"(leader)":"");

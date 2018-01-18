@@ -68,13 +68,13 @@ void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
     m_initialized = true;
     m_dirty = true;
 
-    m_logger->trace("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+    m_logger->info("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
 		    m_global_box.xsize, m_global_box.ysize,
 		    m_global_box.zsize,
 		    m_global_box.xlo, m_global_box.xhi,
 		    m_global_box.ylo, m_global_box.yhi,
 		    m_global_box.zlo, m_global_box.zhi);
-    m_logger->trace("Global box periodicity is %d, %d, %d",
+    m_logger->info("Global box periodicity is %d, %d, %d",
 		    m_pbc[0], m_pbc[1], m_pbc[2]);
 }
 
@@ -90,19 +90,19 @@ void domain::commit()
 	iris_real *zsplit = m_proc_grid->m_zsplit;
 	int *c = m_proc_grid->m_coords;
 	int *size = m_proc_grid->m_size;
-
-	// OAOO helper
-#define CALC_LOCAL(ILO, IHI, ISIZE, I)					\
-    m_local_box.ILO = m_global_box.ILO + m_global_box.ISIZE * xsplit[c[I]]; \
-    if(c[I] < size[I] - 1) {					\
-	m_local_box.IHI = m_global_box.ILO + m_global_box.ISIZE * xsplit[c[I] + 1]; \
-    }else {								\
-	m_local_box.IHI = m_global_box.IHI;				\
-    }
 	
-	CALC_LOCAL(xlo, xhi, xsize, 0);
-	CALC_LOCAL(ylo, yhi, ysize, 1);
-	CALC_LOCAL(zlo, zhi, zsize, 2);
+	// OAOO helper
+#define CALC_LOCAL(ILO, IHI, ISIZE, ISPLIT, I)				\
+	m_local_box.ILO = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I]]; \
+	if(c[I] < size[I] - 1) {					\
+	    m_local_box.IHI = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I] + 1]; \
+	}else {								\
+	    m_local_box.IHI = m_global_box.IHI;				\
+	}
+	
+	CALC_LOCAL(xlo, xhi, xsize, xsplit, 0);
+	CALC_LOCAL(ylo, yhi, ysize, ysplit, 1);
+	CALC_LOCAL(zlo, zhi, zsize, zsplit, 2);
 
 #undef CALC_LOCAL
 	
@@ -110,7 +110,7 @@ void domain::commit()
 	m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
 	m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
 
-	m_logger->trace("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+	m_logger->info("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
 			m_local_box.xsize, m_local_box.ysize,
 			m_local_box.zsize,
 			m_local_box.xlo, m_local_box.xhi,
