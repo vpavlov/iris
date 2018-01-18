@@ -37,7 +37,7 @@ namespace ORG_NCSA_IRIS {
 
     // An item of halo: x, y, z coords in the local mesh and v to contribute
     // to the rho at that point
-    struct iris_halo_item_t {
+    struct halo_item_t {
 	iris_real v;
 	int x;
 	int y;
@@ -59,7 +59,7 @@ namespace ORG_NCSA_IRIS {
 
 	void assign_charges(iris_real *in_charges, int ncharges);
 	void exchange_halo();
-	void add_halo_items(iris_halo_item_t *in_items, int in_nitems);
+	void add_halo_items(halo_item_t *in_items, int in_nitems);
 	void dump_rho(char *in_fname);
 
     public:

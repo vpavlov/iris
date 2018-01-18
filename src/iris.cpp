@@ -514,7 +514,7 @@ void iris::handle_commit_charges()
 
 void iris::handle_rho_halo(event_t *event)
 {
-    int unit = sizeof(iris_halo_item_t);
+    int unit = sizeof(halo_item_t);
     if(event->size % unit != 0) {
 	throw std::length_error("Unexpected message size while receiving rho halo!");
     }
@@ -523,7 +523,7 @@ void iris::handle_rho_halo(event_t *event)
     if(nitems != 0) {
 	m_logger->trace("Received %d halo items from %d: adding them to our ρ",
 			nitems, event->peer);
-	m_mesh->add_halo_items((iris_halo_item_t *)event->data, nitems);
+	m_mesh->add_halo_items((halo_item_t *)event->data, nitems);
 	m_logger->trace("Adding halo to ρ done");
     }
 }

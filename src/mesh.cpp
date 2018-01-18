@@ -240,7 +240,7 @@ void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 void mesh::exchange_halo()
 {
     MPI_Request *req = new MPI_Request[m_iris->m_server_size];
-    iris_halo_item_t **sendbufs = new iris_halo_item_t *[m_iris->m_server_size];
+    halo_item_t **sendbufs = new halo_item_t *[m_iris->m_server_size];
 
     MPI_Win win;
     int *pending = m_iris->stos_fence_pending(&win);
@@ -251,7 +251,7 @@ void mesh::exchange_halo()
 
 	std::map<std::tuple<int, int, int>, iris_real> map = m_halo[peer];
 	int count = map.size();  // number of halo items
-	int size = count * sizeof(iris_halo_item_t);  // in bytes
+	int size = count * sizeof(halo_item_t);  // in bytes
 	if(count == 0) {
 	    continue;
 	}
@@ -259,7 +259,7 @@ void mesh::exchange_halo()
 	m_logger->trace("There are %d halo items for %d", count, peer);
 
 	int i = 0;
-	sendbufs[peer] = (iris_halo_item_t *)memory::wmalloc(size);
+	sendbufs[peer] = (halo_item_t *)memory::wmalloc(size);
     	for(auto j = map.begin(); j != map.end(); j++) {
     	    sendbufs[peer][i].v = j->second;
     	    sendbufs[peer][i].x = std::get<0>(j->first);
@@ -280,7 +280,7 @@ void mesh::exchange_halo()
 }
 
 //TODO: openmp
-void mesh::add_halo_items(iris_halo_item_t *in_items, int in_nitems)
+void mesh::add_halo_items(halo_item_t *in_items, int in_nitems)
 {
     for(int i=0;i<in_nitems;i++) {
     	m_rho[in_items[i].x][in_items[i].y][in_items[i].z] += in_items[i].v;

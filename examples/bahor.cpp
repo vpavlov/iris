@@ -419,7 +419,7 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	x->m_mesh->dump_rho("nacl");
+	x->m_mesh->dump_rho((char *)"nacl");
     }
 
     // Cleanup
