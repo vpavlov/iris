@@ -184,29 +184,34 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
     }
 }
 
+
+// Find out which charges on this client node belong to which server node.
+// This implementation here is just an example and is not optimal. But this is
+// outside IRIS's responsibility and is provided here only as means to execute
+// the example.
 void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 		  box_t<iris_real> *in_local_boxes)
 {
-    int       *counts  = (int *)memory::wmalloc(in_iris->m_server_size * sizeof(int));
     iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 4 * sizeof(iris_real));
-    int idx = 0;
+    for(int i=0;i<in_iris->m_server_size;i++) {
 
-    for(int j=0;j<in_iris->m_server_size;j++) {
-	counts[j] = 0;
-    }
+	// get the sever local box
+	iris_real x0 = in_local_boxes[i].xlo;
+	iris_real y0 = in_local_boxes[i].ylo;
+	iris_real z0 = in_local_boxes[i].zlo;
+	iris_real x1 = in_local_boxes[i].xhi;
+	iris_real y1 = in_local_boxes[i].yhi;
+	iris_real z1 = in_local_boxes[i].zhi;
 
-    for(int i=0;i<in_my_count;i++) {
-	iris_real x = in_my_charges[i][0];
-	iris_real y = in_my_charges[i][1];
-	iris_real z = in_my_charges[i][2];
-	iris_real q = in_my_charges[i][3];
-	for(int j=0;j<in_iris->m_server_size;j++) {
-	    iris_real x0 = in_local_boxes[j].xlo;
-	    iris_real y0 = in_local_boxes[j].ylo;
-	    iris_real z0 = in_local_boxes[j].zlo;
-	    iris_real x1 = in_local_boxes[j].xhi;
-	    iris_real y1 = in_local_boxes[j].yhi;
-	    iris_real z1 = in_local_boxes[j].zhi;
+	// find those charges that reside in this box
+	// Here -- non-optimal; once a charge is assigned to a server, there is
+	// no need to go through it again...
+	int idx = 0;
+	for(int j=0;j<in_my_count;j++) {
+	    iris_real x = in_my_charges[j][0];
+	    iris_real y = in_my_charges[j][1];
+	    iris_real z = in_my_charges[j][2];
+	    iris_real q = in_my_charges[j][3];
 
 	    if(x >= x0 && x < x1 &&
 	       y >= y0 && y < y1 &&
@@ -216,17 +221,59 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 		sendbuf[idx++] = y;
 		sendbuf[idx++] = z;
 		sendbuf[idx++] = q;
-		counts[j]++;
-		break;
 	    }
 	}
+
+	in_iris->broadcast_charges(i, sendbuf, idx/4);
+	
     }
 
-    in_iris->broadcast_charges(counts, sendbuf);
-
     memory::wfree(sendbuf);
-    memory::wfree(counts);
 }
+
+// void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
+// 		  box_t<iris_real> *in_local_boxes)
+// {
+//     int       *counts  = (int *)memory::wmalloc(in_iris->m_server_size * sizeof(int));
+//     iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 4 * sizeof(iris_real));
+//     int idx = 0;
+
+//     for(int j=0;j<in_iris->m_server_size;j++) {
+// 	counts[j] = 0;
+//     }
+
+//     for(int i=0;i<in_my_count;i++) {
+// 	iris_real x = in_my_charges[i][0];
+// 	iris_real y = in_my_charges[i][1];
+// 	iris_real z = in_my_charges[i][2];
+// 	iris_real q = in_my_charges[i][3];
+// 	for(int j=0;j<in_iris->m_server_size;j++) {
+// 	    iris_real x0 = in_local_boxes[j].xlo;
+// 	    iris_real y0 = in_local_boxes[j].ylo;
+// 	    iris_real z0 = in_local_boxes[j].zlo;
+// 	    iris_real x1 = in_local_boxes[j].xhi;
+// 	    iris_real y1 = in_local_boxes[j].yhi;
+// 	    iris_real z1 = in_local_boxes[j].zhi;
+
+// 	    if(x >= x0 && x < x1 &&
+// 	       y >= y0 && y < y1 &&
+// 	       z >= z0 && z < z1)
+// 	    {
+// 		sendbuf[idx++] = x;
+// 		sendbuf[idx++] = y;
+// 		sendbuf[idx++] = z;
+// 		sendbuf[idx++] = q;
+// 		counts[j]++;
+// 		break;
+// 	    }
+// 	}
+//     }
+
+//     in_iris->broadcast_charges(counts, sendbuf);
+
+//     memory::wfree(sendbuf);
+//     memory::wfree(counts);
+// }
 
 
 main(int argc, char **argv)
@@ -328,7 +375,7 @@ main(int argc, char **argv)
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
-    x->set_order(3);
+    x->set_order(7);
     x->commit();
 
 

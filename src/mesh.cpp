@@ -130,7 +130,7 @@ void mesh::dump_rho(char *fname)
     FILE *fp = fopen(values_fname, "wb");
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<32;k++) {
+	    for(int k=0;k<m_own_size[0];k++) {
 		fwrite(&(m_rho[k][j][i]), sizeof(iris_real), 1, fp);
 	    }
 	}

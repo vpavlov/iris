@@ -359,7 +359,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     }
 }
 
-void iris::broadcast_charges(int *in_counts, iris_real *in_charges)
+void iris::broadcast_charges(int in_peer, iris_real *in_charges, int in_count)
 {
     ASSERT_CLIENT("broadcast_charges");
 
@@ -368,22 +368,17 @@ void iris::broadcast_charges(int *in_counts, iris_real *in_charges)
     int *pending = stos_fence_pending(&win);
 
     int offset = 0;
-    MPI_Request *req = new MPI_Request[m_server_size];
-    for(int i=0;i<m_server_size;i++) {
-	req[i] = MPI_REQUEST_NULL;
-	if(in_counts[i] != 0) {
-	    send_event(comm, i, IRIS_TAG_CHARGES,
-		       4*in_counts[i]*sizeof(iris_real),
-		       in_charges + offset, &req[i],
-		       win);
-	}
-	offset += 4*in_counts[i];
+    MPI_Request req;
+    req = MPI_REQUEST_NULL;
+    if(in_count != 0) {
+	send_event(comm, in_peer, IRIS_TAG_CHARGES,
+		   4*in_count*sizeof(iris_real),
+		   in_charges, &req, win);
     }
 
     stos_process_pending(pending, win);
 
-    MPI_Waitall(m_server_size, req, MPI_STATUSES_IGNORE);
-    delete [] req;
+    MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
 void iris::commit_charges()

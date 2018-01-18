@@ -112,28 +112,8 @@ namespace ORG_NCSA_IRIS {
 	// server's local_comm.
 	box_t<iris_real> *get_local_boxes();
 
-	// Use this to broadcast charges to servers
-	//
-	// in_counts is an array (of m_server_size size) whose I-th element
-	// contains the number of charges to be sent to rank I of the intercomm
-	//
-	// in_charges can be viewed as a 3D staggered array. The array size
-	// must = sum(all elements of in_counts). The first N = in_count(0)
-	// items of 4 iris_reals (x, y, z, q) each are charges to be sent to
-	// rank 0 in the intercomm. The second M = in_count(1) items of 4
-	// iris_reals each are the charges to be sent to rank 1, etc.
-	//
-	// For example:
-	//
-	// in_counts = {2, 3}
-	//
-	// in_charges = {x00, y00, z00, c00,    // proc 0, charge 0
-	//               x01, y01, z01, c01,    // proc 0, charge 1
-	//
-	//               x10, y10, z10, c10,    // proc 1, charge 0
-	//               x11, y11, z11, c11,    // proc 1, charge 1
-	//               x12, y12, z12, c12};   // proc 1, charge 2
-	void broadcast_charges(int *in_count, iris_real *in_charges);
+	// Use this to broadcast charges from a client node to a server node
+	void broadcast_charges(int in_peer, iris_real *in_charges, int in_count);
 	void commit_charges();
 	void quit();
 
