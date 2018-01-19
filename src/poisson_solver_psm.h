@@ -40,7 +40,7 @@ namespace ORG_NCSA_IRIS {
 	poisson_solver_psm(class iris *obj);
 	~poisson_solver_psm();
 
-	void commit() override;
+	void commit();
 
     private:
 	// 3D Array of stencil eigenvalues (local portion only).

@@ -58,7 +58,7 @@ namespace ORG_NCSA_IRIS {
 	taylor_stencil(class iris *in_obj, int in_order);
 	~taylor_stencil();
 
-	void commit() override;
+	void commit();
 
     public:
 	iris_real m_h2;  // mesh's hx squared

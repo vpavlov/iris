@@ -172,7 +172,7 @@ iris::~iris()
 
     delete m_local_comm;
 
-    m_logger->trace("Shutting down node");  // before m_uber_comm
+    m_logger->info("Shutting down node");  // before m_uber_comm
     delete m_logger;
 
     delete m_uber_comm;

@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <stdexcept>
 #include "taylor_stencil.h"
 #include "logger.h"
 #include "mesh.h"
