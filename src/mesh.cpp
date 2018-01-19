@@ -56,7 +56,7 @@ mesh::~mesh()
 
 void mesh::set_size(int nx, int ny, int nz)
 {
-    if(nx <= 0 || ny <= 0 || nz <= 0) {
+    if(nx < 2 || ny < 2 || nz < 2) {
 	throw std::invalid_argument("Invalid mesh size!");
     }
 
@@ -81,13 +81,18 @@ void mesh::commit()
     }
 
     if(m_dirty) {
-	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
-	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
-	m_h[2] = m_domain->m_global_box.zsize / m_size[2];
+	// NOTE NOTE NOTE: In LAMMPS they use m_size[I] instead of m_size[I-1]
+	// for m_hinv[I], but my solver uses -1, for which I know it is correct.
+	// I think this is because they use 'zonal' instead of 'nodal',
+	// however I'm not sure how this will work with the poisson solver,
+	// which is made to be nodal...
+	m_h[0] = m_domain->m_global_box.xsize / (m_size[0] - 1);
+	m_h[1] = m_domain->m_global_box.ysize / (m_size[1] - 1);
+	m_h[2] = m_domain->m_global_box.zsize / (m_size[2] - 1);
 
-	m_hinv[0] = m_size[0] / m_domain->m_global_box.xsize;
-	m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
-	m_hinv[2] = m_size[2] / m_domain->m_global_box.zsize;
+	m_hinv[0] = (m_size[0] - 1) / m_domain->m_global_box.xsize;
+	m_hinv[1] = (m_size[1] - 1) / m_domain->m_global_box.ysize;
+	m_hinv[2] = (m_size[2] - 1) / m_domain->m_global_box.zsize;
 
 	m_h3inv = m_hinv[0] * m_hinv[1] * m_hinv[2];
 
@@ -160,7 +165,7 @@ void mesh::dump_rho(char *fname)
     }
     fprintf(fp, "VARIABLE: RHO\n");
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
-    fprintf(fp, "CENTERING: zonal\n");
+    fprintf(fp, "CENTERING: nodal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
 	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",
