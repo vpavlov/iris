@@ -68,13 +68,12 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 
     public:
+	bool m_dirty;
 	bool m_initialized;
 	int m_pbc[3];   // periodicity of the box for each direction
 	box_t<iris_real> m_global_box;
 	box_t<iris_real> m_local_box;
 
-    private:
-	bool m_dirty;
     };
 }
 #endif

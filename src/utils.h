@@ -30,6 +30,8 @@
 #ifndef __IRIS_UTILS_H__
 #define __IRIS_UTILS_H__
 
+#include "real.h"
+
 namespace ORG_NCSA_IRIS {
 
 #define MIN(A,B) ((A) < (B) ? (A) : (B))

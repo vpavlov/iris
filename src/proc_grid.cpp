@@ -92,6 +92,15 @@ void proc_grid::commit()
 	select_grid_size();      // set m_size
 	setup_grid_details();    // based on this, setup grid details
 	setup_splits();
+
+	// other configuration that depends on ours must be re-set
+	if(m_mesh != NULL) {
+	    m_mesh->m_dirty = true;
+	}
+	if(m_domain != NULL) {
+	    m_domain->m_dirty = true;
+	}
+
 	m_dirty = false;
     }
 }

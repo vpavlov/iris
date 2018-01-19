@@ -67,7 +67,9 @@ namespace ORG_NCSA_IRIS {
 	    m_domain(obj->m_domain),
 	    m_proc_grid(obj->m_proc_grid),
 	    m_mesh(obj->m_mesh),
-	    m_chass(obj->m_chass)
+	    m_chass(obj->m_chass),
+	    m_stencil(obj->m_stencil),
+	    m_solver(obj->m_solver)
 	{};
 
 	virtual ~state_accessor() {};
@@ -83,6 +85,8 @@ namespace ORG_NCSA_IRIS {
 	proc_grid *&m_proc_grid;
 	mesh *&m_mesh;
 	charge_assigner *&m_chass;
+	stencil *&m_stencil;
+	poisson_solver *&m_solver;
     };
 
 }

@@ -97,6 +97,13 @@ namespace ORG_NCSA_IRIS {
 	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
 	void set_grid_pref(int x, int y, int z);
 
+	// Sets the stencil of the calculation to a Taylor-derived approximation
+	// accurate to order in_order.
+	void set_taylor_stencil(int in_order);
+
+	// Set the poisson solver to be used
+	void set_poisson_solver(int in_solver);
+
 	// Call this when all configuration is done. When called, it will
 	// signal all internal components to:
 	//   - set default configuration not explicitly set by the user;
@@ -116,6 +123,7 @@ namespace ORG_NCSA_IRIS {
 	void broadcast_charges(int in_peer, iris_real *in_charges, int in_count);
 	void commit_charges();
 	void quit();
+
 
 	// Helpers used in internode communication
 	MPI_Comm server_comm();
@@ -150,6 +158,8 @@ namespace ORG_NCSA_IRIS {
 	class proc_grid   *m_proc_grid;   // MPI Comm related stuff
 	class mesh        *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;   // Charge assignmen machinery
+	class stencil        *m_stencil;  // Which stencil to use
+	class poisson_solver *m_solver;   // Which solver to use
 
     private:
 	volatile bool m_quit;  // quit the main loop

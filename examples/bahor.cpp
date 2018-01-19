@@ -376,6 +376,7 @@ main(int argc, char **argv)
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
     x->set_order(2);
+    x->set_taylor_stencil(2);
     x->commit();
 
 

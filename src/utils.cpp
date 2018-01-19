@@ -31,3 +31,4 @@
 #include "utils.h"
 #include "memory.h"
 
+using namespace ORG_NCSA_IRIS;

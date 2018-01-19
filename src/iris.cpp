@@ -40,6 +40,8 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
+#include "taylor_stencil.h"
+#include "poisson_solver_psm.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -86,6 +88,8 @@ iris::iris(int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+    m_solver = NULL;
+    m_stencil = NULL;
     m_quit = false;
     m_inter_comm = NULL;
     m_local_comm = new comm_rec(this, in_local_comm);
@@ -138,6 +142,14 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris::~iris()
 {
+    if(m_stencil != NULL) {
+	delete m_stencil;
+    }
+
+    if(m_solver != NULL) {
+	delete m_solver;
+    }
+
     if(m_proc_grid != NULL) {
 	delete m_proc_grid;
     }
@@ -198,17 +210,56 @@ void iris::set_grid_pref(int x, int y, int z)
     m_proc_grid->set_pref(x, y, z);
 }
 
+void iris::set_poisson_solver(int in_solver)
+{
+    if(m_solver != NULL) {
+	delete m_solver;
+    }
+
+    switch(in_solver) {
+    case IRIS_POISSON_SOLVER_PSM:
+	m_solver = new poisson_solver_psm(this);
+	break;
+
+    default:
+	throw std::logic_error("Unknown poisson solver selected!");
+    }
+}
+
+void iris::set_taylor_stencil(int in_order)
+{
+    if(in_order < 2 || in_order > 12 || in_order % 2) {
+	throw std::logic_error("Taylor stencil only supports even orders between 2 and 12!");
+    }
+
+    if(m_stencil != NULL) {
+	delete m_stencil;
+    }
+    m_stencil = new taylor_stencil(this, in_order);
+}
 
 void iris::commit()
 {
     if(is_server()) {
+	// select defaults
+	if(m_stencil == NULL) {
+	    set_taylor_stencil(2);
+	}
+
+	if(m_solver == NULL) {
+	    set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
+	}
+
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
-	m_chass->commit();      // does not depend on anything being commited
-	m_proc_grid->commit();  // does not depend on anything being comitted
-	m_domain->commit();     // depends on m_proc_grid->commit()
-	m_mesh->commit();       // depends on m_proc_grid->commit()
+	m_chass->commit();      // does not depend on anything
+	m_proc_grid->commit();  // does not depend on anything
+	m_domain->commit();     // depends on m_proc_grid
+	m_mesh->commit();       // depends on m_proc_grid
+	m_stencil->commit();    // depends on m_mesh
+	m_solver->commit();     // depends on m_stencil
     }
+
     m_state = IRIS_STATE_COMMITED;
 }
 

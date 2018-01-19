@@ -39,6 +39,7 @@
 #include "charge_assigner.h"
 #include "comm_rec.h"
 #include "tags.h"
+#include "stencil.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -80,9 +81,14 @@ void mesh::commit()
     }
 
     if(m_dirty) {
+	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
+	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
+	m_h[2] = m_domain->m_global_box.zsize / m_size[2];
+
 	m_hinv[0] = m_size[0] / m_domain->m_global_box.xsize;
 	m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
 	m_hinv[2] = m_size[2] / m_domain->m_global_box.zsize;
+
 	m_h3inv = m_hinv[0] * m_hinv[1] * m_hinv[2];
 
 	m_own_size[0] = m_size[0] / m_proc_grid->m_size[0];
@@ -109,6 +115,11 @@ void mesh::commit()
 	}
 
 	m_halo = new std::map<std::tuple<int, int, int>, iris_real>[m_iris->m_server_size];
+
+	// other configuration that depends on ours must be reset
+	if(m_stencil != NULL) {
+	    m_stencil->m_dirty = true;
+	}
 
 	m_dirty = false;
 

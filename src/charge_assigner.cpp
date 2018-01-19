@@ -136,9 +136,7 @@ void charge_assigner::commit()
 	    m_coeff = (iris_real *) coeff7;
 	}
 
-	if(m_weights != NULL) {
-	    memory::destroy_2d(m_weights);
-	}
+	memory::destroy_2d(m_weights);
 	memory::create_2d(m_weights, 3, m_order);
 	m_dirty = false;
     }

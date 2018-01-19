@@ -27,54 +27,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
+#ifndef __IRIS_POISSON_SOLVER_PSM_H__
+#define __IRIS_POISSON_SOLVER_PSM_H__
 
-#include <tuple>
-#include "state_accessor.h"
+#include "poisson_solver.h"
 
 namespace ORG_NCSA_IRIS {
 
-    // An item of halo: x, y, z coords in the local mesh and v to contribute
-    // to the rho at that point
-    struct halo_item_t {
-	iris_real v;
-	int x;
-	int y;
-	int z;
-    };
-
-    class mesh : protected state_accessor {
+    class poisson_solver_psm : public poisson_solver {
 
     public:
-	mesh(class iris *obj);
-	~mesh();
+	poisson_solver_psm(class iris *obj);
+	~poisson_solver_psm();
 
-	void set_size(int nx, int ny, int nz);
+	void commit() override;
 
-	// commit configuration. Perform all preliminary calculations based on
-	// configuration and prepare all that is needed in order to
-	// start solving
-	void commit();
-
-	void assign_charges(iris_real *in_charges, int ncharges);
-	void exchange_halo();
-	void add_halo_items(halo_item_t *in_items, int in_nitems);
-	void dump_rho(char *in_fname);
-
-    public:
-	bool      m_dirty;  // if we need to re-calculate upon commit
-	bool      m_initialized;
-	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
-	iris_real m_h[3];     // step of the mesh (h) in each direction
-	iris_real m_hinv[3];  // 1/h in each direction
-	iris_real m_h3inv;    // 1/dV
-	int       m_own_size[3];    // local mesh size: my portion only
-	int       m_own_offset[3];  // where does my mesh start from 
-
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-	std::map<std::tuple<int, int, int>, iris_real> *m_halo;
-
+    private:
+	// 3D Array of stencil eigenvalues (local portion only).
+	// Has the same dimension as the local mesh.
+	iris_real ***m_ev;
     };
 }
+
 #endif
