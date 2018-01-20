@@ -20,42 +20,29 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_PSM_H__
-#define __IRIS_POISSON_SOLVER_PSM_H__
+#ifndef __IRIS_FFT_GRID_H__
+#define __IRIS_FFT_GRID_H__
 
-#include "poisson_solver.h"
+#include "grid.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class poisson_solver_psm : public poisson_solver {
+    class fft_grid : public grid {
 
     public:
-	poisson_solver_psm(class iris *obj);
-	~poisson_solver_psm();
+	fft_grid(class iris *obj);
+	~fft_grid();
 
 	void commit();
 
-    private:
-	void calculate_eigenvalues();
-	void setup_fft_grid();
-
-    private:
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-
-	class fft_grid *m_fft_grid;
-	int             m_own_size[3];
-	int             m_own_offset[3];
-
-	class remap *m_remap;
     };
 }
 

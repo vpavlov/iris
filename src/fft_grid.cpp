@@ -27,36 +27,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_PSM_H__
-#define __IRIS_POISSON_SOLVER_PSM_H__
+#include "iris.h"
+#include "fft_grid.h"
 
-#include "poisson_solver.h"
+using namespace ORG_NCSA_IRIS;
+using namespace std;
 
-namespace ORG_NCSA_IRIS {
-
-    class poisson_solver_psm : public poisson_solver {
-
-    public:
-	poisson_solver_psm(class iris *obj);
-	~poisson_solver_psm();
-
-	void commit();
-
-    private:
-	void calculate_eigenvalues();
-	void setup_fft_grid();
-
-    private:
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-
-	class fft_grid *m_fft_grid;
-	int             m_own_size[3];
-	int             m_own_offset[3];
-
-	class remap *m_remap;
-    };
+fft_grid::fft_grid(iris *obj)
+    : grid(obj, "FFT")
+{
 }
 
-#endif
+fft_grid::~fft_grid()
+{
+}
+
+void fft_grid::commit()
+{
+    grid::commit();
+}

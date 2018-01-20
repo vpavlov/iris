@@ -32,11 +32,41 @@
 
 namespace ORG_NCSA_IRIS {
 
+#define MIN(A,B) ((A) < (B) ? (A) : (B))
+#define MAX(A,B) ((A) > (B) ? (A) : (B))
+
     template <typename T>
     struct box_t {
 	T xlo, ylo, zlo;
 	T xhi, yhi, zhi;
 	T xsize, ysize, zsize;
+
+	box_t<T> operator && (box_t<T> &other)
+	{
+	    box_t<T> retval;
+	    retval.xlo = MAX(this->xlo, other.xlo);
+	    retval.xhi = MIN(this->xhi, other.xhi);
+
+	    retval.ylo = MAX(this->ylo, other.ylo);
+	    retval.yhi = MIN(this->yhi, other.yhi);
+
+	    retval.zlo = MAX(this->zlo, other.zlo);
+	    retval.zhi = MIN(this->zhi, other.zhi);
+
+	    if(retval.xlo > retval.xhi ||
+	       retval.ylo > retval.yhi ||
+	       retval.zlo > retval.zhi)
+	    {
+		retval.xlo = retval.ylo = retval.zlo = 
+		    retval.xhi = retval.yhi = retval.zhi = 
+		    retval.xsize = retval.ysize = retval.zsize = 0;
+	    }else {
+		retval.xsize = retval.xhi - retval.xlo + 1;
+		retval.ysize = retval.yhi - retval.ylo + 1;
+		retval.zsize = retval.zhi - retval.zlo + 1;
+	    }
+	    return retval;
+	}
     };
 
 }
