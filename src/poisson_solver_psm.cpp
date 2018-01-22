@@ -41,7 +41,8 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
-    :poisson_solver(obj), m_ev(NULL), m_remap(NULL)
+    :poisson_solver(obj), m_ev(NULL), m_remap(NULL), m_rho(NULL),
+     m_scratch(NULL)
 {
     m_fft_grid = new fft_grid(obj);
     m_logger->info("Will use the Pseudo-spectral method for solving Poisson's equation");
@@ -54,6 +55,8 @@ poisson_solver_psm::~poisson_solver_psm()
     }
     delete m_fft_grid;
     memory::destroy_3d(m_ev);
+    memory::destroy_1d(m_rho);
+    memory::destroy_1d(m_scratch);
 }
 
 void poisson_solver_psm::calculate_eigenvalues()
@@ -159,19 +162,55 @@ void poisson_solver_psm::setup_fft_grid()
 		   m_own_offset[0], m_own_offset[1], m_own_offset[2]);
 }
 
+void poisson_solver_psm::setup_remap()
+{
+    if(m_remap != NULL) {
+	delete m_remap;
+    }
+    m_remap = new remap(m_iris,
+			m_mesh->m_own_size, m_mesh->m_own_offset,
+			m_own_size, m_own_offset, 1, 0);
+}
+
 void poisson_solver_psm::commit()
 {
     if(m_dirty) {
 	calculate_eigenvalues();
 	setup_fft_grid();
-	
+	setup_remap();
 
-	if(m_remap != NULL) {
-	    delete m_remap;
-	}
-	m_remap = new remap(m_iris,
-			    m_mesh->m_own_size, m_mesh->m_own_offset,
-			    m_own_size, m_own_offset, 1, 0);
+	memory::destroy_1d(m_rho);
+	memory::create_1d(m_rho, m_mesh->m_own_size[0] * 
+			  m_mesh->m_own_size[1] *
+			  m_mesh->m_own_size[2]);
+
+	// 2 *, because it needs to contain complex numbers at some point
+	memory::destroy_1d(m_scratch);
+	memory::create_1d(m_scratch, 2*m_mesh->m_own_size[0]*m_mesh->m_own_size[1]*m_mesh->m_own_size[2]);
+
 	m_dirty = false;
     }
+}
+
+void poisson_solver_psm::copy_rho_from_mesh()
+{
+
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int i=0;
+    for(int x = 0; x < nx; x++) {
+	for(int y = 0; y < ny; y++) {
+	    for(int z = 0; z < nz; z++) {
+		m_rho[i++] = m_mesh->m_rho[x][y][z];
+	    }
+	}
+    }
+}
+
+void poisson_solver_psm::solve()
+{
+    copy_rho_from_mesh();
+    m_remap->perform(m_rho, m_rho, m_scratch);
 }

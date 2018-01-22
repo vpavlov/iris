@@ -214,10 +214,28 @@ remap::remap(class iris *obj,
 	if(m_recv_plan[nrecv-1].peer == m_local_comm->m_rank) {
 	    m_nrecv--;
 	}
+
+	m_self = true;
+	if(nrecv == m_nrecv) {
+	    m_self = false;
+	}
+
+    }
+
+    int size = 0;
+    for(int i=0;i<m_nsend;i++) {
+	size = MAX(size, m_send_plan[i].size);
     }
 
     m_logger->trace("Remap will send do %d nodes", m_nsend);
     m_logger->trace("Remap will recv from %d nodes", m_nrecv);
+    m_logger->trace("Remap largest message size is %d", size);
+
+    if(size != 0) {
+	m_sendbuf = (iris_real *)memory::wmalloc(size * sizeof(iris_real));
+    }else {
+	m_sendbuf = NULL;
+    }
 
     memory::wfree(to);
     memory::wfree(from);
@@ -232,4 +250,25 @@ remap::~remap()
     if(m_recv_plan != NULL) {
 	delete [] m_recv_plan;
     }
+
+    memory::wfree(m_sendbuf);
+}
+
+void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+{
+    MPI_Request *req = new MPI_Request[m_nsend];
+    MPI_Win win;
+    int *pending = m_iris->stos_fence_pending(&win);
+
+    for(int i = 0; i < m_nsend; i++) {
+	req[i] = MPI_REQUEST_NULL;
+	remap_xfer_item_t *xfer = m_recv_plan + i;
+
+	// flatten_brick(in_src + xfer->offset, in_buf, iris_real *dest,
+	// 		   int nx, int ny, int nz, int stride_plane,
+	// 		   int stride_line)
+    }
+
+    m_iris->stos_process_pending(pending, win);
+    MPI_Waitall(m_nsend, req, MPI_STATUSES_IGNORE);
 }

@@ -43,6 +43,7 @@ namespace ORG_NCSA_IRIS {
 	~poisson_solver() {};
 
 	virtual void commit() = 0;
+	virtual void solve() = 0;
 
     public:
 	bool m_dirty;  // wether to recalculate on commit

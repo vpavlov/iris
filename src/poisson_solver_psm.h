@@ -41,21 +41,29 @@ namespace ORG_NCSA_IRIS {
 	~poisson_solver_psm();
 
 	void commit();
+	void solve();
 
     private:
 	void calculate_eigenvalues();
 	void setup_fft_grid();
+	void setup_remap();
+
+	void copy_rho_from_mesh();
 
     private:
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-
+	// our version of domain decomposition, whatever's most suitable for
+	// this kind of solver.
 	class fft_grid *m_fft_grid;
 	int             m_own_size[3];
 	int             m_own_offset[3];
 
+	// 3D Array of stencil eigenvalues (local portion only).
+	// Has the same dimension as the local mesh.
+	iris_real ***m_ev;
+	iris_real *m_rho;  // our version of rho, used for fft
+
 	class remap *m_remap;
+	iris_real *m_scratch;  // scratch space for remapping
     };
 }
 

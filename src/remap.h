@@ -65,6 +65,8 @@ namespace ORG_NCSA_IRIS {
 	      int in_permute);
 	~remap();
 
+	void perform(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
+
     private:
 	box_t<int> m_from;
 	box_t<int> m_to;
@@ -72,6 +74,8 @@ namespace ORG_NCSA_IRIS {
 	int m_nrecv;  // number of items to recv
 	remap_xfer_item_t *m_send_plan;
 	remap_xfer_item_t *m_recv_plan;
+	bool m_self;  // are we also receiving from self?
+	iris_real *m_sendbuf;  // buffer for sending
     };
 
 }
