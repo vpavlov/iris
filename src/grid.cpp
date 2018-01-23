@@ -28,6 +28,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <mpi.h>
+#include <string.h>
 #include "iris.h"
 #include "grid.h"
 #include "comm_rec.h"

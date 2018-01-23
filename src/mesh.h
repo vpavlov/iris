@@ -61,6 +61,7 @@ namespace ORG_NCSA_IRIS {
 	void exchange_halo();
 	void add_halo_items(halo_item_t *in_items, int in_nitems);
 	void dump_rho(char *in_fname);
+	void dump_rho2(char *in_fname);
 
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit
