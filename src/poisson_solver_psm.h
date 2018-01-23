@@ -43,6 +43,9 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 
+	void dump_rho(char *fname);
+	void dump_rho2(char *fname);
+
     private:
 	void calculate_eigenvalues();
 	void setup_fft_grid();

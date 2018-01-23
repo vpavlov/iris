@@ -179,7 +179,6 @@ void mesh::dump_rho2(char *fname)
     char header_fname[256];
     
     sprintf(values_fname, "%s-%d.data", fname, m_local_comm->m_rank);
-    sprintf(header_fname, "%s-%d.bov", fname, m_local_comm->m_rank);
     
     // 1. write the bov file
     FILE *fp = fopen(values_fname, "wb");
@@ -191,25 +190,6 @@ void mesh::dump_rho2(char *fname)
 	    }
 	}
     }
-    fclose(fp);
-    
-    // 2. write the bov header
-    fp = fopen(header_fname, "w");
-    fprintf(fp, "TIME: 1.23456\n");
-    fprintf(fp, "DATA_FILE: %s\n", values_fname);
-    fprintf(fp, "DATA_SIZE: %d %d %d\n", m_own_size[0], m_own_size[1], m_own_size[2]);
-    if(sizeof(iris_real) == sizeof(double)) {
-	fprintf(fp, "DATA_FORMAT: DOUBLE\n");
-    }else {
-	fprintf(fp, "DATA_FORMAT: FLOAT\n");
-    }
-    fprintf(fp, "VARIABLE: RHO\n");
-    fprintf(fp, "DATA_ENDIAN: LITTLE\n");
-    fprintf(fp, "CENTERING: nodal\n");
-    fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
-	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
-    fprintf(fp, "BRICK_SIZE: %f %f %f\n",
-	    m_domain->m_local_box.xsize, m_domain->m_local_box.ysize, m_domain->m_local_box.zsize);
     fclose(fp);
 }
 

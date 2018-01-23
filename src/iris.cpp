@@ -561,6 +561,16 @@ void iris::handle_commit_charges()
     m_logger->trace("Commit charges received: initiating halo exchange");
     m_mesh->exchange_halo();
     m_logger->trace("Halo exchange done");
+
+    // in order to test the remap, fill rho with constant = rank
+    for(int i=0;i<m_mesh->m_own_size[0];i++) {
+	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+		m_mesh->m_rho[i][j][k] = m_local_comm->m_rank * 1.0;
+	    }
+	}
+    }
+
     m_solver->solve();
 }
 

@@ -37,6 +37,7 @@
 #include "fft_grid.h"
 #include "comm_rec.h"
 #include "remap.h"
+#include "domain.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -209,9 +210,73 @@ void poisson_solver_psm::copy_rho_from_mesh()
     }
 }
 
+void poisson_solver_psm::dump_rho(char *fname)
+{
+    char values_fname[256];
+    char header_fname[256];
+    
+    sprintf(values_fname, "%s-%d.bdata", fname, m_local_comm->m_rank);
+    sprintf(header_fname, "%s-%d.bov", fname, m_local_comm->m_rank);
+    
+    // 1. write the bov file
+    int n = 0;
+    FILE *fp = fopen(values_fname, "wb");
+    for(int i=0;i<m_own_size[2];i++) {
+	for(int j=0;j<m_own_size[1];j++) {
+	    for(int k=0;k<m_own_size[0];k++) {
+		fwrite(&(m_rho[n++]), sizeof(iris_real), 1, fp);
+	    }
+	}
+    }
+    fclose(fp);
+    
+    // 2. write the bov header
+    fp = fopen(header_fname, "w");
+    fprintf(fp, "TIME: 1.23456\n");
+    fprintf(fp, "DATA_FILE: %s\n", values_fname);
+    fprintf(fp, "DATA_SIZE: %d %d %d\n", m_own_size[0], m_own_size[1], m_own_size[2]);
+    if(sizeof(iris_real) == sizeof(double)) {
+	fprintf(fp, "DATA_FORMAT: DOUBLE\n");
+    }else {
+	fprintf(fp, "DATA_FORMAT: FLOAT\n");
+    }
+    fprintf(fp, "VARIABLE: RHO\n");
+    fprintf(fp, "DATA_ENDIAN: LITTLE\n");
+    fprintf(fp, "CENTERING: nodal\n");
+    fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
+	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
+    fprintf(fp, "BRICK_SIZE: %f %f %f\n",
+	    m_domain->m_local_box.xsize, m_domain->m_local_box.ysize, m_domain->m_local_box.zsize);
+    fclose(fp);
+}
+
+void poisson_solver_psm::dump_rho2(char *fname)
+{
+    char values_fname[256];
+    
+    sprintf(values_fname, "%s-%d.data", fname, m_local_comm->m_rank);
+    
+    // 1. write the bov file
+    int n = 0;
+    FILE *fp = fopen(values_fname, "wb");
+    for(int z=0;z<m_own_size[2];z++) {
+	for(int y=0;y<m_own_size[1];y++) {
+	    for(int x=0;x<m_own_size[0];x++) {
+		fprintf(fp, "%.10f ", m_rho[n++]);
+	    }
+	    fprintf(fp, "\n");
+	}
+	fprintf(fp, "\n");
+    }
+    fclose(fp);
+}
+
 void poisson_solver_psm::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
     copy_rho_from_mesh();
     m_remap->perform(m_rho, m_rho, m_scratch);
+    dump_rho2("remap");
 }
+
+
