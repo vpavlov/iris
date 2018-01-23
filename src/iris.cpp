@@ -561,6 +561,7 @@ void iris::handle_commit_charges()
     m_logger->trace("Commit charges received: initiating halo exchange");
     m_mesh->exchange_halo();
     m_logger->trace("Halo exchange done");
+    m_solver->solve();
 }
 
 void iris::handle_rho_halo(event_t *event)

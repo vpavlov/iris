@@ -33,9 +33,10 @@
 #include "logger.h"
 #include "memory.h"
 #include "comm_rec.h"
+#include "tags.h"
+#include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
-
 remap::remap(class iris *obj,
 	     int *in_from_size, int *in_from_offset,
 	     int *in_to_size, int *in_to_offset,
@@ -256,19 +257,42 @@ remap::~remap()
 
 void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
 {
-    MPI_Request *req = new MPI_Request[m_nsend];
-    MPI_Win win;
-    int *pending = m_iris->stos_fence_pending(&win);
+    MPI_Request *req = new MPI_Request[m_nrecv];
 
-    for(int i = 0; i < m_nsend; i++) {
-	req[i] = MPI_REQUEST_NULL;
-	remap_xfer_item_t *xfer = m_recv_plan + i;
-
-	// flatten_brick(in_src + xfer->offset, in_buf, iris_real *dest,
-	// 		   int nx, int ny, int nz, int stride_plane,
-	// 		   int stride_line)
+    for(int i = 0; i < m_nrecv; i++) {
+	remap_xfer_item_t *xi = &m_recv_plan[i];
+	MPI_Irecv(&in_buf[xi->bufloc], xi->size, IRIS_REAL, xi->peer,
+		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
-    m_iris->stos_process_pending(pending, win);
-    MPI_Waitall(m_nsend, req, MPI_STATUSES_IGNORE);
+    for(int i = 0; i < m_nsend; i++) {
+	remap_xfer_item_t *xi = &m_send_plan[i];
+	flatten_brick(&in_src[xi->offset], m_sendbuf,
+		      xi->nx, xi->ny, xi->nz, xi->stride_plane,
+		      xi->stride_line);
+	MPI_Send(m_sendbuf, xi->size, IRIS_REAL, xi->peer,
+		 IRIS_TAG_REMAP, m_local_comm->m_comm);
+    }
+
+    if(m_self) {
+	remap_xfer_item_t *si = &m_send_plan[m_nsend];
+	remap_xfer_item_t *ri = &m_recv_plan[m_nrecv];
+	flatten_brick(&in_src[si->offset], &in_buf[ri->bufloc], 
+		      si->nx, si->ny, si->nz, si->stride_plane,
+		      si->stride_line);
+	unflatten_brick(&in_buf[ri->bufloc], &in_dest[ri->offset],
+			ri->nx, ri->ny, ri->nz, ri->stride_plane,
+			ri->stride_line);
+    }
+
+    for(int i = 0; i < m_nrecv; i++) {
+	int j;
+	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
+	remap_xfer_item_t *ri = &m_recv_plan[j];
+	unflatten_brick(&in_buf[ri->bufloc], &in_dest[ri->offset],
+			ri->nx, ri->ny, ri->nz, ri->stride_plane,
+			ri->stride_line);
+    }
+
+    delete req;
 }

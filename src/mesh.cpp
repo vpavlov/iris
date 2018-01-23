@@ -290,6 +290,7 @@ void mesh::exchange_halo()
     m_iris->stos_process_pending(pending, win);
 
     MPI_Waitall(m_iris->m_server_size, req, MPI_STATUSES_IGNORE);
+    delete req;
     for(int i=0;i<m_iris->m_server_size;i++) {
 	memory::wfree(sendbufs[i]);
     }

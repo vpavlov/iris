@@ -211,6 +211,7 @@ void poisson_solver_psm::copy_rho_from_mesh()
 
 void poisson_solver_psm::solve()
 {
+    m_logger->trace("Solving Poisson's Equation now");
     copy_rho_from_mesh();
     m_remap->perform(m_rho, m_rho, m_scratch);
 }

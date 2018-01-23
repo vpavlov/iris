@@ -33,9 +33,9 @@
 
 using namespace ORG_NCSA_IRIS;
 
-void flatten_brick(iris_real *src, iris_real *dest,
-		   int nx, int ny, int nz, int stride_plane,
-		   int stride_line)
+void ORG_NCSA_IRIS::flatten_brick(iris_real *src, iris_real *dest,
+				  int nx, int ny, int nz, int stride_plane,
+				  int stride_line)
 {
     int di = 0;
     for(int i = 0; i < nx; i++) {
@@ -49,9 +49,9 @@ void flatten_brick(iris_real *src, iris_real *dest,
     }
 }
 		   
-void unflatten_brick(iris_real *src, iris_real *dest,
-		     int nx, int ny, int nz, int stride_plane,
-		     int stride_line)
+void ORG_NCSA_IRIS::unflatten_brick(iris_real *src, iris_real *dest,
+				    int nx, int ny, int nz, int stride_plane,
+				    int stride_line)
 {
     int si = 0;
     for(int i = 0; i < nx; i++) {

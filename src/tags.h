@@ -34,3 +34,4 @@
 #define IRIS_TAG_COMMIT_CHARGES   4
 #define IRIS_TAG_QUIT             5
 #define IRIS_TAG_RHO_HALO         6
+#define IRIS_TAG_REMAP            7
