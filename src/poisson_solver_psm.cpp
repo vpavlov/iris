@@ -230,6 +230,34 @@ void poisson_solver_psm::dump_rho(char *fname)
     }
     fclose(fp);
     
+    iris_real *xsplit = m_fft_grid->m_xsplit;
+    iris_real *ysplit = m_fft_grid->m_ysplit;
+    iris_real *zsplit = m_fft_grid->m_zsplit;
+    int *c = m_fft_grid->m_coords;
+    int *size = m_fft_grid->m_size;
+
+    box_t<iris_real> local_box;
+
+	// OAOO helper
+#define CALC_LOCAL(ILO, IHI, ISIZE, ISPLIT, I)				\
+	local_box.ILO = m_domain->m_global_box.ILO + m_domain->m_global_box.ISIZE * ISPLIT[c[I]]; \
+	if(c[I] < size[I] - 1) {					\
+	    local_box.IHI = m_domain->m_global_box.ILO + m_domain->m_global_box.ISIZE * ISPLIT[c[I] + 1]; \
+	}else {								\
+	    local_box.IHI = m_domain->m_global_box.IHI;				\
+	}
+	
+	CALC_LOCAL(xlo, xhi, xsize, xsplit, 0);
+	CALC_LOCAL(ylo, yhi, ysize, ysplit, 1);
+	CALC_LOCAL(zlo, zhi, zsize, zsplit, 2);
+
+#undef CALC_LOCAL
+
+	local_box.xsize = local_box.xhi - local_box.xlo;
+	local_box.ysize = local_box.yhi - local_box.ylo;
+	local_box.zsize = local_box.zhi - local_box.zlo;
+
+
     // 2. write the bov header
     fp = fopen(header_fname, "w");
     fprintf(fp, "TIME: 1.23456\n");
@@ -244,9 +272,9 @@ void poisson_solver_psm::dump_rho(char *fname)
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
     fprintf(fp, "CENTERING: nodal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
-	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
+	    local_box.xlo, local_box.ylo, local_box.zlo);
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",
-	    m_domain->m_local_box.xsize, m_domain->m_local_box.ysize, m_domain->m_local_box.zsize);
+	    local_box.xsize, local_box.ysize, local_box.zsize);
     fclose(fp);
 }
 
