@@ -113,8 +113,8 @@ if(BUILD_SHARED_LIBS)
   set_target_properties(iris PROPERTIES SOVERSION ${SOVERSION})
 endif()
 
-add_executable(bahor ${IRIS_SOURCE_DIR}/../examples/bahor.cpp)
-target_link_libraries(bahor iris)
+add_executable(nacl ${IRIS_SOURCE_DIR}/../examples/nacl.cpp)
+target_link_libraries(nacl iris)
 
 # Handle pkgconfig
 set(PKG_CFLAGS "")

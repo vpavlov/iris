@@ -59,8 +59,8 @@ namespace ORG_NCSA_IRIS {
 
     public:
 	remap(class iris *obj,
-	      int *in_from_size, int *in_from_offset,
-	      int *in_to_size, int *in_to_offset,
+	      int *in_from_offset, int *in_from_size, 
+	      int *in_to_offset, int *in_to_size, 
 	      int in_unit_size,
 	      int in_permute);
 	~remap();

@@ -38,8 +38,8 @@
 
 using namespace ORG_NCSA_IRIS;
 remap::remap(class iris *obj,
-	     int *in_from_size, int *in_from_offset,
-	     int *in_to_size, int *in_to_offset,
+	     int *in_from_offset, int *in_from_size, 
+	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
 	     int in_permute)
     : state_accessor(obj), m_send_plan(NULL), m_recv_plan(NULL), m_nsend(0),
@@ -178,7 +178,7 @@ remap::remap(class iris *obj,
 		    m_recv_plan[nrecv].unit_size = in_unit_size;
 		}else if(in_permute == 1) {
 		    m_recv_plan[nrecv].offset = in_unit_size *
-			((overlap.xlo - m_to.xlo) * m_to.ysize * m_to.zsize +
+			((overlap.xlo - m_to.xlo) * m_to.zsize * m_to.ysize +
 			 ((overlap.zlo - m_to.zlo) * m_to.ysize + 
 			  overlap.ylo - m_to.ylo));
 		    m_recv_plan[nrecv].nx = overlap.xsize;
@@ -193,7 +193,7 @@ remap::remap(class iris *obj,
 			((overlap.ylo - m_to.ylo) * m_to.xsize * m_to.zsize +
 			 ((overlap.xlo - m_to.xlo) * m_to.zsize + 
 			  overlap.zlo - m_to.zlo));
-		    m_recv_plan[nrecv].nx = overlap.xsize;
+		    m_recv_plan[nrecv].nx = in_unit_size * overlap.xsize;
 		    m_recv_plan[nrecv].ny = overlap.ysize;
 		    m_recv_plan[nrecv].nz = overlap.zsize;
 		    m_recv_plan[nrecv].stride_line = in_unit_size * m_to.zsize;
@@ -227,10 +227,6 @@ remap::remap(class iris *obj,
     for(int i=0;i<m_nsend;i++) {
 	size = MAX(size, m_send_plan[i].size);
     }
-
-    m_logger->trace("Remap will send do %d nodes", m_nsend);
-    m_logger->trace("Remap will recv from %d nodes", m_nrecv);
-    m_logger->trace("Remap largest message size is %d", size);
 
     if(size != 0) {
 	m_sendbuf = (iris_real *)memory::wmalloc(size * sizeof(iris_real));
