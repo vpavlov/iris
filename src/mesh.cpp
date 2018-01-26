@@ -45,13 +45,14 @@ using namespace ORG_NCSA_IRIS;
 
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_dirty(true),
-    m_initialized(false), m_halo(NULL)
+    m_initialized(false), m_halo(NULL), m_phi(NULL)
 {
 }
 
 mesh::~mesh()
 {
     memory::destroy_3d(m_rho);
+    memory::destroy_3d(m_phi);
 }
 
 void mesh::set_size(int nx, int ny, int nz)
@@ -114,6 +115,9 @@ void mesh::commit()
 		}
 	    }
 	}
+
+	memory::destroy_3d(m_phi);
+	memory::create_3d(m_phi, m_own_size[0], m_own_size[1], m_own_size[2]);
 	
 	if(m_halo != NULL) {
 	    delete [] m_halo;
@@ -321,5 +325,41 @@ void mesh::add_halo_items(halo_item_t *in_items, int in_nitems)
 {
     for(int i=0;i<in_nitems;i++) {
     	m_rho[in_items[i].x][in_items[i].y][in_items[i].z] += in_items[i].v;
+    }
+}
+
+void mesh::ijk_to_xyz(int i, int j, int k,
+		      iris_real &x, iris_real &y, iris_real &z)
+{
+    x = m_domain->m_local_box.xlo + i * m_h[0];
+    y = m_domain->m_local_box.ylo + j * m_h[1];
+    z = m_domain->m_local_box.zlo + k * m_h[2];
+}
+
+void mesh::dump_rho()
+{
+    for(int i=0;i<m_own_size[0];i++) {
+	for(int j=0;j<m_own_size[1];j++) {
+	    for(int k=0;k<m_own_size[2];k++) {
+		m_logger->trace("RHO[%d][%d][%d] = %.16f", i, j, k,
+				m_rho[i][j][k]);
+	    }
+	    m_logger->trace("");
+	}
+	m_logger->trace("");
+    }
+}
+
+void mesh::dump_phi()
+{
+    for(int i=0;i<m_own_size[0];i++) {
+	for(int j=0;j<m_own_size[1];j++) {
+	    for(int k=0;k<m_own_size[2];k++) {
+		m_logger->trace("PHI[%d][%d][%d] = %.16f", i, j, k,
+				m_phi[i][j][k]);
+	    }
+	    m_logger->trace("");
+	}
+	m_logger->trace("");
     }
 }

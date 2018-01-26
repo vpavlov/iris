@@ -33,18 +33,9 @@
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {
-
+    
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
-
-void flatten_brick(iris_real *src, iris_real *dest,
-		   int nx, int ny, int nz, int stride_plane,
-		   int stride_line);
-
-void unflatten_brick(iris_real *src, iris_real *dest,
-		     int nx, int ny, int nz, int stride_plane,
-		     int stride_line);
-
 
 }
 

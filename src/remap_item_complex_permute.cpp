@@ -20,40 +20,38 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_PSM_H__
-#define __IRIS_POISSON_SOLVER_PSM_H__
+#include "remap_item_complex_permute.h"
 
-#include "poisson_solver.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
-
-    class poisson_solver_psm : public poisson_solver {
-
-    public:
-	poisson_solver_psm(class iris *obj);
-	~poisson_solver_psm();
-
-	void commit();
-	void solve();
-
-    private:
-	void calculate_eigenvalues();
-	void divide_by_eigenvalues(iris_real *krho);
-
-    private:
-
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-	class fft3d *m_fft;
-    };
+remap_item_complex_permute::remap_item_complex_permute()
+{
 }
 
-#endif
+remap_item_complex_permute::~remap_item_complex_permute()
+{
+}
+
+void remap_item_complex_permute::unpack(iris_real *src, iris_real *dest)
+{
+    int si = 0;
+    for(int i = 0; i < m_nx; i++) {
+	int plane = i * m_stride_line;
+	for(int j = 0; j < m_ny; j++) {
+	    int di = plane + 2*j;
+	    for(int k = 0; k < m_nz; k++) {
+		dest[di] = src[si++];
+		dest[di+1] = src[si++];
+		di += m_stride_plane;
+	    }
+	}
+    }
+}

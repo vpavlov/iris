@@ -47,6 +47,9 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_STATE_INITIALIZED  1
 #define IRIS_STATE_COMMITED     2
 
+    // type of function called to set pieces of the right-hand side
+    typedef iris_real (*rhs_fn_t)(class iris *obj, int i, int j, int k);
+
     class iris {
 
     public:
@@ -104,6 +107,10 @@ namespace ORG_NCSA_IRIS {
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
 
+	// Set the right hand side directly (skips all charge assignment and
+	// whatnot, usful for testing)
+	void set_rhs(rhs_fn_t fn);
+
 	// Call this when all configuration is done. When called, it will
 	// signal all internal components to:
 	//   - set default configuration not explicitly set by the user;
@@ -122,6 +129,7 @@ namespace ORG_NCSA_IRIS {
 	// Use this to broadcast charges from a client node to a server node
 	void broadcast_charges(int in_peer, iris_real *in_charges, int in_count);
 	void commit_charges();
+	void solve();
 	void quit();
 
 

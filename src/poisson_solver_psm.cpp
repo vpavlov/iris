@@ -70,7 +70,9 @@ void poisson_solver_psm::calculate_eigenvalues()
     int ex = sx + nx;
     int ey = sy + ny;
     int ez = sz + nz;
-    
+
+    int norm = m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2];
+
     int cnt = (m_stencil->m_size_1d - 1) / 2;
     iris_real *A = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     iris_real *B = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
@@ -116,7 +118,7 @@ void poisson_solver_psm::calculate_eigenvalues()
 		    val = std::numeric_limits<iris_real>::min();
 		}
 		
-		m_ev[x-sx][y-sy][z-sz] = val;
+		m_ev[x-sx][y-sy][z-sz] = val * norm;
 	    }
 	}
     }
@@ -136,9 +138,36 @@ void poisson_solver_psm::commit()
     }
 }
 
+void poisson_solver_psm::divide_by_eigenvalues(iris_real *krho)
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int sx = m_mesh->m_own_offset[0];
+    int sy = m_mesh->m_own_offset[1];
+    int sz = m_mesh->m_own_offset[2];
+    
+    int ex = sx + nx;
+    int ey = sy + ny;
+    int ez = sz + nz;
+
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		krho[idx]   /= m_ev[i][j][k];
+		krho[idx+1] /= m_ev[i][j][k];
+		idx+=2;
+	    }
+	}
+    }
+}
+
 void poisson_solver_psm::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
-    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]));
-
+    iris_real *krho = m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]));
+    divide_by_eigenvalues(krho);
+    m_fft->compute_bk(&(m_mesh->m_phi[0][0][0]));
 }

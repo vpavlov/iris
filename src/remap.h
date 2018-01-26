@@ -35,25 +35,6 @@
 #include "box.h"
 
 namespace ORG_NCSA_IRIS {
-
-    // for each proc to send/recv, we need to prepare the following information:
-    // - processor to send to
-    // - offset from [0, 0, 0] of the start of the brick that needs to be sent
-    // - number of items in X, Y and Z that needs to be sent
-    // - plane and line strides
-    // - number of iris_reals in a single cell (e.g. to support complex numbers)
-    // - size of the data to send
-    struct remap_xfer_item_t {
-	int peer;
-	int offset;
-	int nx, ny, nz;
-	int stride_line;
-	int stride_plane;
-	int unit_size;  // number of iris_reals
-	int size;
-	int bufloc;     // buffer location, only for receive
-	int permute;    // 0 = no, 1 = x->y->z->x, 2 = x<-y<-z<-x
-    };
     
     class remap : protected state_accessor {
 
@@ -72,8 +53,8 @@ namespace ORG_NCSA_IRIS {
 	box_t<int> m_to;
 	int m_nsend;  // number of items to send
 	int m_nrecv;  // number of items to recv
-	remap_xfer_item_t *m_send_plan;
-	remap_xfer_item_t *m_recv_plan;
+	class remap_item *m_send_plans;
+	class remap_item *m_recv_plans;
 	bool m_self;  // are we also receiving from self?
 	iris_real *m_sendbuf;  // buffer for sending
     };

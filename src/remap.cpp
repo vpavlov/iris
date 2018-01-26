@@ -35,6 +35,8 @@
 #include "comm_rec.h"
 #include "tags.h"
 #include "utils.h"
+#include "remap_item.h"
+#include "remap_item_complex_permute.h"
 
 using namespace ORG_NCSA_IRIS;
 remap::remap(class iris *obj,
@@ -42,7 +44,7 @@ remap::remap(class iris *obj,
 	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
 	     int in_permute)
-    : state_accessor(obj), m_send_plan(NULL), m_recv_plan(NULL), m_nsend(0),
+    : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
       m_nrecv(0)
 {
     m_from.xlo = in_from_offset[0];
@@ -95,7 +97,7 @@ remap::remap(class iris *obj,
     // For each overlapping box, create a plan to send and store it in the
     // array of plans
     if(nsend) {
-	m_send_plan = new remap_xfer_item_t[nsend];
+	m_send_plans = new remap_item[nsend];
 	nsend = 0;
 	int iproc = m_local_comm->m_rank;
 	for(int i=0;i<m_local_comm->m_size;i++) {
@@ -107,28 +109,26 @@ remap::remap(class iris *obj,
 
 	    box_t<int> overlap = m_from && to[iproc];
 	    if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
-		m_send_plan[nsend].peer = iproc;
-		m_send_plan[nsend].offset = in_unit_size *
+		m_send_plans[nsend].m_peer = iproc;
+		m_send_plans[nsend].m_offset = in_unit_size *
 		    ((overlap.zlo - m_from.zlo) * m_from.ysize * m_from.xsize +
 		     ((overlap.ylo - m_from.ylo) * m_from.xsize + 
 		      overlap.xlo - m_from.xlo));
-		m_send_plan[nsend].nx = in_unit_size * overlap.xsize;
-		m_send_plan[nsend].ny = overlap.ysize;
-		m_send_plan[nsend].nz = overlap.zsize;
-		m_send_plan[nsend].stride_line = in_unit_size * m_from.xsize;
-		m_send_plan[nsend].stride_plane = 
+		m_send_plans[nsend].m_nx = in_unit_size * overlap.xsize;
+		m_send_plans[nsend].m_ny = overlap.ysize;
+		m_send_plans[nsend].m_nz = overlap.zsize;
+		m_send_plans[nsend].m_stride_line = in_unit_size * m_from.xsize;
+		m_send_plans[nsend].m_stride_plane = 
 		    in_unit_size * m_from.xsize * m_from.ysize;
-		m_send_plan[nsend].unit_size = in_unit_size;
-		m_send_plan[nsend].size = in_unit_size *
+		m_send_plans[nsend].m_size = in_unit_size *
 		    overlap.xsize * overlap.ysize * overlap.zsize;
-		m_send_plan[nsend].permute = 0;
-		m_send_plan[nsend++].bufloc = 0;
+		m_send_plans[nsend++].m_bufloc = 0;
 	    }
 	}
 
 	// if we're sending to self, don't count it
 	m_nsend = nsend;
-	if(m_send_plan[nsend-1].peer == m_local_comm->m_rank) {
+	if(m_send_plans[nsend-1].m_peer == m_local_comm->m_rank) {
 	    m_nsend--;
 	}
     }
@@ -149,7 +149,15 @@ remap::remap(class iris *obj,
     // For each overlapping box, create a plan to recv and store it in the
     // array of plans
     if(nrecv) {
-	m_recv_plan = new remap_xfer_item_t[nrecv];
+
+	if(in_permute == 0) {
+	    m_recv_plans = new remap_item[nrecv];
+	}else if(in_permute == 1 && in_unit_size == 2) {
+	    m_recv_plans = new remap_item_complex_permute[nrecv];
+	}else {
+	    throw std::invalid_argument("Unimplemented combination of in_permute/in_unit_size!");
+	}
+
 	nrecv = 0;
 	int bufloc = 0;
 	int iproc = m_local_comm->m_rank;
@@ -162,57 +170,53 @@ remap::remap(class iris *obj,
 
 	    box_t<int> overlap = m_to && from[iproc];
 	    if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
-		m_recv_plan[nrecv].peer = iproc;
+		m_recv_plans[nrecv].m_peer = iproc;
 		
 		if(in_permute == 0) {
-		    m_recv_plan[nrecv].offset = in_unit_size *
+		    m_recv_plans[nrecv].m_offset = in_unit_size *
 			((overlap.zlo - m_to.zlo) * m_to.ysize * m_to.xsize +
 			 ((overlap.ylo - m_to.ylo) * m_to.xsize + 
 			  overlap.xlo - m_to.xlo));
-		    m_recv_plan[nrecv].nx = in_unit_size * overlap.xsize;
-		    m_recv_plan[nrecv].ny = overlap.ysize;
-		    m_recv_plan[nrecv].nz = overlap.zsize;
-		    m_recv_plan[nrecv].stride_line = in_unit_size * m_to.xsize;
-		    m_recv_plan[nrecv].stride_plane = 
+		    m_recv_plans[nrecv].m_nx = in_unit_size * overlap.xsize;
+		    m_recv_plans[nrecv].m_ny = overlap.ysize;
+		    m_recv_plans[nrecv].m_nz = overlap.zsize;
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.xsize;
+		    m_recv_plans[nrecv].m_stride_plane = 
 			in_unit_size * m_to.xsize * m_to.ysize;
-		    m_recv_plan[nrecv].unit_size = in_unit_size;
 		}else if(in_permute == 1) {
-		    m_recv_plan[nrecv].offset = in_unit_size *
+		    m_recv_plans[nrecv].m_offset = in_unit_size *
 			((overlap.xlo - m_to.xlo) * m_to.zsize * m_to.ysize +
 			 ((overlap.zlo - m_to.zlo) * m_to.ysize + 
 			  overlap.ylo - m_to.ylo));
-		    m_recv_plan[nrecv].nx = overlap.xsize;
-		    m_recv_plan[nrecv].ny = overlap.ysize;
-		    m_recv_plan[nrecv].nz = overlap.zsize;
-		    m_recv_plan[nrecv].stride_line = in_unit_size * m_to.ysize;
-		    m_recv_plan[nrecv].stride_plane = 
+		    m_recv_plans[nrecv].m_nx = overlap.xsize;  // unit is in unflat
+		    m_recv_plans[nrecv].m_ny = overlap.ysize;
+		    m_recv_plans[nrecv].m_nz = overlap.zsize;
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.ysize;
+		    m_recv_plans[nrecv].m_stride_plane = 
 			in_unit_size * m_to.ysize * m_to.zsize;
-		    m_recv_plan[nrecv].unit_size = in_unit_size;
 		}else {
-		    m_recv_plan[nrecv].offset = in_unit_size *
+		    m_recv_plans[nrecv].m_offset = in_unit_size *
 			((overlap.ylo - m_to.ylo) * m_to.xsize * m_to.zsize +
 			 ((overlap.xlo - m_to.xlo) * m_to.zsize + 
 			  overlap.zlo - m_to.zlo));
-		    m_recv_plan[nrecv].nx = in_unit_size * overlap.xsize;
-		    m_recv_plan[nrecv].ny = overlap.ysize;
-		    m_recv_plan[nrecv].nz = overlap.zsize;
-		    m_recv_plan[nrecv].stride_line = in_unit_size * m_to.zsize;
-		    m_recv_plan[nrecv].stride_plane = 
+		    m_recv_plans[nrecv].m_nx = overlap.xsize;
+		    m_recv_plans[nrecv].m_ny = overlap.ysize;
+		    m_recv_plans[nrecv].m_nz = overlap.zsize;
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.zsize;
+		    m_recv_plans[nrecv].m_stride_plane = 
 			in_unit_size * m_to.zsize * m_to.xsize;
-		    m_recv_plan[nrecv].unit_size = in_unit_size;
 		}
 
-		m_recv_plan[nrecv].size = in_unit_size *
+		m_recv_plans[nrecv].m_size = in_unit_size *
 		    overlap.xsize * overlap.ysize * overlap.zsize;
-		m_recv_plan[nrecv].bufloc = bufloc;
-		m_recv_plan[nrecv].permute = in_permute;
-		bufloc += m_recv_plan[nrecv++].size;
+		m_recv_plans[nrecv].m_bufloc = bufloc;
+		bufloc += m_recv_plans[nrecv++].m_size;
 	    }
 	}
 
 	// if we're recving from self, don't count it
 	m_nrecv = nrecv;
-	if(m_recv_plan[nrecv-1].peer == m_local_comm->m_rank) {
+	if(m_recv_plans[nrecv-1].m_peer == m_local_comm->m_rank) {
 	    m_nrecv--;
 	}
 
@@ -225,7 +229,7 @@ remap::remap(class iris *obj,
 
     int size = 0;
     for(int i=0;i<m_nsend;i++) {
-	size = MAX(size, m_send_plan[i].size);
+	size = MAX(size, m_send_plans[i].m_size);
     }
 
     if(size != 0) {
@@ -240,12 +244,12 @@ remap::remap(class iris *obj,
 
 remap::~remap()
 {
-    if(m_send_plan != NULL) {
-	delete [] m_send_plan;
+    if(m_send_plans != NULL) {
+	delete [] m_send_plans;
     }
 
-    if(m_recv_plan != NULL) {
-	delete [] m_recv_plan;
+    if(m_recv_plans != NULL) {
+	delete [] m_recv_plans;
     }
 
     memory::wfree(m_sendbuf);
@@ -256,38 +260,30 @@ void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
     MPI_Request *req = new MPI_Request[m_nrecv];
 
     for(int i = 0; i < m_nrecv; i++) {
-	remap_xfer_item_t *xi = &m_recv_plan[i];
-	MPI_Irecv(&in_buf[xi->bufloc], xi->size, IRIS_REAL, xi->peer,
+	remap_item *xi = &m_recv_plans[i];
+	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
 		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
     for(int i = 0; i < m_nsend; i++) {
-	remap_xfer_item_t *xi = &m_send_plan[i];
-	flatten_brick(&in_src[xi->offset], m_sendbuf,
-		      xi->nx, xi->ny, xi->nz, xi->stride_plane,
-		      xi->stride_line);
-	MPI_Send(m_sendbuf, xi->size, IRIS_REAL, xi->peer,
+	remap_item *xi = &m_send_plans[i];
+	xi->pack(&in_src[xi->m_offset], m_sendbuf);
+	MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
 		 IRIS_TAG_REMAP, m_local_comm->m_comm);
     }
 
     if(m_self) {
-	remap_xfer_item_t *si = &m_send_plan[m_nsend];
-	remap_xfer_item_t *ri = &m_recv_plan[m_nrecv];
-	flatten_brick(&in_src[si->offset], &in_buf[ri->bufloc], 
-		      si->nx, si->ny, si->nz, si->stride_plane,
-		      si->stride_line);
-	unflatten_brick(&in_buf[ri->bufloc], &in_dest[ri->offset],
-			ri->nx, ri->ny, ri->nz, ri->stride_plane,
-			ri->stride_line);
+	remap_item *si = &m_send_plans[m_nsend];
+	remap_item *ri = &m_recv_plans[m_nrecv];
+	si->pack(&in_src[si->m_offset], &in_buf[ri->m_bufloc]);
+	ri->unpack(&in_buf[ri->m_bufloc], &in_dest[ri->m_offset]);
     }
 
     for(int i = 0; i < m_nrecv; i++) {
 	int j;
 	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
-	remap_xfer_item_t *ri = &m_recv_plan[j];
-	unflatten_brick(&in_buf[ri->bufloc], &in_dest[ri->offset],
-			ri->nx, ri->ny, ri->nz, ri->stride_plane,
-			ri->stride_line);
+	remap_item *ri = &m_recv_plans[j];
+	ri->unpack(&in_buf[ri->m_bufloc], &in_dest[ri->m_offset]);
     }
 
     delete req;

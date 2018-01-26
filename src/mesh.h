@@ -62,6 +62,10 @@ namespace ORG_NCSA_IRIS {
 	void add_halo_items(halo_item_t *in_items, int in_nitems);
 	void dump_rho(char *in_fname);
 	void dump_rho2(char *in_fname);
+	void dump_rho();
+	void dump_phi();
+	void ijk_to_xyz(int i, int j, int k,
+			iris_real &x, iris_real &y, iris_real &z);
 
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit
@@ -74,6 +78,7 @@ namespace ORG_NCSA_IRIS {
 	int       m_own_offset[3];  // where does my mesh start from 
 
 	iris_real ***m_rho;  // right hand side of the Poisson equation
+	iris_real ***m_phi;  // unknown function (left hand side)
 	std::map<std::tuple<int, int, int>, iris_real> *m_halo;
 
     };

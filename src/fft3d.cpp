@@ -112,10 +112,10 @@ void fft3d::setup_grid(int in_which)
     const char *grid_name;
     switch(in_which) {
     case 0:
-	grid_name = "1D-FFT-X";
-	last = 2;
-	xp1 = 1; yp1 = 1; zp1 = 0;
-	xp2 = 1; yp2 = 0; zp2 = 0;
+	grid_name = "1D-FFT-Z";
+	last = 1;
+	zp1 = 1; xp1 = 1; yp1 = 0;
+	zp2 = 1; xp2 = 0; yp2 = 0;
 	break;
 	
     case 1:
@@ -126,10 +126,10 @@ void fft3d::setup_grid(int in_which)
 	break;
 
     case 2:
-	grid_name = "1D-FFT-Z";
-	last = 1;
-	zp1 = 1; xp1 = 1; yp1 = 0;
-	zp2 = 1; xp2 = 0; yp2 = 0;
+	grid_name = "1D-FFT-X";
+	last = 2;
+	xp1 = 1; yp1 = 1; zp1 = 0;
+	xp2 = 1; yp2 = 0; zp2 = 0;
 	break;
     }
 
@@ -219,7 +219,7 @@ void fft3d::setup_plans(int in_which)
     int x, y, z;
     switch(in_which) {
     case 0:
-	x = 0; y = 1; z = 2;
+	y = 0; z = 1; x = 2;
 	break;
 
     case 1:
@@ -227,7 +227,7 @@ void fft3d::setup_plans(int in_which)
 	break;
 
     case 2:
-	y = 0; z = 1; x = 2;
+	x = 0; y = 1; z = 2;
 	break;
 
     }
@@ -285,10 +285,43 @@ iris_real *fft3d::compute_fw(iris_real *src)
 			   (complex_t *)m_workspace,
 			   (complex_t *)m_workspace);
 #endif
+
     }
 
     m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
 
     // now workspace contains 3D FFT of m_mesh->m_rho, in the original DD
     return m_workspace;
+}
+
+void fft3d::compute_bk(iris_real *dest)
+{
+
+    for(int i=0;i<3;i++) {
+	m_remaps[i]->perform(m_workspace, m_workspace, m_scratch);
+
+#ifdef FFT_FFTW3
+	FFTW_(execute_dft)(m_bk_plans[i],
+			   (complex_t *)m_workspace,
+			   (complex_t *)m_workspace);
+#endif
+
+    }
+
+    m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
+
+    // send data to the mesh
+    int j = 0;
+    for(int i=0;i<m_count;i++) {
+	dest[i] = m_workspace[j];
+	j += 2;
+    }
+}
+
+void fft3d::dump_workspace()
+{
+    for(int i=0;i<m_count;i++) {
+	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+			i, m_workspace[i*2+0], m_workspace[i*2+1]);
+    }
 }

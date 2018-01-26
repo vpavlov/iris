@@ -20,40 +20,30 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_PSM_H__
-#define __IRIS_POISSON_SOLVER_PSM_H__
+#ifndef __IRIS_REMAP_ITEM_COMPLEX_PERMUTE_H__
+#define __IRIS_REMAP_ITEM_COMPLEX_PERMUTE_H__
 
-#include "poisson_solver.h"
+#include "remap_item.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class poisson_solver_psm : public poisson_solver {
+    class remap_item_complex_permute : public remap_item {
 
     public:
-	poisson_solver_psm(class iris *obj);
-	~poisson_solver_psm();
+	remap_item_complex_permute();
+	~remap_item_complex_permute();
 
-	void commit();
-	void solve();
-
-    private:
-	void calculate_eigenvalues();
-	void divide_by_eigenvalues(iris_real *krho);
-
-    private:
-
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-	class fft3d *m_fft;
+	virtual void unpack(iris_real *src, iris_real *dest);
     };
+
 }
 
 #endif

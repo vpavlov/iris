@@ -20,40 +20,40 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_PSM_H__
-#define __IRIS_POISSON_SOLVER_PSM_H__
+#ifndef __IRIS_REMAP_ITEM_H__
+#define __IRIS_REMAP_ITEM_H__
 
-#include "poisson_solver.h"
+#include "real.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class poisson_solver_psm : public poisson_solver {
+    class remap_item {
 
     public:
-	poisson_solver_psm(class iris *obj);
-	~poisson_solver_psm();
+	remap_item();
+	~remap_item();
 
-	void commit();
-	void solve();
+	void pack(iris_real *src, iris_real *dest);
+	virtual void unpack(iris_real *src, iris_real *dest);
 
-    private:
-	void calculate_eigenvalues();
-	void divide_by_eigenvalues(iris_real *krho);
-
-    private:
-
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
-	class fft3d *m_fft;
+    public:
+	int m_peer;            // processor to send to/recv from
+	int m_offset;          // offset from [0, 0, 0] of the start of block
+	int m_nx, m_ny, m_nz;  // number of items in X, Y, Z that have to be xf
+	int m_stride_line;     // distance to next pencil
+	int m_stride_plane;    // distance to next plane
+	int m_size;            // size of the data to send
+	int m_bufloc;          // only in recv: offset in receiving buffer
     };
+
 }
 
 #endif

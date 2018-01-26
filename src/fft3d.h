@@ -65,6 +65,9 @@ namespace ORG_NCSA_IRIS {
 	~fft3d();
 
 	iris_real *compute_fw(iris_real *src);
+	void compute_bk(iris_real *dest);
+
+	void dump_workspace();
 
     private:
 	void setup_grid(int in_which);
