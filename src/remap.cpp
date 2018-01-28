@@ -37,6 +37,7 @@
 #include "utils.h"
 #include "remap_item.h"
 #include "remap_item_complex_permute.h"
+#include "remap_item_complex_permute2.h"
 
 using namespace ORG_NCSA_IRIS;
 remap::remap(class iris *obj,
@@ -111,15 +112,17 @@ remap::remap(class iris *obj,
 	    if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
 		m_send_plans[nsend].m_peer = iproc;
 		m_send_plans[nsend].m_offset = in_unit_size *
-		    ((overlap.zlo - m_from.zlo) * m_from.ysize * m_from.xsize +
-		     ((overlap.ylo - m_from.ylo) * m_from.xsize + 
-		      overlap.xlo - m_from.xlo));
-		m_send_plans[nsend].m_nx = in_unit_size * overlap.xsize;
+		    ROW_MAJOR_OFFSET(overlap.xlo - m_from.xlo,
+				     overlap.ylo - m_from.ylo,
+				     overlap.zlo - m_from.zlo,
+				     m_from.ysize,
+				     m_from.zsize);
+		m_send_plans[nsend].m_nx = overlap.xsize;
 		m_send_plans[nsend].m_ny = overlap.ysize;
-		m_send_plans[nsend].m_nz = overlap.zsize;
-		m_send_plans[nsend].m_stride_line = in_unit_size * m_from.xsize;
+		m_send_plans[nsend].m_nz = in_unit_size * overlap.zsize;
+		m_send_plans[nsend].m_stride_line = in_unit_size * m_from.zsize;
 		m_send_plans[nsend].m_stride_plane = 
-		    in_unit_size * m_from.xsize * m_from.ysize;
+		    in_unit_size * m_from.ysize * m_from.zsize;
 		m_send_plans[nsend].m_size = in_unit_size *
 		    overlap.xsize * overlap.ysize * overlap.zsize;
 		m_send_plans[nsend++].m_bufloc = 0;
@@ -154,6 +157,8 @@ remap::remap(class iris *obj,
 	    m_recv_plans = new remap_item[nrecv];
 	}else if(in_permute == 1 && in_unit_size == 2) {
 	    m_recv_plans = new remap_item_complex_permute[nrecv];
+	}else if(in_permute == 2 && in_unit_size == 2) {
+	    m_recv_plans = new remap_item_complex_permute2[nrecv];
 	}else {
 	    throw std::invalid_argument("Unimplemented combination of in_permute/in_unit_size!");
 	}
@@ -174,35 +179,41 @@ remap::remap(class iris *obj,
 		
 		if(in_permute == 0) {
 		    m_recv_plans[nrecv].m_offset = in_unit_size *
-			((overlap.zlo - m_to.zlo) * m_to.ysize * m_to.xsize +
-			 ((overlap.ylo - m_to.ylo) * m_to.xsize + 
-			  overlap.xlo - m_to.xlo));
-		    m_recv_plans[nrecv].m_nx = in_unit_size * overlap.xsize;
+			ROW_MAJOR_OFFSET(overlap.xlo - m_to.xlo,
+					 overlap.ylo - m_to.ylo,
+					 overlap.zlo - m_to.zlo,
+					 m_to.ysize,
+					 m_to.zsize);
+		    m_recv_plans[nrecv].m_nx = overlap.xsize;
 		    m_recv_plans[nrecv].m_ny = overlap.ysize;
-		    m_recv_plans[nrecv].m_nz = overlap.zsize;
-		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.xsize;
-		    m_recv_plans[nrecv].m_stride_plane = 
-			in_unit_size * m_to.xsize * m_to.ysize;
-		}else if(in_permute == 1) {
-		    m_recv_plans[nrecv].m_offset = in_unit_size *
-			((overlap.xlo - m_to.xlo) * m_to.zsize * m_to.ysize +
-			 ((overlap.zlo - m_to.zlo) * m_to.ysize + 
-			  overlap.ylo - m_to.ylo));
-		    m_recv_plans[nrecv].m_nx = overlap.xsize;  // unit is in unflat
-		    m_recv_plans[nrecv].m_ny = overlap.ysize;
-		    m_recv_plans[nrecv].m_nz = overlap.zsize;
-		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.ysize;
+		    m_recv_plans[nrecv].m_nz = in_unit_size * overlap.zsize;
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.zsize;
 		    m_recv_plans[nrecv].m_stride_plane = 
 			in_unit_size * m_to.ysize * m_to.zsize;
+		}else if(in_permute == 1) {
+		    m_recv_plans[nrecv].m_offset = in_unit_size *
+			ROW_MAJOR_OFFSET(overlap.zlo - m_to.zlo,
+					 overlap.xlo - m_to.xlo,
+					 overlap.ylo - m_to.ylo,
+					 m_to.xsize,
+					 m_to.ysize);
+		    m_recv_plans[nrecv].m_nx = overlap.xsize;
+		    m_recv_plans[nrecv].m_ny = overlap.ysize;
+		    m_recv_plans[nrecv].m_nz = overlap.zsize;  // unit in unpack
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.ysize;
+		    m_recv_plans[nrecv].m_stride_plane = 
+			in_unit_size * m_to.xsize * m_to.ysize;
 		}else {
 		    m_recv_plans[nrecv].m_offset = in_unit_size *
-			((overlap.ylo - m_to.ylo) * m_to.xsize * m_to.zsize +
-			 ((overlap.xlo - m_to.xlo) * m_to.zsize + 
-			  overlap.zlo - m_to.zlo));
+			ROW_MAJOR_OFFSET(overlap.ylo - m_to.ylo,
+					 overlap.zlo - m_to.zlo,
+					 overlap.xlo - m_to.xlo,
+					 m_to.zsize,
+					 m_to.xsize);
 		    m_recv_plans[nrecv].m_nx = overlap.xsize;
 		    m_recv_plans[nrecv].m_ny = overlap.ysize;
 		    m_recv_plans[nrecv].m_nz = overlap.zsize;
-		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.zsize;
+		    m_recv_plans[nrecv].m_stride_line = in_unit_size * m_to.xsize;
 		    m_recv_plans[nrecv].m_stride_plane = 
 			in_unit_size * m_to.zsize * m_to.xsize;
 		}

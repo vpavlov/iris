@@ -170,6 +170,7 @@ void fft3d::setup_grid(int in_which)
 //  = 4 for remap from m_grids[3] to m_mesh
 void fft3d::setup_remap(int in_which)
 {
+
     switch(in_which) {
     case 0:  // XYZ -> XYZ
 	m_remaps[in_which] = new remap(m_iris,
@@ -181,7 +182,7 @@ void fft3d::setup_remap(int in_which)
 				       0);                    // no permutation
 	break;
 
-    case 1:  // XYZ -> YZX
+    case 1:  // XYZ -> ZXY
 	m_remaps[in_which] = new remap(m_iris,
 				       m_own_offset[0],       // from m_grids[0]
 				       m_own_size[0],
@@ -191,24 +192,78 @@ void fft3d::setup_remap(int in_which)
 				       1);                    // x<-y<-z<-x
 	break;
 
-    case 2:  // YZX -> ZXY
-	m_remaps[in_which] = new remap(m_iris,
-				       m_own_offset[1],       // from m_grids[1]
-				       m_own_size[1],
-				       m_own_offset[2],       // to m_grids[2]
-				       m_own_size[2],
-				       2,                     // complex
-				       1);                    // x<-y<-z<-x
+    case 2:  // ZXY -> YZX
+	{
+	    int t_own_offset1[3];
+	    int t_own_size1[3];
+	    int t_own_offset2[3];
+	    int t_own_size2[3];
+
+	    t_own_offset1[0] = m_own_offset[1][2];
+	    t_own_offset1[1] = m_own_offset[1][0];
+	    t_own_offset1[2] = m_own_offset[1][1];
+	    t_own_size1[0] = m_own_size[1][2];
+	    t_own_size1[1] = m_own_size[1][0];
+	    t_own_size1[2] = m_own_size[1][1];
+	    t_own_offset1[0] = m_own_offset[1][2];
+	    t_own_offset1[1] = m_own_offset[1][0];
+	    t_own_offset1[2] = m_own_offset[1][1];
+	    t_own_size1[0] = m_own_size[1][2];
+	    t_own_size1[1] = m_own_size[1][0];
+	    t_own_size1[2] = m_own_size[1][1];
+
+	    t_own_offset2[0] = m_own_offset[2][2];
+	    t_own_offset2[1] = m_own_offset[2][0];
+	    t_own_offset2[2] = m_own_offset[2][1];
+	    t_own_size2[0] = m_own_size[2][2];
+	    t_own_size2[1] = m_own_size[2][0];
+	    t_own_size2[2] = m_own_size[2][1];
+
+	    m_remaps[in_which] = new remap(m_iris,
+					   t_own_offset1,
+					   t_own_size1,
+					   t_own_offset2,
+					   t_own_size2,
+					   2,
+					   1);
+	}
 	break;
 
     case 3:  // ZXY -> XYZ
-	m_remaps[in_which] = new remap(m_iris,
-				       m_own_offset[2],       // from m_grids[2]
-				       m_own_size[2],
-				       m_mesh->m_own_offset,  // to m_mesh
-				       m_mesh->m_own_size, 
-				       2,                     // complex
-				       1);                    // x<-y<-z<-x
+	{
+	    int t_own_offset1[3];
+	    int t_own_size1[3];
+	    int t_own_offset2[3];
+	    int t_own_size2[3];
+
+	    t_own_offset1[0] = m_own_offset[2][1];
+	    t_own_offset1[1] = m_own_offset[2][2];
+	    t_own_offset1[2] = m_own_offset[2][0];
+	    t_own_size1[0] = m_own_size[2][1];
+	    t_own_size1[1] = m_own_size[2][2];
+	    t_own_size1[2] = m_own_size[2][0];
+	    t_own_offset1[0] = m_own_offset[2][1];
+	    t_own_offset1[1] = m_own_offset[2][2];
+	    t_own_offset1[2] = m_own_offset[2][0];
+	    t_own_size1[0] = m_own_size[2][1];
+	    t_own_size1[1] = m_own_size[2][2];
+	    t_own_size1[2] = m_own_size[2][0];
+
+	    t_own_offset2[0] = m_mesh->m_own_offset[1];
+	    t_own_offset2[1] = m_mesh->m_own_offset[2];
+	    t_own_offset2[2] = m_mesh->m_own_offset[0];
+	    t_own_size2[0] = m_mesh->m_own_size[1];
+	    t_own_size2[1] = m_mesh->m_own_size[2];
+	    t_own_size2[2] = m_mesh->m_own_size[0];
+
+	    m_remaps[in_which] = new remap(m_iris,
+					   t_own_offset1,
+					   t_own_size1,
+					   t_own_offset2,
+					   t_own_size2,
+					   2,
+					   1);
+	}
 	break;
     }
 
@@ -280,15 +335,24 @@ iris_real *fft3d::compute_fw(iris_real *src)
     for(int i=0;i<3;i++) {
 	m_remaps[i]->perform(m_workspace, m_workspace, m_scratch);
 
+	m_logger->trace("AFTER REMAP %d", i);
+	dump_workspace();
+
 #ifdef FFT_FFTW3
 	FFTW_(execute_dft)(m_fw_plans[i],
 			   (complex_t *)m_workspace,
 			   (complex_t *)m_workspace);
 #endif
 
+	m_logger->trace("AFTER FFT %d", i);
+	dump_workspace();
+
     }
 
     m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
+
+    m_logger->trace("AFTER FINAL REMAP");
+    dump_workspace();
 
     // now workspace contains 3D FFT of m_mesh->m_rho, in the original DD
     return m_workspace;

@@ -2,32 +2,24 @@
 #include <iris/iris.h>
 #include <iris/mesh.h>
 
-#define M 5
-#define N 5
-#define P 5
+#define M 6
+#define N 8
+#define P 6
 
 using namespace ORG_NCSA_IRIS;
 
 iris_real example1_rhs(iris *iris, int i, int j, int k)
 {
     if(i==0) {
-	return 0.75;
+	return 27.0;
     }
 
     if(i==1) {
-	return 7.5;
-    }
-
-    if(i==2) {
 	return 0.0;
     }
 
-    if(i==3) {
-	return -7.5;
-    }
-
-    if(i==4) {
-	return -0.75;
+    if(i==2) {
+	return -27.0;
     }
 }
 
@@ -62,7 +54,8 @@ main(int argc, char **argv)
     iris *x = new iris(MPI_COMM_WORLD);
     x->set_global_box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
     x->set_mesh_size(M, N, P);
-    x->set_taylor_stencil(2);
+    x->set_taylor_stencil(4);
+    x->set_grid_pref(1, 0, 1);
     x->commit();
     x->set_rhs(example2_rhs);
     x->m_mesh->dump_rho();

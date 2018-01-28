@@ -37,6 +37,8 @@ namespace ORG_NCSA_IRIS {
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 
+#define ROW_MAJOR_OFFSET(x, y, z, ny, nz) ((z) + (nz)*((y) + (ny)*(x)))
+
 }
 
 #endif

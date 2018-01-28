@@ -341,7 +341,7 @@ void mesh::dump_rho()
     for(int i=0;i<m_own_size[0];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[2];k++) {
-		m_logger->trace("RHO[%d][%d][%d] = %.16f", i, j, k,
+		m_logger->trace("RHO[%d][%d][%d] = %.17f", i, j, k,
 				m_rho[i][j][k]);
 	    }
 	    m_logger->trace("");
@@ -355,7 +355,7 @@ void mesh::dump_phi()
     for(int i=0;i<m_own_size[0];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[2];k++) {
-		m_logger->trace("PHI[%d][%d][%d] = %.16f", i, j, k,
+		m_logger->trace("PHI[%d][%d][%d] = %.17f", i, j, k,
 				m_phi[i][j][k]);
 	    }
 	    m_logger->trace("");

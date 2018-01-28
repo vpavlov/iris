@@ -28,41 +28,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include "remap_item.h"
+#include "remap_item_complex_permute2.h"
 
 using namespace ORG_NCSA_IRIS;
 
-remap_item::remap_item()
+remap_item_complex_permute2::remap_item_complex_permute2()
 {
 }
 
-remap_item::~remap_item()
+remap_item_complex_permute2::~remap_item_complex_permute2()
 {
 }
 
-void remap_item::pack(iris_real *src, iris_real *dest)
-{
-    int di = 0;
-    for(int i = 0; i < m_nx; i++) {
-	int plane = i * m_stride_plane;
-	for(int j = 0; j < m_ny; j++) {
-	    int si = plane + j * m_stride_line;
-	    for(int k = 0; k < m_nz; k++) {
-		dest[di++] = src[si++];
-	    }
-	}
-    }
-}
-
-void remap_item::unpack(iris_real *src, iris_real *dest)
+void remap_item_complex_permute2::unpack(iris_real *src, iris_real *dest)
 {
     int si = 0;
     for(int i = 0; i < m_nx; i++) {
-	int plane = i * m_stride_plane;
 	for(int j = 0; j < m_ny; j++) {
-	    int di = plane + j * m_stride_line;
+	    int di = 2*i + j*m_stride_plane;
 	    for(int k = 0; k < m_nz; k++) {
-		dest[di++] = src[si++];
+		dest[di] = src[si++];
+		dest[di+1] = src[si++];
+		di += m_stride_line;
 	    }
 	}
     }
