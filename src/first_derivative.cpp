@@ -27,20 +27,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "stencil.h"
+#include <stdio.h>
+#include <math.h>
+#include "first_derivative.h"
 
 using namespace ORG_NCSA_IRIS;
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
+void first_derivative::trace(const char *in_name)
 {
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
-    }
-}
+    printf("---------------------------------\n");
+    printf("%s: 1D first derivative stencil\n", in_name);
+    printf("---------------------------------\n");
+    printf("Δx:          % g\n", m_h);
+    printf("Accurate to: % g (Δx^%d)\n\n", pow(m_h, m_acc), m_acc);
+    iris_real *data = (iris_real *)m_data;
 
-stencil::~stencil()
-{
+    for(int i=0;i<m_acc;i++) {
+	printf("%s[%+02d] =   % g\n", in_name, m_acc-i, data[i]);
+    }
+
+    printf("%s[ 0] =   % g\n", in_name, 0.0);
+
+    for(int i=m_acc-1;i>=0;i--) {
+	printf("%s[%+02d] =   % g\n", in_name, i-m_acc, -data[i]);
+    }
+    printf("\n");
 }

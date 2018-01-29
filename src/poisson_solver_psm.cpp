@@ -39,8 +39,13 @@
 #include "remap.h"
 #include "fft3d.h"
 #include "domain.h"
+#include "laplacian3D.h"
+#include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
+
+static const iris_real _PI  = 3.14159265358979323846;
+static const iris_real _2PI = 6.28318530717958647692;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
     :poisson_solver(obj), m_ev(NULL), m_fft(NULL)
@@ -73,54 +78,68 @@ void poisson_solver_psm::calculate_eigenvalues()
 
     int norm = m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2];
 
-    int cnt = (m_stencil->m_size_1d - 1) / 2;
+    int hx = m_mesh->m_h[0];
+    int hy = m_mesh->m_h[1];
+    int hz = m_mesh->m_h[2];
+
+    int cnt = m_laplacian->m_acc/2;
+    int cnt1 = cnt+1;
     iris_real *A = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     iris_real *B = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     iris_real *C = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
+    iris_real *Ai = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
+    iris_real *Bi = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
+    iris_real *Ci = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     
     A[0] = B[0] = C[0] = 1.0;
-    
+    Ai[0] = Bi[0] = Ci[0] = 1.0;
+
+    iris_real *data = (iris_real *)m_laplacian->m_data;
+
     memory::destroy_3d(m_ev);
     memory::create_3d(m_ev, nx, ny, nz);
     for(int x = sx; x < ex; x++) {
-	iris_real t = M_PI * x / nx;
-	for(int c = 1; c <= cnt; c++) {
-	    A[c] = 2*cos(2*c*t);
-	}
+    	iris_real t = _2PI * x / nx;
+    	for(int c = 1; c <= cnt; c++) {
+    	    A[c] = 2*cos(c*t);
+    	    Ai[c] = hx*tan(c*t);
+    	}
 	
-	for(int y = sy; y < ey; y++) {
-	    iris_real t = M_PI * y / ny;
-	    for(int c = 1; c <= cnt; c++) {
-		B[c] = 2*cos(2*c*t);
-	    }
+    	for(int y = sy; y < ey; y++) {
+    	    iris_real t = _2PI * y / ny;
+    	    for(int c = 1; c <= cnt; c++) {
+    		B[c] = 2*cos(c*t);
+    		Bi[c] = hy*tan(c*t);
+    	    }
 	    
-	    for(int z = sz; z < ez; z++) {
-		iris_real t = M_PI * z / nz;
-		for(int c = 1; c <= cnt; c++) {
-		    C[c] = 2*cos(2*c*t);
-		}
+    	    for(int z = sz; z < ez; z++) {
+    		iris_real t = _2PI * z / nz;
+    		for(int c = 1; c <= cnt; c++) {
+    		    C[c] = 2*cos(c*t);
+    		    Ci[c] = hz*tan(c*t);
+    		}
 		
-		iris_real val = (iris_real)0.0;
-		for(int i=0;i<=cnt;i++) {
-		    int xl = cnt - i;
-		    for(int j=0;j<=cnt;j++) {
-			int yl = cnt - j;
-			for(int k=0;k<=cnt;k++) {
-			    int zl = cnt - k;
-			    iris_real sc = m_stencil->m_coeff[i][j][k];
-			    iris_real tt = sc*A[xl]*B[yl]*C[zl];
-			    val += tt;
-			}
-		    }
-		}
+    		iris_real val = (iris_real)0.0;
+    		for(int i=0;i<=cnt;i++) {
+    		    int xl = cnt - i;
+    		    for(int j=0;j<=cnt;j++) {
+    			int yl = cnt - j;
+    			for(int k=0;k<=cnt;k++) {
+    			    int zl = cnt - k;
+    			    iris_real sc = data[ROW_MAJOR_OFFSET(i, j, k, cnt1, cnt1)];
+    			    iris_real tt = sc*A[xl]*B[yl]*C[zl];
+    			    val += tt;
+    			}
+    		    }
+    		}
 		
-		if(val == 0.0) {
-		    val = std::numeric_limits<iris_real>::min();
-		}
+    		if(val == 0.0) {
+    		    val = std::numeric_limits<iris_real>::min();
+    		}
 		
-		m_ev[x-sx][y-sy][z-sz] = val * norm;
-	    }
-	}
+    		m_ev[x-sx][y-sy][z-sz] = val * norm;
+    	    }
+    	}
     }
     
     m_logger->trace("Pseudo-spectral method: Laplacian eigenvalues calculated");
@@ -128,7 +147,13 @@ void poisson_solver_psm::calculate_eigenvalues()
 
 void poisson_solver_psm::commit()
 {
-    if(m_dirty) {
+    bool dirty = m_dirty;
+    poisson_solver::commit();
+    if(dirty) {
+	m_laplacian->set_hx(m_mesh->m_h[0]);
+	m_laplacian->set_hy(m_mesh->m_h[1]);
+	m_laplacian->set_hz(m_mesh->m_h[2]);
+
 	calculate_eigenvalues();
 
 	if(m_fft != NULL) { delete m_fft; }

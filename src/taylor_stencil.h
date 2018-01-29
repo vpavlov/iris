@@ -61,7 +61,6 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 
     public:
-	iris_real m_h2;  // mesh's hx squared
 	int m_order;     // Accuracy order, e.g. 2nd, 4th, 6th, etc.
     };
 }

@@ -40,7 +40,7 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
-#include "taylor_stencil.h"
+//#include "taylor_stencil.h"
 #include "poisson_solver_psm.h"
 
 using namespace ORG_NCSA_IRIS;
@@ -54,15 +54,15 @@ using namespace ORG_NCSA_IRIS;
     }
 
 iris::iris(MPI_Comm in_uber_comm)
-    :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-     m_remote_leader(0), m_client_size(0), m_server_size(0)
+    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
+      m_remote_leader(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
 iris::iris(MPI_Comm in_uber_comm, int in_leader)
-    :m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-     m_remote_leader(in_leader), m_client_size(0), m_server_size(0)
+    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
+      m_remote_leader(in_leader)
 {
     init(in_uber_comm, in_uber_comm);
 }
@@ -70,8 +70,9 @@ iris::iris(MPI_Comm in_uber_comm, int in_leader)
 iris::iris(int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm,
 	   MPI_Comm in_uber_comm, int in_remote_leader)
-    :m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader),
-     m_client_size(in_client_size), m_server_size(in_server_size)
+    : m_client_size(in_client_size), m_server_size(in_server_size),
+      m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+     
 {
     init(in_local_comm, in_uber_comm);
 }
@@ -79,21 +80,18 @@ iris::iris(int in_client_size, int in_server_size,
 iris::iris(int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm, int in_local_leader,
 	   MPI_Comm in_uber_comm, int in_remote_leader)
-    :m_role(in_role), m_local_leader(in_local_leader),
-     m_remote_leader(in_remote_leader), m_client_size(in_client_size),
-     m_server_size(in_server_size)
+    : m_client_size(in_client_size), m_server_size(in_server_size),
+      m_role(in_role), m_local_leader(in_local_leader),
+      m_remote_leader(in_remote_leader)
 {
     init(in_local_comm, in_uber_comm);
 }
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-    m_solver = NULL;
-    m_stencil = NULL;
-    m_quit = false;
-    m_inter_comm = NULL;
-    m_local_comm = new comm_rec(this, in_local_comm);
     m_uber_comm = new comm_rec(this, in_uber_comm);
+    m_local_comm = new comm_rec(this, in_local_comm);
+    m_inter_comm = NULL;
 
     if(!is_both()) {
 	// For the intercomm to be created, the two groups must be disjoint, and
@@ -121,19 +119,21 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     m_logger = new logger(this);
 
-    m_mesh = NULL;
     m_domain = NULL;
-    m_chass = NULL;
     m_proc_grid = NULL;
+    m_mesh = NULL;
+    m_chass = NULL;
+    m_solver = NULL;
 
     if(is_server()) {
 	m_domain = new domain(this);
+	m_proc_grid = new proc_grid(this);
 	m_mesh = new mesh(this);
 	m_chass = new charge_assigner(this);
-	m_proc_grid = new proc_grid(this);
     }
 
-    m_state = IRIS_STATE_INITIALIZED;
+    m_quit = false;
+
     m_logger->info("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
@@ -142,18 +142,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris::~iris()
 {
-    if(m_stencil != NULL) {
-	delete m_stencil;
-    }
-
-    if(m_solver != NULL) {
-	delete m_solver;
-    }
-
-    if(m_proc_grid != NULL) {
-	delete m_proc_grid;
-    }
-
     if(m_chass != NULL) {
 	delete m_chass;
     }
@@ -162,19 +150,22 @@ iris::~iris()
 	delete m_mesh;
     }
 
+    if(m_proc_grid != NULL) {
+	delete m_proc_grid;
+    }
+
     if(m_domain != NULL) {
 	delete m_domain;
     }
+
+    m_logger->info("Shutting down node");  // before m_uber_comm
+    delete m_logger;
 
     if(m_inter_comm != NULL) {
 	delete m_inter_comm;
     }
 
     delete m_local_comm;
-
-    m_logger->info("Shutting down node");  // before m_uber_comm
-    delete m_logger;
-
     delete m_uber_comm;
 }
 
@@ -207,45 +198,39 @@ void iris::set_order(int in_order)
 
 void iris::set_grid_pref(int x, int y, int z)
 {
-    m_proc_grid->set_pref(x, y, z);
+    if(is_server()) {
+	m_proc_grid->set_pref(x, y, z);
+    }
 }
 
 void iris::set_poisson_solver(int in_solver)
 {
     if(m_solver != NULL) {
-	delete m_solver;
+       delete m_solver;
     }
 
     switch(in_solver) {
     case IRIS_POISSON_SOLVER_PSM:
-	m_solver = new poisson_solver_psm(this);
-	break;
+       m_solver = new poisson_solver_psm(this);
+       break;
 
     default:
-	throw std::logic_error("Unknown poisson solver selected!");
+       throw std::logic_error("Unknown poisson solver selected!");
     }
 }
 
-void iris::set_taylor_stencil(int in_order)
+void iris::set_laplacian(int in_style, int in_order)
 {
-    if(in_order < 2 || in_order > 12 || in_order % 2) {
-	throw std::logic_error("Taylor stencil only supports even orders between 2 and 12!");
+    if(m_solver == NULL) {
+	set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
     }
 
-    if(m_stencil != NULL) {
-	delete m_stencil;
-    }
-    m_stencil = new taylor_stencil(this, in_order);
+    m_solver->set_laplacian(in_style, in_order);
 }
 
 void iris::commit()
 {
     if(is_server()) {
-	// select defaults
-	if(m_stencil == NULL) {
-	    set_taylor_stencil(2);
-	}
-
 	if(m_solver == NULL) {
 	    set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
 	}
@@ -256,11 +241,8 @@ void iris::commit()
 	m_proc_grid->commit();  // does not depend on anything
 	m_domain->commit();     // depends on m_proc_grid
 	m_mesh->commit();       // depends on m_proc_grid
-	m_stencil->commit();    // depends on m_mesh
-	m_solver->commit();     // depends on m_stencil
+	m_solver->commit();     // depends on m_mesh
     }
-
-    m_state = IRIS_STATE_COMMITED;
 }
 
 
@@ -477,69 +459,6 @@ void iris::quit()
 
     stos_process_pending(pending, win);
 }
-
-
-
-
-
-
-
-// event_t iris::poke_barrier_event(bool &out_has_event)
-// {
-//     event_t ev;
-
-//     out_has_event = false;
-//     if(__barrier_posted) {
-// 	int has_event;
-// 	MPI_Status status;
-// 	MPI_Test(&__barrier_req, &has_event, &status);
-// 	if(has_event) {
-// 	    MPI_Status status;
-// 	    MPI_Wait(&__barrier_req, MPI_STATUS_IGNORE);
-// 	    //MPI_Barrier(m_proc_grid->iris_comm);
-// 	    m_logger->trace("----------");
-
-// 	    //ev.comm = m_proc_grid->iris_comm;
-// 	    ev.peer = -1;
-// 	    ev.code = IRIS_EVENT_BARRIER;
-// 	    ev.size = 0;
-// 	    ev.data = NULL;
-// 	    out_has_event = true;
-// 	    __barrier_posted = false;
-// 	}
-//     }
-//     return ev;
-// }
-
-
-// void iris::post_barrier()
-// {
-//     //MPI_Ibarrier(m_proc_grid->iris_comm, &__barrier_req);
-//     __barrier_posted = true;
-// }
-
-// void iris::__handle_atoms_eof(event_t event)
-// {
-//     if(state != IRIS_STATE_WAITING_FOR_ATOMS) {
-// 	throw std::logic_error("Receiving atoms EOF while in un-configured state!");
-//     }
-
-//     m_logger->trace("All atoms received");
-//     post_barrier();
-// }
-
-// void iris::__handle_barrier(event_t ev)
-// {
-//     if(state == IRIS_STATE_WAITING_FOR_ATOMS) {
-// 	//m_chass->exchange_halo();
-
-// 	// char fname[256];
-// 	// sprintf(fname, "NaCl-rho-%d-%d-%d-%d", m_proc_grid->uber_size, omp_get_num_threads(), m_proc_grid->uber_rank, omp_get_thread_num());
-// 	// m_mesh->dump_rho(fname);
-
-// 	set_state(IRIS_STATE_HAS_RHO);
-//     }
-// }
 
 void iris::handle_charges(event_t *event)
 {

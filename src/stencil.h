@@ -30,24 +30,35 @@
 #ifndef __IRIS_STENCIL_H__
 #define __IRIS_STENCIL_H__
 
-#include "state_accessor.h"
-
 namespace ORG_NCSA_IRIS {
-
-    class stencil : protected state_accessor {
+    //
+    // Representation of a stencil used to approximate a derivative operator.
+    // 
+    // A stencil is a geometric arrangement of a nodal group that relate to the
+    // point of interest by using a numerical approximation routine.
+    // 
+    // The coefficients of the stencil in the different nodes are stored in the
+    // array, m_data. The class doesn't make any assumptions on the
+    // dimensionality m_dim of the stencil, it can be 1D, 2D, etc. This is left
+    // to the discretion of the derived classes. The accuracy order of the
+    // stencil (m_order) is a characteristic which the derived classes may
+    // use to calculate the amount of data necessary. 
+    //
+    class stencil {
 
     public:
-	stencil(class iris *obj);
+	stencil(int in_dim, int in_order, int in_acc);
 	~stencil();
 
 	virtual void commit() = 0;
-
-	void trace();
+	virtual void trace(const char *in_name) = 0;
 
     public:
-	bool m_dirty;          // wether to recalculate on commit
-	int m_size_1d;         // size is 1 dir (total size = m_size_1d^3)
-	iris_real ***m_coeff;  // Stencil values, a 3D array
+	bool m_dirty;  // wether to recalculate on commit
+	int m_dim;     // dimensionality (e.g. 1D, 2D, 3D)
+	int m_order;   // first, second, third derivative
+	int m_acc;     // accuracy order in h
+	void *m_data;  // coefficients of the stencil
     };
 }
 

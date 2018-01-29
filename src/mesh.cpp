@@ -39,7 +39,7 @@
 #include "charge_assigner.h"
 #include "comm_rec.h"
 #include "tags.h"
-#include "stencil.h"
+#include "poisson_solver.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -126,8 +126,8 @@ void mesh::commit()
 	m_halo = new std::map<std::tuple<int, int, int>, iris_real>[m_iris->m_server_size];
 
 	// other configuration that depends on ours must be reset
-	if(m_stencil != NULL) {
-	    m_stencil->m_dirty = true;
+	if(m_solver != NULL) {
+	    m_solver->m_dirty = true;
 	}
 
 	m_dirty = false;

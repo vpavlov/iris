@@ -58,7 +58,6 @@ namespace ORG_NCSA_IRIS {
     public:
 	state_accessor(iris *obj) :
 	    m_iris(obj),
-	    m_queue(obj->m_queue),
 	    m_uber_comm(obj->m_uber_comm),
 	    m_local_comm(obj->m_local_comm),
 	    m_inter_comm(obj->m_inter_comm),
@@ -68,7 +67,6 @@ namespace ORG_NCSA_IRIS {
 	    m_proc_grid(obj->m_proc_grid),
 	    m_mesh(obj->m_mesh),
 	    m_chass(obj->m_chass),
-	    m_stencil(obj->m_stencil),
 	    m_solver(obj->m_solver)
 	{};
 
@@ -76,7 +74,6 @@ namespace ORG_NCSA_IRIS {
 
     protected:
 	iris *m_iris;
-	event_queue *&m_queue;
 	comm_rec *&m_uber_comm;
 	comm_rec *&m_local_comm;
 	comm_rec *&m_inter_comm;
@@ -85,7 +82,6 @@ namespace ORG_NCSA_IRIS {
 	proc_grid *&m_proc_grid;
 	mesh *&m_mesh;
 	charge_assigner *&m_chass;
-	stencil *&m_stencil;
 	poisson_solver *&m_solver;
     };
 

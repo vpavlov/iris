@@ -27,20 +27,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "stencil.h"
+#ifndef __IRIS_LAPLACIAN3D_TAYLOR_H__
+#define __IRIS_LAPLACIAN3D_TAYLOR_H__
 
-using namespace ORG_NCSA_IRIS;
+#include "laplacian3D.h"
+#include "real.h"
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
-{
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
-    }
+namespace ORG_NCSA_IRIS {
+
+    //
+    // A symmetrical stencil that approximates a 3D Laplacian:
+    //
+    // d2/dx^2 + d2/dy^2 + d2/dz^2
+    //
+    // using Taylor expansion
+    class laplacian3D_taylor : public laplacian3D {
+	
+    public:
+	laplacian3D_taylor(int in_acc);
+	laplacian3D_taylor(int in_acc,
+			   iris_real in_hx, iris_real in_hy, iris_real in_hz);
+	~laplacian3D_taylor();
+
+	void commit();
+    };
+
 }
 
-stencil::~stencil()
-{
-}
+#endif

@@ -39,14 +39,19 @@ namespace ORG_NCSA_IRIS {
     class poisson_solver : protected state_accessor {
 
     public:
-	poisson_solver(class iris *obj) : state_accessor(obj), m_dirty(true) {};
-	~poisson_solver() {};
+	poisson_solver(class iris *obj);
+	~poisson_solver();
 
-	virtual void commit() = 0;
+	void set_laplacian(int in_style, int in_order);
+
+	virtual void commit();
 	virtual void solve() = 0;
 
     public:
 	bool m_dirty;  // wether to recalculate on commit
+	int m_style;   // which approximation to use (Taylor or Pade)
+	int m_order;   // accuracy order of the Laplacian
+	class laplacian3D *m_laplacian;  // the Laplacian stencil
     };
 }
 

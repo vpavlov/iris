@@ -27,20 +27,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
+#ifndef __IRIS_FIRST_DERIVATIVE_H__
+#define __IRIS_FIRST_DERIVATIVE_H__
+
 #include "stencil.h"
+#include "real.h"
 
-using namespace ORG_NCSA_IRIS;
+namespace ORG_NCSA_IRIS {
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
-{
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
-    }
+    //
+    // A symmetrical stencil that approximates a first derivative
+    // (e.g. d/dx, d/dy, etc.)
+    //
+    class first_derivative : public stencil {
+	
+    public:
+	first_derivative(int in_acc) : stencil(1, 1, in_acc) {};
+	~first_derivative() {};
+
+	void set_h(iris_real in_h) { m_h = in_h; m_dirty = true; }
+
+	virtual void commit() = 0;
+	void trace(const char *in_name);
+
+    protected:
+	iris_real m_h;  // Δx
+    };
+
 }
 
-stencil::~stencil()
-{
-}
+#endif

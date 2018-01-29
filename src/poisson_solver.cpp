@@ -27,20 +27,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "stencil.h"
+#include "poisson_solver.h"
+#include "laplacian3D_taylor.h"
 
 using namespace ORG_NCSA_IRIS;
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
+poisson_solver::poisson_solver(class iris *obj)
+    : state_accessor(obj), m_dirty(true), m_style(0), m_order(0),
+      m_laplacian(NULL)
 {
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
+};
+
+poisson_solver::~poisson_solver()
+{
+    if(m_laplacian != NULL) {
+	delete m_laplacian;
     }
+};
+
+void poisson_solver::set_laplacian(int in_style, int in_order)
+{
+    if(in_style == m_style && in_order == m_order) {
+	return;
+    }
+
+    m_style = in_style;
+    m_order = in_order;
+    m_dirty = true;
 }
 
-stencil::~stencil()
+void poisson_solver::commit()
 {
+    // set defaults (if not configured)
+    if(m_style == 0 || m_order == 0) {
+	set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 2);
+    }
+
+    if(!m_dirty) {
+	return;
+    }
+
+    if(m_laplacian != NULL) {
+	delete m_laplacian;
+    }
+
+    switch(m_style) {
+    case IRIS_LAPL_STYLE_TAYLOR:
+	m_laplacian = new laplacian3D_taylor(m_order);
+	break;
+
+    default:
+	throw std::logic_error("Unknown laplacian style selected!");
+    }
+
+    m_dirty = false;
 }

@@ -27,20 +27,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "stencil.h"
+#include <stdio.h>
+#include <math.h>
+#include "laplacian3D.h"
+#include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
+void laplacian3D::trace(const char *in_name)
 {
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
-    }
-}
+    printf("---------------------------------\n");
+    printf("%s: 3D Laplacian stencil\n", in_name);
+    printf("---------------------------------\n");
+    printf("Δx:          % g\n", m_hx);
+    printf("Δy:          % g\n", m_hy);
+    printf("Δz:          % g\n", m_hz);
+    printf("Accurate to: % g (Δx^%d)\n\n", pow(m_hx, m_acc), m_acc);
+    iris_real *data = (iris_real *)m_data;
 
-stencil::~stencil()
-{
+    int cnt = m_acc/2 + 1;
+    int all = m_acc + 1;
+
+    for(int i=0;i<all;i++) {
+	for(int j=0;j<all;j++) {
+	    for(int k=0;k<all;k++) {
+		int ii = (i < cnt) ? i : (all-1-i);
+		int jj = (j < cnt) ? j : (all-1-j);
+		int kk = (k < cnt) ? k : (all-1-k);
+		
+		if(data[ROW_MAJOR_OFFSET(ii, jj, kk, cnt, cnt)] != 0.0) {
+		    printf("%s[%+02d,%+02d,%+02d] =   % g\n", in_name,
+			   cnt-i-1, cnt-j-1, cnt-k-1,
+			   data[ROW_MAJOR_OFFSET(ii, jj, kk, cnt, cnt)]);
+		}
+	    }
+	}
+    }
 }

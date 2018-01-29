@@ -27,20 +27,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
+#ifndef __IRIS_LAPLACIAN3D_H__
+#define __IRIS_LAPLACIAN3D_H__
+
 #include "stencil.h"
+#include "real.h"
 
-using namespace ORG_NCSA_IRIS;
+namespace ORG_NCSA_IRIS {
 
-stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
-{
-    if(m_acc % m_order) {
-	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");
-    }
+    //
+    // A symmetrical stencil that approximates a 3D Laplacian:
+    // d2/dx^2 + d2/dy^2 + d2/dz^2
+    //
+    class laplacian3D : public stencil {
+	
+    public:
+	laplacian3D(int in_acc) : stencil(3, 2, in_acc) {};
+	~laplacian3D() {};
+
+	void set_hx(iris_real in_hx) { m_hx = in_hx; m_dirty = true; }
+	void set_hy(iris_real in_hy) { m_hy = in_hy; m_dirty = true; }
+	void set_hz(iris_real in_hz) { m_hz = in_hz; m_dirty = true; }
+
+	virtual void commit() = 0;
+	void trace(const char *in_name);
+
+    protected:
+	iris_real m_hx;  // Δx
+	iris_real m_hy;  // Δy
+	iris_real m_hz;  // Δz
+    };
+
 }
 
-stencil::~stencil()
-{
-}
+#endif

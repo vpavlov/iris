@@ -44,8 +44,7 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
 
-#define IRIS_STATE_INITIALIZED  1
-#define IRIS_STATE_COMMITED     2
+#define IRIS_LAPL_STYLE_TAYLOR 1
 
     // type of function called to set pieces of the right-hand side
     typedef iris_real (*rhs_fn_t)(class iris *obj, int i, int j, int k);
@@ -99,13 +98,16 @@ namespace ORG_NCSA_IRIS {
 
 	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
 	void set_grid_pref(int x, int y, int z);
-
-	// Sets the stencil of the calculation to a Taylor-derived approximation
-	// accurate to order in_order.
-	void set_taylor_stencil(int in_order);
-
+	
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
+
+	// Set the parameters of the Laplacian
+	// in_style:
+	//   - IRIS_LAPL_STYLE_TAYLOR - use Taylor approximation stencils
+	//   - IRIS_LAPL_STYLE_PADE   - use Pade approximation stencils
+	// in_order: 2, 4, 6, 8, 10 or 12 (accuracy order of the stencil)
+	void set_laplacian(int in_style, int in_order);
 
 	// Set the right hand side directly (skips all charge assignment and
 	// whatnot, usful for testing)
@@ -155,19 +157,16 @@ namespace ORG_NCSA_IRIS {
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
-	int m_state;                   // State of the solver (FSM)
 
-	class event_queue *m_queue;       // IRIS event queue
-	class comm_rec    *m_uber_comm;   // to facilitate comm with world
-	class comm_rec    *m_local_comm;  // ...within group (client OR server)
-	class comm_rec    *m_inter_comm;  // ...between groups
-	class logger      *m_logger;      // Logger
-	class domain      *m_domain;      // Domain of the simulation
-	class proc_grid   *m_proc_grid;   // MPI Comm related stuff
-	class mesh        *m_mesh;        // Computational mesh
-	class charge_assigner *m_chass;   // Charge assignmen machinery
-	class stencil        *m_stencil;  // Which stencil to use
-	class poisson_solver *m_solver;   // Which solver to use
+	class comm_rec        *m_uber_comm;   // to facilitate comm with world
+	class comm_rec        *m_local_comm;  // ...within group (client/server)
+	class comm_rec        *m_inter_comm;  // ...between groups
+	class logger          *m_logger;      // Logger
+	class domain          *m_domain;      // Domain of the simulation
+	class proc_grid       *m_proc_grid;   // MPI Comm related stuff
+	class mesh            *m_mesh;        // Computational mesh
+	class charge_assigner *m_chass;       // Charge assignmen machinery
+	class poisson_solver  *m_solver;      // Which solver to use
 
     private:
 	volatile bool m_quit;  // quit the main loop
