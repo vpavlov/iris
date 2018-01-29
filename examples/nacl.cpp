@@ -1,19 +1,7 @@
-#include <new>
 #include <vector>
-#include <exception>
-#include <stdio.h>
-#include <mpi.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <iris/real.h>
-#include <iris/memory.h>
 #include <iris/iris.h>
-#include <iris/domain.h>
-#include <iris/utils.h>
+#include <iris/memory.h>
 #include <iris/logger.h>
-#include <iris/comm_rec.h>
-#include <iris/tags.h>
 #include <iris/mesh.h>
 
 #define NSTEPS 1
@@ -383,7 +371,8 @@ main(int argc, char **argv)
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(128, 128, 128);
-    x->set_order(3);
+    x->set_order(2);
+    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 2);
     x->commit();
 
 
@@ -426,9 +415,7 @@ main(int argc, char **argv)
 	x->run();
     }
 
-    if(x->is_server()) {
-	x->m_mesh->dump_rho2((char *)"constant");
-    }
+    x->m_mesh->dump_rho("nacl-rho");
 
     // Cleanup
     memory::wfree(local_boxes);

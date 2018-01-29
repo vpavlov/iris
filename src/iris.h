@@ -132,6 +132,7 @@ namespace ORG_NCSA_IRIS {
 	void broadcast_charges(int in_peer, iris_real *in_charges, int in_count);
 	void commit_charges();
 	void solve();
+
 	void quit();
 
 

@@ -37,15 +37,16 @@
 #include "grid.h"
 #include "comm_rec.h"
 #include "remap.h"
-#include "fft3d.h"
+#include "fft3D.h"
 #include "domain.h"
 #include "laplacian3D.h"
 #include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
 
-static const iris_real _PI  = 3.14159265358979323846;
-static const iris_real _2PI = 6.28318530717958647692;
+static const iris_real _PI  =  3.141592653589793;
+static const iris_real _2PI =  6.283185307179586;
+static const iris_real _4PI = 12.566370614359172;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
     :poisson_solver(obj), m_ev(NULL), m_fft(NULL)
@@ -87,12 +88,8 @@ void poisson_solver_psm::calculate_eigenvalues()
     iris_real *A = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     iris_real *B = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     iris_real *C = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
-    iris_real *Ai = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
-    iris_real *Bi = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
-    iris_real *Ci = (iris_real *)memory::wmalloc((cnt+1)*sizeof(iris_real));
     
     A[0] = B[0] = C[0] = 1.0;
-    Ai[0] = Bi[0] = Ci[0] = 1.0;
 
     iris_real *data = (iris_real *)m_laplacian->m_data;
 
@@ -102,21 +99,18 @@ void poisson_solver_psm::calculate_eigenvalues()
     	iris_real t = _2PI * x / nx;
     	for(int c = 1; c <= cnt; c++) {
     	    A[c] = 2*cos(c*t);
-    	    Ai[c] = hx*tan(c*t);
     	}
 	
     	for(int y = sy; y < ey; y++) {
     	    iris_real t = _2PI * y / ny;
     	    for(int c = 1; c <= cnt; c++) {
     		B[c] = 2*cos(c*t);
-    		Bi[c] = hy*tan(c*t);
     	    }
 	    
     	    for(int z = sz; z < ez; z++) {
     		iris_real t = _2PI * z / nz;
     		for(int c = 1; c <= cnt; c++) {
     		    C[c] = 2*cos(c*t);
-    		    Ci[c] = hz*tan(c*t);
     		}
 		
     		iris_real val = (iris_real)0.0;
@@ -153,6 +147,7 @@ void poisson_solver_psm::commit()
 	m_laplacian->set_hx(m_mesh->m_h[0]);
 	m_laplacian->set_hy(m_mesh->m_h[1]);
 	m_laplacian->set_hz(m_mesh->m_h[2]);
+	m_laplacian->commit();
 
 	calculate_eigenvalues();
 
@@ -187,6 +182,10 @@ void poisson_solver_psm::divide_by_eigenvalues(iris_real *krho)
 	    }
 	}
     }
+
+    // make sure that the first coeff. is not infinity (e.g. not entirely
+    // perfect neutral box leads to this).
+    krho[0] = krho[1] = 0.0;
 }
 
 void poisson_solver_psm::solve()

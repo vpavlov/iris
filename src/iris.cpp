@@ -514,4 +514,25 @@ void iris::set_rhs(rhs_fn_t fn)
 void iris::solve()
 {
     m_solver->solve();
+
+    iris_real sum = 0.0;
+    iris_real dv = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
+    for(int i=0;i<m_mesh->m_own_size[0];i++) {
+	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+		iris_real tt = (m_mesh->m_phi[i][j][k] * m_mesh->m_rho[i][j][k] * dv);
+		sum += tt;
+	    }
+	}
+    }
+    sum *= 0.5;
+    m_logger->info("Partial Hartree energy: %g", sum);
+
+    iris_real hartree;
+    MPI_Reduce(&sum, &hartree, 1, IRIS_REAL, MPI_SUM, m_local_leader,
+	       m_local_comm->m_comm);
+    if(is_leader()) {
+	m_logger->info("Full Hartree energy: %g", hartree);
+    }
 }
+

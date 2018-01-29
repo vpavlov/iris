@@ -29,7 +29,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include "iris.h"
-#include "fft3d.h"
+#include "fft3D.h"
 #include "mesh.h"
 #include "logger.h"
 #include "grid.h"
@@ -38,6 +38,8 @@
 #include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
+
+static const iris_real _4PI = 12.566370614359172;
 
 fft3d::fft3d(class iris *obj)
     : state_accessor(obj), m_grids { NULL, NULL, NULL },
@@ -328,15 +330,15 @@ iris_real *fft3d::compute_fw(iris_real *src)
     // get data from the mesh
     int j = 0;
     for(int i=0;i<m_count;i++) {
-	m_workspace[j++] = src[i];
+	m_workspace[j++] = -_4PI * src[i];  // Gaussian units
 	m_workspace[j++] = 0.0;
     }
 
     for(int i=0;i<3;i++) {
 	m_remaps[i]->perform(m_workspace, m_workspace, m_scratch);
 
-	m_logger->trace("AFTER REMAP %d", i);
-	dump_workspace();
+	// m_logger->trace("AFTER REMAP %d", i);
+	// dump_workspace();
 
 #ifdef FFT_FFTW3
 	FFTW_(execute_dft)(m_fw_plans[i],
@@ -344,15 +346,15 @@ iris_real *fft3d::compute_fw(iris_real *src)
 			   (complex_t *)m_workspace);
 #endif
 
-	m_logger->trace("AFTER FFT %d", i);
-	dump_workspace();
+	// m_logger->trace("AFTER FFT %d", i);
+	// dump_workspace();
 
     }
 
     m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
 
-    m_logger->trace("AFTER FINAL REMAP");
-    dump_workspace();
+    // m_logger->trace("AFTER FINAL REMAP");
+    // dump_workspace();
 
     // now workspace contains 3D FFT of m_mesh->m_rho, in the original DD
     return m_workspace;

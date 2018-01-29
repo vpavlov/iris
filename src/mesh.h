@@ -60,10 +60,16 @@ namespace ORG_NCSA_IRIS {
 	void assign_charges(iris_real *in_charges, int ncharges);
 	void exchange_halo();
 	void add_halo_items(halo_item_t *in_items, int in_nitems);
+
 	void dump_rho(char *in_fname);
+	void dump_phi(char *in_fname);
+
 	void dump_rho2(char *in_fname);
+	void dump_phi2(char *in_fname);
+
 	void dump_rho();
 	void dump_phi();
+
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
 
