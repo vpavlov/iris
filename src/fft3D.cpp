@@ -333,11 +333,11 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
     for(int i=0;i<3;i++) {
 	m_remaps[i]->perform(dest, dest, m_scratch);
 
-	m_logger->trace("AFTER REMAP %d", i);
-	for(int j=0;j<m_count;j++) {
-	    m_logger->trace("FFT[%d] = %.16f + j*%.16f",
-			    j, dest[j*2+0], dest[j*2+1]);
-	}
+	// m_logger->trace("AFTER REMAP %d", i);
+	// for(int j=0;j<m_count;j++) {
+	//     m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+	// 		    j, dest[j*2+0], dest[j*2+1]);
+	// }
 
 
 #ifdef FFT_FFTW3
@@ -346,21 +346,21 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 			   (complex_t *)dest);
 #endif
 
-	m_logger->trace("AFTER FFT %d", i);
-	for(int j=0;j<m_count;j++) {
-	    m_logger->trace("FFT[%d] = %.16f + j*%.16f",
-			    j, dest[j*2+0], dest[j*2+1]);
-	}
+	// m_logger->trace("AFTER FFT %d", i);
+	// for(int j=0;j<m_count;j++) {
+	//     m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+	// 		    j, dest[j*2+0], dest[j*2+1]);
+	// }
 
     }
 
     m_remaps[3]->perform(dest, dest, m_scratch);
 
-    m_logger->trace("AFTER FINAL REMAP");
-    for(int j=0;j<m_count;j++) {
-	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
-			j, dest[j*2+0], dest[j*2+1]);
-    }
+    // m_logger->trace("AFTER FINAL REMAP");
+    // for(int j=0;j<m_count;j++) {
+    // 	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+    // 			j, dest[j*2+0], dest[j*2+1]);
+    // }
 
     // now workspace contains 3D FFT of m_mesh->m_rho, in the original DD
     return dest;

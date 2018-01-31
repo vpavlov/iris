@@ -477,7 +477,7 @@ void iris::handle_charges(event_t *event)
     m_mesh->assign_charges((iris_real *)event->data, natoms);
     m_logger->trace("Charge assignment from %d done", event->peer);
     
-    if(event->comm == m_inter_comm->m_comm) {
+    if(!is_client()) {
 	MPI_Request req;
 	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK, event->comm, &req);
 	MPI_Request_free(&req);

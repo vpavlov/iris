@@ -9,9 +9,9 @@
 
 #define NSTEPS 1
 
-#define M 16
-#define N 16
-#define P 16
+#define M 128
+#define N 128
+#define P 128
 
 using namespace ORG_NCSA_IRIS;
 
@@ -378,7 +378,7 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	x->m_mesh->dump_rho();
+	//x->m_mesh->dump_rho();
 	// x->m_mesh->dump_phi();
     }
 
