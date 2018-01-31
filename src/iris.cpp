@@ -409,6 +409,9 @@ void iris::broadcast_charges(int in_peer, iris_real *in_charges, int in_count)
 	send_event(comm, in_peer, IRIS_TAG_CHARGES,
 		   4*in_count*sizeof(iris_real),
 		   in_charges, &req, win);
+	if(!is_server()) {
+	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
+	}
     }
 
     stos_process_pending(pending, win);
@@ -470,10 +473,14 @@ void iris::handle_charges(event_t *event)
     }
 
     int natoms = event->size / unit;
-    if(natoms != 0) {
-	m_logger->trace("Received %d atoms from %d: initiating charge assignment", natoms, event->peer);
-	m_mesh->assign_charges((iris_real *)event->data, natoms);
-	m_logger->trace("Charge assignment from %d done", event->peer);
+    m_logger->trace("Received %d atoms from %d: initiating charge assignment", natoms, event->peer);
+    m_mesh->assign_charges((iris_real *)event->data, natoms);
+    m_logger->trace("Charge assignment from %d done", event->peer);
+    
+    if(event->comm == m_inter_comm->m_comm) {
+	MPI_Request req;
+	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK, event->comm, &req);
+	MPI_Request_free(&req);
     }
 }
 

@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
 #include <vector>
 #include <iris/iris.h>
 #include <iris/memory.h>
@@ -7,9 +9,9 @@
 
 #define NSTEPS 1
 
-#define M 128
-#define N 128
-#define P 128
+#define M 16
+#define N 16
+#define P 16
 
 using namespace ORG_NCSA_IRIS;
 
@@ -217,57 +219,11 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 	    }
 	}
 
-	in_iris->broadcast_charges(i, sendbuf, idx/4);
-	
+	in_iris->broadcast_charges(i, sendbuf, idx/4);	
     }
 
     memory::wfree(sendbuf);
 }
-
-// void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
-// 		  box_t<iris_real> *in_local_boxes)
-// {
-//     int       *counts  = (int *)memory::wmalloc(in_iris->m_server_size * sizeof(int));
-//     iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 4 * sizeof(iris_real));
-//     int idx = 0;
-
-//     for(int j=0;j<in_iris->m_server_size;j++) {
-// 	counts[j] = 0;
-//     }
-
-//     for(int i=0;i<in_my_count;i++) {
-// 	iris_real x = in_my_charges[i][0];
-// 	iris_real y = in_my_charges[i][1];
-// 	iris_real z = in_my_charges[i][2];
-// 	iris_real q = in_my_charges[i][3];
-// 	for(int j=0;j<in_iris->m_server_size;j++) {
-// 	    iris_real x0 = in_local_boxes[j].xlo;
-// 	    iris_real y0 = in_local_boxes[j].ylo;
-// 	    iris_real z0 = in_local_boxes[j].zlo;
-// 	    iris_real x1 = in_local_boxes[j].xhi;
-// 	    iris_real y1 = in_local_boxes[j].yhi;
-// 	    iris_real z1 = in_local_boxes[j].zhi;
-
-// 	    if(x >= x0 && x < x1 &&
-// 	       y >= y0 && y < y1 &&
-// 	       z >= z0 && z < z1)
-// 	    {
-// 		sendbuf[idx++] = x;
-// 		sendbuf[idx++] = y;
-// 		sendbuf[idx++] = z;
-// 		sendbuf[idx++] = q;
-// 		counts[j]++;
-// 		break;
-// 	    }
-// 	}
-//     }
-
-//     in_iris->broadcast_charges(counts, sendbuf);
-
-//     memory::wfree(sendbuf);
-//     memory::wfree(counts);
-// }
-
 
 main(int argc, char **argv)
 {
@@ -378,6 +334,7 @@ main(int argc, char **argv)
     x->set_mesh_size(M, N, P);
     x->set_order(2);
     x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
+    x->set_rho_multiplier(1.0);
     x->commit();
 
 
@@ -421,7 +378,7 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	// x->m_mesh->dump_rho();
+	x->m_mesh->dump_rho();
 	// x->m_mesh->dump_phi();
     }
 

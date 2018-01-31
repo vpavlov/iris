@@ -29,6 +29,7 @@
 //==============================================================================
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include "poisson_solver_psm.h"
 #include "logger.h"
 #include "mesh.h"
@@ -220,8 +221,8 @@ void poisson_solver_psm::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
     m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
+    dump_work(1);
     divide_by_eigenvalues(m_work1);
-    //dump_work(1);
     m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }
 

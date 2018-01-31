@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <stdexcept>
 #include "poisson_solver.h"
 #include "laplacian3D_taylor.h"
 

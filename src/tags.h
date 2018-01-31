@@ -31,7 +31,8 @@
 #define IRIS_TAG_INTERCOMM_CREATE 1
 #define IRIS_TAG_LOCAL_BOXES      2
 #define IRIS_TAG_CHARGES          3
-#define IRIS_TAG_COMMIT_CHARGES   4
-#define IRIS_TAG_QUIT             5
-#define IRIS_TAG_RHO_HALO         6
-#define IRIS_TAG_REMAP            7
+#define IRIS_TAG_CHARGES_ACK      4
+#define IRIS_TAG_COMMIT_CHARGES   5
+#define IRIS_TAG_QUIT             6
+#define IRIS_TAG_RHO_HALO         7
+#define IRIS_TAG_REMAP            8
