@@ -46,7 +46,6 @@ using namespace ORG_NCSA_IRIS;
 
 static const iris_real _PI  =  3.141592653589793;
 static const iris_real _2PI =  6.283185307179586;
-static const iris_real _4PI = 12.566370614359172;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
     :poisson_solver(obj), m_ev(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL)
@@ -67,20 +66,30 @@ poisson_solver_psm::~poisson_solver_psm()
 
 void poisson_solver_psm::calculate_eigenvalues()
 {
+    // global mesh size
+    int gnx = m_mesh->m_size[0];
+    int gny = m_mesh->m_size[1];
+    int gnz = m_mesh->m_size[2];
+
+    // local mesh size
     int nx = m_mesh->m_own_size[0];
     int ny = m_mesh->m_own_size[1];
     int nz = m_mesh->m_own_size[2];
-    
+
+    // from where we start
     int sx = m_mesh->m_own_offset[0];
     int sy = m_mesh->m_own_offset[1];
     int sz = m_mesh->m_own_offset[2];
-    
+
+    // where we end
     int ex = sx + nx;
     int ey = sy + ny;
     int ez = sz + nz;
 
-    int norm = m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2];
+    // normalization coefficient (FFT is not normalized)
+    int norm = gnx * gny * gnz;
 
+    // mesh step
     int hx = m_mesh->m_h[0];
     int hy = m_mesh->m_h[1];
     int hz = m_mesh->m_h[2];
@@ -98,19 +107,19 @@ void poisson_solver_psm::calculate_eigenvalues()
     memory::destroy_3d(m_ev);
     memory::create_3d(m_ev, nx, ny, nz);
     for(int x = sx; x < ex; x++) {
-    	iris_real t = _2PI * x / nx;
+    	iris_real t = _2PI * x / gnx;
     	for(int c = 1; c <= cnt; c++) {
     	    A[c] = 2*cos(c*t);
     	}
 	
     	for(int y = sy; y < ey; y++) {
-    	    iris_real t = _2PI * y / ny;
+    	    iris_real t = _2PI * y / gny;
     	    for(int c = 1; c <= cnt; c++) {
     		B[c] = 2*cos(c*t);
     	    }
 	    
     	    for(int z = sz; z < ez; z++) {
-    		iris_real t = _2PI * z / nz;
+    		iris_real t = _2PI * z / gnz;
     		for(int c = 1; c <= cnt; c++) {
     		    C[c] = 2*cos(c*t);
     		}
@@ -137,7 +146,14 @@ void poisson_solver_psm::calculate_eigenvalues()
     	    }
     	}
     }
-    
+
+    // for(int i=0;i<nx;i++) {
+    // 	for(int j=0;j<ny;j++) {
+    // 	    for(int k=0;k<nz;k++) {
+    // 		m_logger->trace("EV[%d][%d][%d] = %.16f", i, j, k, m_ev[i][j][k]);
+    // 	    }
+    // 	}
+    // }
     m_logger->trace("Pseudo-spectral method: Laplacian eigenvalues calculated");
 }
 
@@ -193,9 +209,11 @@ void poisson_solver_psm::divide_by_eigenvalues(iris_real *krho)
 	}
     }
 
-    // make sure that the first coeff. is not infinity (e.g. not entirely
+    // make sure that the very first coeff. (DC) is not infinity (e.g. not entirely
     // perfect neutral box leads to this).
-    krho[0] = krho[1] = 0.0;
+    if(sx == 0 && sy == 0 && sz == 0) {
+	krho[0] = krho[1] = 0.0;
+    }
 }
 
 void poisson_solver_psm::solve()
@@ -203,20 +221,21 @@ void poisson_solver_psm::solve()
     m_logger->trace("Solving Poisson's Equation now");
     m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
     divide_by_eigenvalues(m_work1);
+    //dump_work(1);
     m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }
 
-void poisson_solver_psm::dump_work(int i)
+void poisson_solver_psm::dump_work(int idx)
 {
     iris_real *data = NULL;
-    if(i==1) {
+    if(idx==1) {
 	data = m_work1;
-    }else if(i==2) {
+    }else if(idx==2) {
 	data = m_work2;
     }
 
     for(int i=0;i<m_fft->m_count;i++) {
-	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
-			i, data[i*2+0], data[i*2+1]);
+	m_logger->trace("WORK%d[%d] = %.16f + j*%.16f",
+			idx, i, data[i*2+0], data[i*2+1]);
     }
 }
