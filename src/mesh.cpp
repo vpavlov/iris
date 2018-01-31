@@ -82,11 +82,6 @@ void mesh::commit()
     }
 
     if(m_dirty) {
-	// NOTE NOTE NOTE: In LAMMPS they use m_size[I] instead of m_size[I-1]
-	// for m_hinv[I], but my solver uses -1, for which I know it is correct.
-	// I think this is because they use 'zonal' instead of 'nodal',
-	// however I'm not sure how this will work with the poisson solver,
-	// which is made to be nodal...
 	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
 	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
 	m_h[2] = m_domain->m_global_box.zsize / m_size[2];
@@ -132,9 +127,10 @@ void mesh::commit()
 
 	m_dirty = false;
 
-	m_logger->info("Local discretization mesh is %d x %d x %d starting at [%d, %d, %d]",
+	m_logger->info("Local mesh is %d x %d x %d starting at [%d, %d, %d]",
 			m_own_size[0], m_own_size[1], m_own_size[2],
 			m_own_offset[0], m_own_offset[1], m_own_offset[2]);
+	m_logger->info("Hx = %g, Hy = %g, Hz = %g", m_h[0], m_h[1], m_h[2]);
     }
 }
 
@@ -169,7 +165,7 @@ void mesh::dump_rho(const char *fname)
     }
     fprintf(fp, "VARIABLE: RHO\n");
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
-    fprintf(fp, "CENTERING: nodal\n");
+    fprintf(fp, "CENTERING: zonal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
 	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",
@@ -208,7 +204,7 @@ void mesh::dump_phi(const char *fname)
     }
     fprintf(fp, "VARIABLE: PHI\n");
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
-    fprintf(fp, "CENTERING: nodal\n");
+    fprintf(fp, "CENTERING: zonal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
 	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",

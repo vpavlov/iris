@@ -332,9 +332,8 @@ main(int argc, char **argv)
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(M, N, P);
-    x->set_order(2);
+    x->set_order(3);
     x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
-    //x->set_rho_multiplier(1.0);
     x->commit();
 
 
@@ -378,7 +377,7 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	//x->m_mesh->dump_rho();
+	x->m_mesh->dump_rho("nacl");
 	// x->m_mesh->dump_phi();
     }
 
