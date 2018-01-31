@@ -39,8 +39,6 @@
 
 using namespace ORG_NCSA_IRIS;
 
-static const iris_real _4PI = 12.566370614359172;
-
 fft3d::fft3d(class iris *obj)
     : state_accessor(obj), m_grids { NULL, NULL, NULL },
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
@@ -48,7 +46,7 @@ fft3d::fft3d(class iris *obj)
     m_remaps { NULL, NULL, NULL, NULL },
     m_fw_plans { NULL, NULL, NULL },
     m_bk_plans { NULL, NULL, NULL },
-    m_scratch(NULL), m_workspace(NULL)
+    m_scratch(NULL)
 {
     for(int i=0;i<3;i++) {
 	setup_grid(i);
@@ -68,13 +66,11 @@ fft3d::fft3d(class iris *obj)
     int n = 2 * m_count;
 
     memory::create_1d(m_scratch, n);
-    memory::create_1d(m_workspace, n);
 }
 
 fft3d::~fft3d()
 {
     memory::destroy_1d(m_scratch);
-    memory::destroy_1d(m_workspace);
 
     for(int i=0;i<3;i++) {
 	if(m_grids[i] != NULL) { delete m_grids[i]; }
@@ -325,69 +321,70 @@ void fft3d::setup_plans(int in_which)
 
 }
 
-iris_real *fft3d::compute_fw(iris_real *src)
+iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 {
     // get data from the mesh
     int j = 0;
     for(int i=0;i<m_count;i++) {
-	m_workspace[j++] = -_4PI * src[i];  // Gaussian units
-	m_workspace[j++] = 0.0;
+	dest[j++] = m_iris->m_rho_multiplier * src[i];
+	dest[j++] = 0.0;
     }
 
     for(int i=0;i<3;i++) {
-	m_remaps[i]->perform(m_workspace, m_workspace, m_scratch);
+	m_remaps[i]->perform(dest, dest, m_scratch);
 
-	// m_logger->trace("AFTER REMAP %d", i);
-	// dump_workspace();
+	m_logger->trace("AFTER REMAP %d", i);
+	for(int i=0;i<m_count;i++) {
+	    m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+			    i, dest[i*2+0], dest[i*2+1]);
+	}
+
 
 #ifdef FFT_FFTW3
 	FFTW_(execute_dft)(m_fw_plans[i],
-			   (complex_t *)m_workspace,
-			   (complex_t *)m_workspace);
+			   (complex_t *)dest,
+			   (complex_t *)dest);
 #endif
 
-	// m_logger->trace("AFTER FFT %d", i);
-	// dump_workspace();
+	m_logger->trace("AFTER FFT %d", i);
+	for(int i=0;i<m_count;i++) {
+	    m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+			    i, dest[i*2+0], dest[i*2+1]);
+	}
 
     }
 
-    m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
+    m_remaps[3]->perform(dest, dest, m_scratch);
 
-    // m_logger->trace("AFTER FINAL REMAP");
-    // dump_workspace();
+    m_logger->trace("AFTER FINAL REMAP");
+	for(int i=0;i<m_count;i++) {
+	    m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+			    i, dest[i*2+0], dest[i*2+1]);
+	}
 
     // now workspace contains 3D FFT of m_mesh->m_rho, in the original DD
-    return m_workspace;
+    return dest;
 }
 
-void fft3d::compute_bk(iris_real *dest)
+void fft3d::compute_bk(iris_real *src, iris_real *dest)
 {
-
     for(int i=0;i<3;i++) {
-	m_remaps[i]->perform(m_workspace, m_workspace, m_scratch);
+	m_remaps[i]->perform(src, src, m_scratch);
 
 #ifdef FFT_FFTW3
 	FFTW_(execute_dft)(m_bk_plans[i],
-			   (complex_t *)m_workspace,
-			   (complex_t *)m_workspace);
+			   (complex_t *)src,
+			   (complex_t *)src);
 #endif
 
     }
 
-    m_remaps[3]->perform(m_workspace, m_workspace, m_scratch);
+    m_remaps[3]->perform(src, src, m_scratch);
 
     // send data to the mesh
     int j = 0;
     for(int i=0;i<m_count;i++) {
-	dest[i] = m_workspace[j];
+	dest[i] = src[j];
 	j += 2;
-    }
-}
-
-void fft3d::dump_workspace()
-{
-    for(int i=0;i<m_count;i++) {
-	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
-			i, m_workspace[i*2+0], m_workspace[i*2+1]);
     }
 }

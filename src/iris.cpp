@@ -89,6 +89,8 @@ iris::iris(int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+    m_rho_multiplier = -_4PI;
+
     m_uber_comm = new comm_rec(this, in_uber_comm);
     m_local_comm = new comm_rec(this, in_local_comm);
     m_inter_comm = NULL;
@@ -526,13 +528,13 @@ void iris::solve()
 	}
     }
     sum *= 0.5;
-    m_logger->info("Partial Hartree energy: %g", sum);
+    m_logger->info("Partial Hartree energy: %.16f", sum);
 
     iris_real hartree;
     MPI_Reduce(&sum, &hartree, 1, IRIS_REAL, MPI_SUM, m_local_leader,
 	       m_local_comm->m_comm);
     if(is_leader()) {
-	m_logger->info("Full Hartree energy: %g", hartree);
+	m_logger->info("Full Hartree energy: %.16f", hartree);
     }
 }
 

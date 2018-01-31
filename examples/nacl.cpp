@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <vector>
 #include <iris/iris.h>
 #include <iris/memory.h>
@@ -5,6 +6,10 @@
 #include <iris/mesh.h>
 
 #define NSTEPS 1
+
+#define M 128
+#define N 128
+#define P 128
 
 using namespace ORG_NCSA_IRIS;
 
@@ -283,8 +288,8 @@ main(int argc, char **argv)
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     
     // debugging facility
-    // bool ready = false;
-    // if(rank == 3) {
+    bool ready = false;
+    // if(rank == 0) {
     // 	printf("Rank %d is PID %d\n", rank, getpid());
     // 	while (!ready) {
     // 	    sleep(5);
@@ -370,9 +375,9 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
-    x->set_mesh_size(128, 128, 128);
+    x->set_mesh_size(M, N, P);
     x->set_order(2);
-    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 2);
+    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
     x->commit();
 
 
@@ -415,7 +420,10 @@ main(int argc, char **argv)
 	x->run();
     }
 
-    x->m_mesh->dump_rho("nacl-rho");
+    if(x->is_server()) {
+	// x->m_mesh->dump_rho();
+	// x->m_mesh->dump_phi();
+    }
 
     // Cleanup
     memory::wfree(local_boxes);

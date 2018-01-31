@@ -87,13 +87,13 @@ void mesh::commit()
 	// I think this is because they use 'zonal' instead of 'nodal',
 	// however I'm not sure how this will work with the poisson solver,
 	// which is made to be nodal...
-	m_h[0] = m_domain->m_global_box.xsize / (m_size[0] - 1);
-	m_h[1] = m_domain->m_global_box.ysize / (m_size[1] - 1);
-	m_h[2] = m_domain->m_global_box.zsize / (m_size[2] - 1);
+	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
+	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
+	m_h[2] = m_domain->m_global_box.zsize / m_size[2];
 
-	m_hinv[0] = (m_size[0] - 1) / m_domain->m_global_box.xsize;
-	m_hinv[1] = (m_size[1] - 1) / m_domain->m_global_box.ysize;
-	m_hinv[2] = (m_size[2] - 1) / m_domain->m_global_box.zsize;
+	m_hinv[0] = m_size[0] / m_domain->m_global_box.xsize;
+	m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
+	m_hinv[2] = m_size[2] / m_domain->m_global_box.zsize;
 
 	m_h3inv = m_hinv[0] * m_hinv[1] * m_hinv[2];
 
@@ -138,7 +138,7 @@ void mesh::commit()
     }
 }
 
-void mesh::dump_rho(char *fname)
+void mesh::dump_rho(const char *fname)
 {
     char values_fname[256];
     char header_fname[256];
@@ -177,7 +177,7 @@ void mesh::dump_rho(char *fname)
     fclose(fp);
 }
 
-void mesh::dump_phi(char *fname)
+void mesh::dump_phi(const char *fname)
 {
     char values_fname[256];
     char header_fname[256];
@@ -216,7 +216,7 @@ void mesh::dump_phi(char *fname)
     fclose(fp);
 }
 
-void mesh::dump_rho2(char *fname)
+void mesh::dump_rho2(const char *fname)
 {
     char values_fname[256];
     char header_fname[256];
@@ -235,7 +235,7 @@ void mesh::dump_rho2(char *fname)
     fclose(fp);
 }
 
-void mesh::dump_phi2(char *fname)
+void mesh::dump_phi2(const char *fname)
 {
     char values_fname[256];
     char header_fname[256];
@@ -259,7 +259,9 @@ void mesh::dump_phi2(char *fname)
 void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-    
+
+    iris_real tmp = 0.0;
+
     for(int i=0;i<in_ncharges;i++) {
 	iris_real tx = (in_charges[i*4 + 0] - gbox->xlo) * m_hinv[0] - m_own_offset[0];
 	iris_real ty = (in_charges[i*4 + 1] - gbox->ylo) * m_hinv[1] - m_own_offset[1];
@@ -279,48 +281,52 @@ void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 
 	iris_real t0 = m_mesh->m_h3inv * in_charges[i*4 + 3];  // charge/volume
 	for(int x = 0; x < m_chass->m_order; x++) {
+
 	    iris_real t1 = t0 * m_chass->m_weights[0][x];
+	    int m_x = nx + x + m_chass->m_ics_from;
+	    int ne_x = m_x;
+	    int xnidx = 0;
+
+	    if(m_x < 0) {
+		// e.g. -1 becomes 127
+		xnidx = 1;
+		ne_x = m_own_size[0] + m_x;
+	    }else if(m_x >= m_own_size[0]) {
+		xnidx = 2;
+		ne_x = m_x - m_own_size[0];      // e.g. 128 becomes 0
+	    }
+
 	    for(int y = 0; y < m_chass->m_order; y++) {
+
 		iris_real t2 = t1 * m_chass->m_weights[1][y];
+		int m_y = ny + y + m_chass->m_ics_from;
+		int ne_y = m_y;
+		int ynidx = 0;
+
+		if(m_y < 0) {
+		    ynidx = 3;
+		    ne_y = m_own_size[1] + m_y;
+		}else if(m_y >= m_own_size[1]) {
+		    ynidx = 6;
+		    ne_y = m_y - m_own_size[1];
+		}
+
 		for(int z = 0; z < m_chass->m_order; z++) {
+
 		    iris_real t3 = t2 * m_chass->m_weights[2][z];
-
-		    int m_x = nx + x + m_chass->m_ics_from;
-		    int m_y = ny + y + m_chass->m_ics_from;
 		    int m_z = nz + z + m_chass->m_ics_from;
-		    
-		    // figure out which neighbour we need to send this
-		    // info to (if any)
-		    int nidx = 0;
-		    int ne_x = m_x;
-		    int ne_y = m_y;
 		    int ne_z = m_z;
-
-		    if(m_x < 0) {
-			// e.g. -1 becomes 127
-			nidx += 1;
-			ne_x = m_own_size[0] + m_x;
-		    }else if(m_x >= m_own_size[0]) {
-			nidx += 2;
-			ne_x = m_x - m_own_size[0];      // e.g. 128 becomes 0
-		    }
-
-		    if(m_y < 0) {
-			nidx += 3;
-			ne_y = m_own_size[1] + m_y;
-		    }else if(m_y >= m_own_size[1]) {
-			nidx += 6;
-			ne_y = m_y - m_own_size[1];
-		    }
+		    int znidx = 0;
 
 		    if(m_z < 0) {
-			nidx += 9;
+			znidx = 9;
 			ne_z = m_own_size[2] + m_z;
 		    }else if(m_z >= m_own_size[2]) {
-			nidx += 18;
+			znidx = 18;
 			ne_z = m_z - m_own_size[2];
 		    }
 
+		    int nidx = xnidx + ynidx + znidx;
 		    if(m_proc_grid->m_hood[nidx] != m_local_comm->m_rank) {
 			std::tuple<int, int, int> entry =
 			    std::make_tuple(ne_x, ne_y, ne_z);

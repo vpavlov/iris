@@ -47,12 +47,17 @@ namespace ORG_NCSA_IRIS {
 	void calculate_eigenvalues();
 	void divide_by_eigenvalues(iris_real *krho);
 
+	void dump_work(int i);
+
     private:
 
 	// 3D Array of stencil eigenvalues (local portion only).
 	// Has the same dimension as the local mesh.
 	iris_real ***m_ev;
 	class fft3d *m_fft;
+	// FFT workspaces
+	iris_real *m_work1;
+	iris_real *m_work2;
     };
 }
 

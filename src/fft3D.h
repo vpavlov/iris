@@ -64,8 +64,8 @@ namespace ORG_NCSA_IRIS {
 	fft3d(class iris *obj);
 	~fft3d();
 
-	iris_real *compute_fw(iris_real *src);
-	void compute_bk(iris_real *dest);
+	iris_real *compute_fw(iris_real *src, iris_real *dest);
+	void compute_bk(iris_real *src, iris_real *dest);
 
 	void dump_workspace();
 
@@ -74,14 +74,15 @@ namespace ORG_NCSA_IRIS {
 	void setup_remap(int in_which);
 	void setup_plans(int in_which);
 
+    public:
+	int m_count;               // number of items in own mesh
+
     private:
 	class grid *m_grids[3];    // proc grids in which 1 proc a whole dim
 	int m_own_size[3][3];      // sizes for each of the grid
 	int m_own_offset[3][3];    // offsets for each of the grid
 	class remap *m_remaps[4];  // remaps between mesh->1d ffts->mesh
 	iris_real *m_scratch;      // scratch space for remapping
-	iris_real *m_workspace;    // for FFT
-	int m_count;               // number of items in own mesh
 
 #ifdef FFT_FFTW3
 	FFTW_(plan) m_fw_plans[3];

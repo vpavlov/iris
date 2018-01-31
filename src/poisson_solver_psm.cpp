@@ -49,7 +49,7 @@ static const iris_real _2PI =  6.283185307179586;
 static const iris_real _4PI = 12.566370614359172;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
-    :poisson_solver(obj), m_ev(NULL), m_fft(NULL)
+    :poisson_solver(obj), m_ev(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL)
 {
     m_logger->info("Will use the Pseudo-spectral method for solving Poisson's equation");
 }
@@ -61,6 +61,8 @@ poisson_solver_psm::~poisson_solver_psm()
     }
 
     memory::destroy_3d(m_ev);
+    memory::destroy_1d(m_work1);
+    memory::destroy_1d(m_work2);
 }
 
 void poisson_solver_psm::calculate_eigenvalues()
@@ -154,6 +156,14 @@ void poisson_solver_psm::commit()
 	if(m_fft != NULL) { delete m_fft; }
 	m_fft = new fft3d(m_iris);
 	
+	int n = 2 * m_fft->m_count;
+
+	memory::destroy_1d(m_work1);
+	memory::create_1d(m_work1, n);
+
+	memory::destroy_1d(m_work2);
+	memory::create_1d(m_work2, n);
+
 	m_dirty = false;
     }
 }
@@ -191,7 +201,22 @@ void poisson_solver_psm::divide_by_eigenvalues(iris_real *krho)
 void poisson_solver_psm::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
-    iris_real *krho = m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]));
-    divide_by_eigenvalues(krho);
-    m_fft->compute_bk(&(m_mesh->m_phi[0][0][0]));
+    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
+    divide_by_eigenvalues(m_work1);
+    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
+}
+
+void poisson_solver_psm::dump_work(int i)
+{
+    iris_real *data = NULL;
+    if(i==1) {
+	data = m_work1;
+    }else if(i==2) {
+	data = m_work2;
+    }
+
+    for(int i=0;i<m_fft->m_count;i++) {
+	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+			i, data[i*2+0], data[i*2+1]);
+    }
 }

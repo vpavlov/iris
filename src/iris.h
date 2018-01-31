@@ -44,7 +44,10 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
 
+
 #define IRIS_LAPL_STYLE_TAYLOR 1
+
+    static const iris_real _4PI = 12.566370614359172;
 
     // type of function called to set pieces of the right-hand side
     typedef iris_real (*rhs_fn_t)(class iris *obj, int i, int j, int k);
@@ -109,6 +112,35 @@ namespace ORG_NCSA_IRIS {
 	// in_order: 2, 4, 6, 8, 10 or 12 (accuracy order of the stencil)
 	void set_laplacian(int in_style, int in_order);
 
+	// Poisson's equation is:
+	//
+	// Δφ = f
+	// 
+	// When applied to electrostatics, it takes the form:
+	//
+	// Δφ = -4πρ (when working in Gaussian units) 
+	//
+	// OR
+	//
+	// Δφ = -ρ/ε (when working in SI units)
+	//
+	// For gravity, the equation takes the form
+	//
+	// Δφ = 4πGρ
+	//
+	// We set ρ in one of two ways: either directly (with the set_rhs call)
+	// or by interpolation from a set of charges (bodies). Either way, we
+	// end up with ρ. By using this function, the user can then specify 
+	// the multiplier in front of ρ, so as to choose which one of the above
+	// three (or possibly another) situations he/she requires.
+	// 
+	// By default, we set the multiplier to -4π, as to handle electrostatics
+	// in Gaussian units.
+	void set_rho_multiplier(iris_real in_rho_multiplier)
+	{
+	    m_rho_multiplier = in_rho_multiplier;
+	}
+
 	// Set the right hand side directly (skips all charge assignment and
 	// whatnot, usful for testing)
 	void set_rhs(rhs_fn_t fn);
@@ -158,6 +190,8 @@ namespace ORG_NCSA_IRIS {
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
+
+	iris_real m_rho_multiplier;  // see set_rho_multiplier above
 
 	class comm_rec        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec        *m_local_comm;  // ...within group (client/server)
