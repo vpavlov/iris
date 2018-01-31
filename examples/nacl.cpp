@@ -334,7 +334,7 @@ main(int argc, char **argv)
     x->set_mesh_size(M, N, P);
     x->set_order(2);
     x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
-    x->set_rho_multiplier(1.0);
+    //x->set_rho_multiplier(1.0);
     x->commit();
 
 
