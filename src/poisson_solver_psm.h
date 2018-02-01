@@ -44,17 +44,30 @@ namespace ORG_NCSA_IRIS {
 	void solve();
 
     private:
-	void calculate_eigenvalues();
-	void divide_by_eigenvalues(iris_real *krho);
+	void calculate_laplacian_ev();
+	void calculate_ddx_ev(int idx, class first_derivative *ddx,
+			      iris_real *&ddx_ev);
+
+	// Calculate the image of the potential (φ) in reciprocal (k) space
+	// Basically, divide the image of ρ through the eigenvalues of the
+	// Laplacian.
+	// It does so in-place
+	void kspace_phi(iris_real *io_rho_phi);
+	void kspace_Ex(iris_real *in_phi, iris_real *out_Ex);
+	void kspace_Ey(iris_real *in_phi, iris_real *out_Ey);
+	void kspace_Ez(iris_real *in_phi, iris_real *out_Ez);
 
 	void dump_work(int i);
 
     private:
 
-	// 3D Array of stencil eigenvalues (local portion only).
-	// Has the same dimension as the local mesh.
-	iris_real ***m_ev;
+	iris_real ***m_ev;    // 3D array of laplacian engeinvalues
+	iris_real *m_ddx_ev;  // 1D array of d/dx stencil eigenvalues
+	iris_real *m_ddy_ev;  // 1D array of d/dy stencil eigenvalues
+	iris_real *m_ddz_ev;  // 1D array of d/dz stencil eigenvalues
+
 	class fft3d *m_fft;
+
 	// FFT workspaces
 	iris_real *m_work1;
 	iris_real *m_work2;

@@ -45,7 +45,8 @@ using namespace ORG_NCSA_IRIS;
 
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_dirty(true),
-    m_initialized(false), m_halo(NULL), m_phi(NULL)
+    m_initialized(false), m_halo(NULL), m_phi(NULL),
+    m_Ex(NULL), m_Ey(NULL), m_Ez(NULL)
 {
 }
 
@@ -53,6 +54,9 @@ mesh::~mesh()
 {
     memory::destroy_3d(m_rho);
     memory::destroy_3d(m_phi);
+    memory::destroy_3d(m_Ex);
+    memory::destroy_3d(m_Ey);
+    memory::destroy_3d(m_Ez);
 }
 
 void mesh::set_size(int nx, int ny, int nz)
@@ -113,6 +117,15 @@ void mesh::commit()
 
 	memory::destroy_3d(m_phi);
 	memory::create_3d(m_phi, m_own_size[0], m_own_size[1], m_own_size[2]);
+
+	memory::destroy_3d(m_Ex);
+	memory::create_3d(m_Ex, m_own_size[0], m_own_size[1], m_own_size[2]);
+
+	memory::destroy_3d(m_Ey);
+	memory::create_3d(m_Ey, m_own_size[0], m_own_size[1], m_own_size[2]);
+
+	memory::destroy_3d(m_Ez);
+	memory::create_3d(m_Ez, m_own_size[0], m_own_size[1], m_own_size[2]);
 	
 	if(m_halo != NULL) {
 	    delete [] m_halo;
@@ -134,7 +147,7 @@ void mesh::commit()
     }
 }
 
-void mesh::dump_rho(const char *fname)
+void mesh::dump_bov(const char *fname, iris_real ***data)
 {
     char values_fname[256];
     char header_fname[256];
@@ -147,7 +160,7 @@ void mesh::dump_rho(const char *fname)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fwrite(&(m_rho[k][j][i]), sizeof(iris_real), 1, fp);
+		fwrite(&(data[k][j][i]), sizeof(iris_real), 1, fp);
 	    }
 	}
     }
@@ -163,7 +176,7 @@ void mesh::dump_rho(const char *fname)
     }else {
 	fprintf(fp, "DATA_FORMAT: FLOAT\n");
     }
-    fprintf(fp, "VARIABLE: RHO\n");
+    fprintf(fp, "VARIABLE: DATA\n");
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
     fprintf(fp, "CENTERING: zonal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
@@ -173,7 +186,7 @@ void mesh::dump_rho(const char *fname)
     fclose(fp);
 }
 
-void mesh::dump_phi(const char *fname)
+void mesh::dump_exyz(const char *fname)
 {
     char values_fname[256];
     char header_fname[256];
@@ -186,7 +199,9 @@ void mesh::dump_phi(const char *fname)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fwrite(&(m_phi[k][j][i]), sizeof(iris_real), 1, fp);
+		fwrite(&(m_Ex[k][j][i]), sizeof(iris_real), 1, fp);
+		fwrite(&(m_Ey[k][j][i]), sizeof(iris_real), 1, fp);
+		fwrite(&(m_Ez[k][j][i]), sizeof(iris_real), 1, fp);
 	    }
 	}
     }
@@ -202,17 +217,19 @@ void mesh::dump_phi(const char *fname)
     }else {
 	fprintf(fp, "DATA_FORMAT: FLOAT\n");
     }
-    fprintf(fp, "VARIABLE: PHI\n");
+    fprintf(fp, "VARIABLE: E\n");
     fprintf(fp, "DATA_ENDIAN: LITTLE\n");
     fprintf(fp, "CENTERING: zonal\n");
     fprintf(fp, "BRICK_ORIGIN: %f %f %f\n",
 	    m_domain->m_local_box.xlo, m_domain->m_local_box.ylo, m_domain->m_local_box.zlo);
     fprintf(fp, "BRICK_SIZE: %f %f %f\n",
 	    m_domain->m_local_box.xsize, m_domain->m_local_box.ysize, m_domain->m_local_box.zsize);
+    fprintf(fp, "DATA COMPONENTS: 3\n");
     fclose(fp);
 }
 
-void mesh::dump_rho2(const char *fname)
+
+void mesh::dump_ascii(const char *fname, iris_real ***data)
 {
     char values_fname[256];
     char header_fname[256];
@@ -224,30 +241,25 @@ void mesh::dump_rho2(const char *fname)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%.16f ", m_rho[k][j][i]);
+		fprintf(fp, "%.16f ", data[k][j][i]);
 	    }
 	}
     }
     fclose(fp);
 }
 
-void mesh::dump_phi2(const char *fname)
+void mesh::dump_log(const char *name, iris_real ***data)
 {
-    char values_fname[256];
-    char header_fname[256];
-    
-    sprintf(values_fname, "%s-%d.data", fname, m_local_comm->m_rank);
-    
-    // 1. write the bov file
-    FILE *fp = fopen(values_fname, "wb");
-    for(int i=0;i<m_own_size[2];i++) {
+    for(int i=0;i<m_own_size[0];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%.16f ", m_phi[k][j][i]);
+	    for(int k=0;k<m_own_size[2];k++) {
+		m_logger->trace("%s[%d][%d][%d] = %.16f", name, i, j, k,
+				data[i][j][k]);
 	    }
+	    m_logger->trace("");
 	}
+	m_logger->trace("");
     }
-    fclose(fp);
 }
 
 
@@ -393,32 +405,4 @@ void mesh::ijk_to_xyz(int i, int j, int k,
     x = m_domain->m_local_box.xlo + i * m_h[0];
     y = m_domain->m_local_box.ylo + j * m_h[1];
     z = m_domain->m_local_box.zlo + k * m_h[2];
-}
-
-void mesh::dump_rho()
-{
-    for(int i=0;i<m_own_size[0];i++) {
-	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<m_own_size[2];k++) {
-		m_logger->trace("RHO[%d][%d][%d] = %.17f", i, j, k,
-				m_rho[i][j][k]);
-	    }
-	    m_logger->trace("");
-	}
-	m_logger->trace("");
-    }
-}
-
-void mesh::dump_phi()
-{
-    for(int i=0;i<m_own_size[0];i++) {
-	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<m_own_size[2];k++) {
-		m_logger->trace("PHI[%d][%d][%d] = %.17f", i, j, k,
-				m_phi[i][j][k]);
-	    }
-	    m_logger->trace("");
-	}
-	m_logger->trace("");
-    }
 }

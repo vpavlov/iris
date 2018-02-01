@@ -180,9 +180,9 @@ namespace ORG_NCSA_IRIS {
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
 
-	void handle_charges(struct event_t *in_event);
-	void handle_commit_charges();
-	void handle_rho_halo(struct event_t *in_event);
+	bool handle_charges(struct event_t *in_event);
+	bool handle_commit_charges();
+	bool handle_rho_halo(struct event_t *in_event);
 
     public:
 	int m_client_size;             // # of client nodes

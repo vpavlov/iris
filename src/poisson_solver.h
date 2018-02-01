@@ -52,6 +52,9 @@ namespace ORG_NCSA_IRIS {
 	int m_style;   // which approximation to use (Taylor or Pade)
 	int m_order;   // accuracy order of the Laplacian
 	class laplacian3D *m_laplacian;  // the Laplacian stencil
+	class first_derivative *m_ddx;   // d/dx stencil
+	class first_derivative *m_ddy;   // d/dy stencil
+	class first_derivative *m_ddz;   // d/dz stencil
     };
 }
 

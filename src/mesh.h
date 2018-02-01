@@ -61,14 +61,11 @@ namespace ORG_NCSA_IRIS {
 	void exchange_halo();
 	void add_halo_items(halo_item_t *in_items, int in_nitems);
 
-	void dump_rho(const char *in_fname);
-	void dump_phi(const char *in_fname);
+	void dump_bov(const char *in_fname, iris_real ***data);
+	void dump_ascii(const char *in_fname, iris_real ***data);
+	void dump_log(const char *in_name, iris_real ***data);
 
-	void dump_rho2(const char *in_fname);
-	void dump_phi2(const char *in_fname);
-
-	void dump_rho();
-	void dump_phi();
+	void dump_exyz(const char *in_fname);
 
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
@@ -85,6 +82,9 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real ***m_rho;  // right hand side of the Poisson equation
 	iris_real ***m_phi;  // unknown function (left hand side)
+	iris_real ***m_Ex;   // Electical field x component
+	iris_real ***m_Ey;   // Electical field y component
+	iris_real ***m_Ez;   // Electical field z component
 	std::map<std::tuple<int, int, int>, iris_real> *m_halo;
 
     };

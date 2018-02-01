@@ -58,9 +58,7 @@ main(int argc, char **argv)
     x->set_grid_pref(1, 0, 1);
     x->commit();
     x->set_rhs(example2_rhs);
-    x->m_mesh->dump_rho();
     x->solve();
-    x->m_mesh->dump_phi();
     delete x;
 
     MPI_Finalize();

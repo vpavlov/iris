@@ -30,20 +30,22 @@
 #include <stdexcept>
 #include "poisson_solver.h"
 #include "laplacian3D_taylor.h"
+#include "first_derivative_taylor.h"
 
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver::poisson_solver(class iris *obj)
     : state_accessor(obj), m_dirty(true), m_style(0), m_order(0),
-      m_laplacian(NULL)
+      m_laplacian(NULL), m_ddx(NULL), m_ddy(NULL), m_ddz(NULL)
 {
 };
 
 poisson_solver::~poisson_solver()
 {
-    if(m_laplacian != NULL) {
-	delete m_laplacian;
-    }
+    if(m_laplacian != NULL) { delete m_laplacian; }
+    if(m_ddx != NULL) { delete m_ddx; }
+    if(m_ddy != NULL) { delete m_ddy; }
+    if(m_ddz != NULL) { delete m_ddz; }
 };
 
 void poisson_solver::set_laplacian(int in_style, int in_order)
@@ -68,13 +70,17 @@ void poisson_solver::commit()
 	return;
     }
 
-    if(m_laplacian != NULL) {
-	delete m_laplacian;
-    }
+    if(m_laplacian != NULL) { delete m_laplacian; }
+    if(m_ddx != NULL) { delete m_ddx; }
+    if(m_ddy != NULL) { delete m_ddy; }
+    if(m_ddz != NULL) { delete m_ddz; }
 
     switch(m_style) {
     case IRIS_LAPL_STYLE_TAYLOR:
 	m_laplacian = new laplacian3D_taylor(m_order);
+	m_ddx = new first_derivative_taylor(m_order/2);
+	m_ddy = new first_derivative_taylor(m_order/2);
+	m_ddz = new first_derivative_taylor(m_order/2);
 	break;
 
     default:

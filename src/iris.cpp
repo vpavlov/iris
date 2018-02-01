@@ -309,7 +309,6 @@ void iris::run()
 	       m_inter_comm->peek_event(event))
 	    {
 		process_event(&event);
-		memory::wfree(event.data);
 	    }
 	}
     }
@@ -319,6 +318,7 @@ void iris::run()
 void iris::process_event(event_t *event)
 {
     //m_logger->trace_event(event);
+    bool hodl = false;
     switch(event->tag) {
     case IRIS_TAG_QUIT:
 	m_logger->trace("Quit event received");
@@ -326,16 +326,20 @@ void iris::process_event(event_t *event)
 	break;
 
     case IRIS_TAG_CHARGES:
-	handle_charges(event);
+	hodl = handle_charges(event);
 	break;
 
     case IRIS_TAG_COMMIT_CHARGES:
-	handle_commit_charges();
+	hodl = handle_commit_charges();
 	break;
 
     case IRIS_TAG_RHO_HALO:
-	handle_rho_halo(event);
+	hodl = handle_rho_halo(event);
 	break;
+    }
+
+    if(!hodl) {
+	memory::wfree(event->data);
     }
 }
 
@@ -465,7 +469,7 @@ void iris::quit()
     stos_process_pending(pending, win);
 }
 
-void iris::handle_charges(event_t *event)
+bool iris::handle_charges(event_t *event)
 {
     int unit = 4 * sizeof(iris_real);
     if(event->size % unit != 0) {
@@ -482,17 +486,20 @@ void iris::handle_charges(event_t *event)
 	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK, event->comm, &req);
 	MPI_Request_free(&req);
     }
+
+    return true;  // hold on to dear life; we need the charges for later
 }
 
-void iris::handle_commit_charges()
+bool iris::handle_commit_charges()
 {
     m_logger->trace("Commit charges received: initiating halo exchange");
     m_mesh->exchange_halo();
     m_logger->trace("Halo exchange done");
     solve();
+    return false;  // no need to hodl
 }
 
-void iris::handle_rho_halo(event_t *event)
+bool iris::handle_rho_halo(event_t *event)
 {
     int unit = sizeof(halo_item_t);
     if(event->size % unit != 0) {
@@ -506,6 +513,7 @@ void iris::handle_rho_halo(event_t *event)
 	m_mesh->add_halo_items((halo_item_t *)event->data, nitems);
 	m_logger->trace("Adding halo to ρ done");
     }
+    return false;  // no need to hodl
 }
 
 void iris::set_rhs(rhs_fn_t fn)
