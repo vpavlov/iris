@@ -243,7 +243,7 @@ void mesh::dump_phi2(const char *fname)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%.10f ", m_phi[k][j][i]);
+		fprintf(fp, "%.16f ", m_phi[k][j][i]);
 	    }
 	}
     }
