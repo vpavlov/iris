@@ -76,9 +76,14 @@ bool comm_rec::peek_event(event_t &out_event)
 
 void comm_rec::get_event(event_t &out_event)
 {
+    get_event(MPI_ANY_SOURCE, MPI_ANY_TAG, out_event);
+}
+
+void comm_rec::get_event(int in_peer, int in_tag, event_t &out_event)
+{
     MPI_Status status;
     
-    MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &status);
+    MPI_Probe(in_peer, in_tag, m_comm, &status);
     out_event.comm = m_comm;
     out_event.peer = status.MPI_SOURCE;
     out_event.tag = status.MPI_TAG;

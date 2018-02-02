@@ -242,7 +242,7 @@ void iris::commit()
 	m_chass->commit();      // does not depend on anything
 	m_proc_grid->commit();  // does not depend on anything
 	m_domain->commit();     // depends on m_proc_grid
-	m_mesh->commit();       // depends on m_proc_grid
+	m_mesh->commit();       // depends on m_proc_grid and m_chass
 	m_solver->commit();     // depends on m_mesh
     }
 }
@@ -391,7 +391,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
 		      MPI_Win in_pending_win)
 {
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_tag, in_comm, req);
-    if(is_server()) {
+    if(is_server() && in_pending_win != NULL) {
 	int one = 1;
 	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
 		in_pending_win);
@@ -501,18 +501,7 @@ bool iris::handle_commit_charges()
 
 bool iris::handle_rho_halo(event_t *event)
 {
-    int unit = sizeof(halo_item_t);
-    if(event->size % unit != 0) {
-	throw std::length_error("Unexpected message size while receiving rho halo!");
-    }
-
-    int nitems = event->size / unit;
-    if(nitems != 0) {
-	m_logger->trace("Received %d halo items from %d: adding them to our ρ",
-			nitems, event->peer);
-	m_mesh->add_rho_halo_items((halo_item_t *)event->data, nitems);
-	m_logger->trace("Adding halo to ρ done");
-    }
+    m_logger->trace_event(event);
     return false;  // no need to hodl
 }
 

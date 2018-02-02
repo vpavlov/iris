@@ -34,5 +34,10 @@
 #define IRIS_TAG_CHARGES_ACK      4
 #define IRIS_TAG_COMMIT_CHARGES   5
 #define IRIS_TAG_QUIT             6
-#define IRIS_TAG_RHO_HALO         7
-#define IRIS_TAG_REMAP            8
+#define IRIS_TAG_RHO_HALO         7   // ..._RHO_HALOx must be consequitive
+#define IRIS_TAG_RHO_HALO2        8   
+#define IRIS_TAG_RHO_HALO3        9
+#define IRIS_TAG_RHO_HALO4        10
+#define IRIS_TAG_RHO_HALO5        11
+#define IRIS_TAG_RHO_HALO6        12
+#define IRIS_TAG_REMAP            13

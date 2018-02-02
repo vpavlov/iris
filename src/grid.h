@@ -55,19 +55,7 @@ namespace ORG_NCSA_IRIS {
 	char *m_name;      // Name of the grid (used in logging)
 	int m_size[3];     // MxNxK procs in each direction
 	int m_coords[3];   // This process' coords in the grid
-
-	// Process neighbourhood: Each proc has neighbours, which
-	// are stored in the m_hood array. The index in the array can be
-	// treated as a number in ternary numeral system. Each trit
-	// corresponds to the location of the proc in relation to me:
-	// 0 = same coord, 1 = one below, 2 = one above.
-	// Rightmost trit is for x dir, Middle is for y, Leftmost for z
-	// 
-	// For example, index 14 (in decimal) = 112 (in ternary), which means
-	// that m_hood[14] is the processor that is right/bottom/front of me
-	// 
-	// Also note that m_hood[0] = me
-	int m_hood[27];
+	int m_hood[3][2];  // for each of the 3 directions, top/bottom neighbour
 
 	iris_real *m_xsplit;    // M ranges (rel 0 - 1) for each proc in X dir
 	iris_real *m_ysplit;    // N ranges (rel 0 - 1) for each proc in Y dir

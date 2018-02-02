@@ -42,6 +42,7 @@ namespace ORG_NCSA_IRIS {
 
 	bool peek_event(struct event_t &out_event);
 	void get_event(struct event_t &out_event);
+	void get_event(int in_peer, int in_tag, struct event_t &out_event);
 
     public:
 	MPI_Comm m_comm;

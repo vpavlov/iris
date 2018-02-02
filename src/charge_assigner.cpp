@@ -138,6 +138,9 @@ void charge_assigner::commit()
 
 	memory::destroy_2d(m_weights);
 	memory::create_2d(m_weights, 3, m_order);
+	if(m_mesh != NULL) {
+	    m_mesh->m_dirty = true;
+	}
 	m_dirty = false;
     }
 }

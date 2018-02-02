@@ -48,9 +48,6 @@ grid::grid(iris *obj, const char *in_name)
     m_ranks(NULL), m_dirty(true)
 {
     m_name = strdup(in_name);
-    for(int i=0;i<27;i++) {
-	m_hood[i] = 0;
-    }
 }
 
 grid::~grid()
@@ -149,41 +146,9 @@ void grid::setup_grid_details()
     // This call fills m_coords with the coordinates of the calling
     // process inside the grid (e.g. this proc is 3,1,0)
     MPI_Cart_get(cart_comm, 3, m_size, m_domain->m_pbc, m_coords);
-
-    // Now, fill the process neighbourhood (me + all 26 surrounding procs)
-    for(int i=0;i<27;i++) {
-	int coords[3];
-
-// OAOO helper
-#define FROB(Q, R, RP, I)				\
-    int Q = RP % 3;					\
-    int R = RP / 3;					\
-    switch(Q) {						\
-    							\
-        case 0:						\
-	    coords[I] = m_coords[I];			\
-	    break;					\
- 							\
-        case 1:						\
-	    coords[I] = m_coords[I] - 1;		\
-	    if(coords[I] < 0) coords[I] += m_size[I];	\
-	    break;					\
-		 					\
-        case 2:						\
-	    coords[I] = (m_coords[I] + 1) % m_size[I];	\
-	    break;					\
-    }
-
-	FROB(q1, r1, i,  0);
-	FROB(q2, r2, r1, 1);
-	FROB(q3, r3, r2, 2);
-
-#undef FROB
-
-	int irank;
-	MPI_Cart_rank(cart_comm, coords, &irank);
-	m_hood[i] = irank;
-    }
+    MPI_Cart_shift(cart_comm, 0, 1, &m_hood[0][0], &m_hood[0][1]);
+    MPI_Cart_shift(cart_comm, 1, 1, &m_hood[1][0], &m_hood[1][1]);
+    MPI_Cart_shift(cart_comm, 2, 1, &m_hood[2][0], &m_hood[2][1]);
 
     memory::destroy_3d(m_ranks);
     memory::create_3d(m_ranks, m_size[0], m_size[1], m_size[2]);

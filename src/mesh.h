@@ -60,7 +60,6 @@ namespace ORG_NCSA_IRIS {
 	void assign_charges(iris_real *in_charges, int ncharges);
 	void exchange_rho_halo();
 	void exchange_field_halo();
-	void add_rho_halo_items(halo_item_t *in_items, int in_nitems);
 
 	void dump_bov(const char *in_fname, iris_real ***data);
 	void dump_ascii(const char *in_fname, iris_real ***data);
@@ -73,6 +72,12 @@ namespace ORG_NCSA_IRIS {
 
 	void check_exyz();
 
+    private:
+	void send_rho_halo(int in_dim, int in_dir,
+			   iris_real **out_sendbuf, MPI_Request *out_req);
+	void recv_rho_halo(int in_dim, int in_dir);
+	void extract_rho();
+
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit
 	bool      m_initialized;
@@ -82,13 +87,14 @@ namespace ORG_NCSA_IRIS {
 	iris_real m_h3inv;    // 1/dV
 	int       m_own_size[3];    // local mesh size: my portion only
 	int       m_own_offset[3];  // where does my mesh start from 
+	int       m_ext_size[3];    // local mesh + halo items
 
-	iris_real ***m_rho;  // right hand side of the Poisson equation
-	iris_real ***m_phi;  // unknown function (left hand side)
+	iris_real ***m_rho;  // own charge density (ρ), part of RHS
+	iris_real ***m_rho_plus;  // ρ, own + halo items
+	iris_real ***m_phi;  // potential φ (unknown in the LHS)
 	iris_real ***m_Ex;   // Electical field x component
 	iris_real ***m_Ey;   // Electical field y component
 	iris_real ***m_Ez;   // Electical field z component
-	std::map<std::tuple<int, int, int>, iris_real> *m_rho_halo;
 
     };
 }

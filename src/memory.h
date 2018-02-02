@@ -98,11 +98,18 @@ namespace ORG_NCSA_IRIS {
 	//**********************************************************************
 
 	template <typename T>
-	static T ***create_3d(T ***&array, int n1, int n2, int n3)
+	static T ***create_3d(T ***&array, int n1, int n2, int n3,
+			      bool clear = false)
 	{
+	    size_t nbytes = n1 * n2 * n3;
 	    array   = (T ***) wmalloc(sizeof(T **) * n1);
 	    T **tmp = (T **)  wmalloc(sizeof(T *)  * n1 * n2);
-	    T *data = (T *)   wmalloc(sizeof(T)    * n1 * n2 * n3);
+	    T *data = (T *)   wmalloc(sizeof(T)    * nbytes);
+	    if(clear) {
+		for(int i=0;i<nbytes;i++) {
+		    data[i] = (T)0;
+		}
+	    }
 
 	    size_t n = 0, m;
 	    for(int i = 0; i < n1; i++) {

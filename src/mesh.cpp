@@ -44,8 +44,8 @@
 using namespace ORG_NCSA_IRIS;
 
 mesh::mesh(iris *obj)
-    :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_dirty(true),
-    m_initialized(false), m_rho_halo(NULL), m_phi(NULL),
+    :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
+    m_dirty(true), m_initialized(false), m_phi(NULL),
     m_Ex(NULL), m_Ey(NULL), m_Ez(NULL)
 {
 }
@@ -53,6 +53,7 @@ mesh::mesh(iris *obj)
 mesh::~mesh()
 {
     memory::destroy_3d(m_rho);
+    memory::destroy_3d(m_rho_plus);
     memory::destroy_3d(m_phi);
     memory::destroy_3d(m_Ex);
     memory::destroy_3d(m_Ey);
@@ -106,14 +107,8 @@ void mesh::commit()
 	m_own_offset[2] = c[2] * m_own_size[2];
 	
 	memory::destroy_3d(m_rho);
-	memory::create_3d(m_rho, m_own_size[0], m_own_size[1], m_own_size[2]);
-	for(int i=0;i<m_own_size[0];i++) {
-	    for(int j=0;j<m_own_size[1];j++) {
-		for(int k=0;k<m_own_size[2];k++) {
-		    m_rho[i][j][k] = 0.0;
-		}
-	    }
-	}
+	memory::create_3d(m_rho, m_own_size[0], m_own_size[1], m_own_size[2],
+			  true);  // make sure ρ is cleared -- it's accumulating
 
 	memory::destroy_3d(m_phi);
 	memory::create_3d(m_phi, m_own_size[0], m_own_size[1], m_own_size[2]);
@@ -127,12 +122,27 @@ void mesh::commit()
 	memory::destroy_3d(m_Ez);
 	memory::create_3d(m_Ez, m_own_size[0], m_own_size[1], m_own_size[2]);
 	
-	if(m_rho_halo != NULL) {
-	    delete [] m_rho_halo;
+	// ρ halo setup
+	// extra cells in each direction: see what charge assigner requires
+	// from below and from above
+	int extra = m_chass->m_ics_to - m_chass->m_ics_from;
+
+	// for odd orders, we have an additional layer at the right, since
+	// charges closer to the right border should go for example
+	// at (0, 1, 2) instead of (-1, 0, 1)
+	if(m_chass->m_order % 2) {
+	    extra++;
 	}
 
-	m_rho_halo = new std::map<std::tuple<int, int, int>, iris_real>[m_iris->m_server_size];
+	m_ext_size[0] = m_own_size[0] + extra;
+	m_ext_size[1] = m_own_size[1] + extra;
+	m_ext_size[2] = m_own_size[2] + extra;
+	memory::destroy_3d(m_rho_plus);
+	memory::create_3d(m_rho_plus, m_ext_size[0], m_ext_size[1],
+			  m_ext_size[2],
+			  true);  // make sure ρ is cleared -- it's accumulating
 
+	
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
 	    m_solver->m_dirty = true;
@@ -262,87 +272,226 @@ void mesh::dump_log(const char *name, iris_real ***data)
     }
 }
 
-
-// TODO: openmp
 void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
 
     iris_real tmp = 0.0;
 
-    for(int i=0;i<in_ncharges;i++) {
-	iris_real tx = (in_charges[i*4 + 0] - gbox->xlo) * m_hinv[0] - m_own_offset[0];
-	iris_real ty = (in_charges[i*4 + 1] - gbox->ylo) * m_hinv[1] - m_own_offset[1];
-	iris_real tz = (in_charges[i*4 + 2] - gbox->zlo) * m_hinv[2] - m_own_offset[2];
+    for(int n=0;n<in_ncharges;n++) {
+	iris_real tx=(in_charges[n*4+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	iris_real ty=(in_charges[n*4+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	iris_real tz=(in_charges[n*4+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
 	
-	// the number of the cell that is to the "left" of the atom
-	int nx = (int) (tx + m_chass->m_ics_bump);
-	int ny = (int) (ty + m_chass->m_ics_bump);
-	int nz = (int) (tz + m_chass->m_ics_bump);
+	// the index of the cell that is to the "left" of the atom
+	int ix = (int) (tx + m_chass->m_ics_bump);
+	int iy = (int) (ty + m_chass->m_ics_bump);
+	int iz = (int) (tz + m_chass->m_ics_bump);
 
-	// distance (increasing to the left!) from the center of the interpolation grid
-	iris_real dx = nx - tx + m_chass->m_ics_center;
-	iris_real dy = ny - ty + m_chass->m_ics_center;
-	iris_real dz = nz - tz + m_chass->m_ics_center;
+	// distance (increasing to the left!) from the center of the
+	// interpolation grid
+	iris_real dx = ix - tx + m_chass->m_ics_center;
+	iris_real dy = iy - ty + m_chass->m_ics_center;
+	iris_real dz = iz - tz + m_chass->m_ics_center;
 
 	m_chass->compute_weights(dx, dy, dz);
 
-	iris_real t0 = m_mesh->m_h3inv * in_charges[i*4 + 3];  // charge/volume
-	for(int x = 0; x < m_chass->m_order; x++) {
-
-	    iris_real t1 = t0 * m_chass->m_weights[0][x];
-	    int m_x = nx + x + m_chass->m_ics_from;
-	    int ne_x = m_x;
-	    int xnidx = 0;
-
-	    if(m_x < 0) {
-		// e.g. -1 becomes 127
-		xnidx = 1;
-		ne_x = m_own_size[0] + m_x;
-	    }else if(m_x >= m_own_size[0]) {
-		xnidx = 2;
-		ne_x = m_x - m_own_size[0];      // e.g. 128 becomes 0
+	iris_real t0 = m_mesh->m_h3inv * in_charges[n*4 + 3];  // q/V
+	for(int i = 0; i < m_chass->m_order; i++) {
+	    iris_real t1 = t0 * m_chass->m_weights[0][i];
+	    for(int j = 0; j < m_chass->m_order; j++) {
+		iris_real t2 = t1 * m_chass->m_weights[1][j];
+		for(int k = 0; k < m_chass->m_order; k++) {
+		    iris_real t3 = t2 * m_chass->m_weights[2][k];
+		    m_rho_plus[ix+i][iy+j][iz+k] += t3;
+		}
 	    }
+	}
+    }
+}
 
-	    for(int y = 0; y < m_chass->m_order; y++) {
+//
+// This is how a line (let's say in X direction) of m_rho_plus looks like:
+//
+// |lll|ooooo|rrr|
+//  \ / \   / \ /
+//   A    B    C
+// A = # of layers to send left;   = -m_chass->m_ics_from
+// B = # of layers of my own mesh; = m_own_size
+// C = # of layers to send right;  = m_chass->m_ics_to
+// The routines below take this into account
+//
+// TODO: optimization: handle the case when peer is self
+void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
+			 MPI_Request *out_req)
+{
+    int A = -m_chass->m_ics_from;
+    int C = m_chass->m_ics_to;
+    if(m_chass->m_order % 2) {
+	C++;
+    }
 
-		iris_real t2 = t1 * m_chass->m_weights[1][y];
-		int m_y = ny + y + m_chass->m_ics_from;
-		int ne_y = m_y;
-		int ynidx = 0;
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
 
-		if(m_y < 0) {
-		    ynidx = 3;
-		    ne_y = m_own_size[1] + m_y;
-		}else if(m_y >= m_own_size[1]) {
-		    ynidx = 6;
-		    ne_y = m_y - m_own_size[1];
-		}
+    if(in_dim == 0) {
+	if(in_dir == 0) {
+	    sx = m_own_size[0] + A;
+	    nx = C;
+	}else {
+	    sx = 0;
+	    nx = A;
+	}
 
-		for(int z = 0; z < m_chass->m_order; z++) {
+	sy = 0;
+	ny = m_ext_size[1];
 
-		    iris_real t3 = t2 * m_chass->m_weights[2][z];
-		    int m_z = nz + z + m_chass->m_ics_from;
-		    int ne_z = m_z;
-		    int znidx = 0;
+	sz = 0;
+	nz = m_ext_size[2];
+    }else if(in_dim == 1) { 
+	sx = 0;
+	nx = m_ext_size[0];
 
-		    if(m_z < 0) {
-			znidx = 9;
-			ne_z = m_own_size[2] + m_z;
-		    }else if(m_z >= m_own_size[2]) {
-			znidx = 18;
-			ne_z = m_z - m_own_size[2];
-		    }
+	if(in_dir == 0) {
+	    sy = m_own_size[1] + A;
+	    ny = C;
+	}else {
+	    sy = 0;
+	    ny = A;
+	}
 
-		    int nidx = xnidx + ynidx + znidx;
-		    if(m_proc_grid->m_hood[nidx] != m_local_comm->m_rank) {
-			std::tuple<int, int, int> entry =
-			    std::make_tuple(ne_x, ne_y, ne_z);
-			m_rho_halo[m_proc_grid->m_hood[nidx]][entry] += t3;
-		    }else {
-			m_rho[ne_x][ne_y][ne_z] += t3;
-		    }
-		}
+	sz = 0;
+	nz = m_ext_size[2];
+    }else {  
+	sx = 0;
+	nx = m_ext_size[0];
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	if(in_dir == 0) {
+	    sz = m_own_size[2] + A;
+	    nz = C;
+	}else {
+	    sz = 0;
+	    nz = A;
+	}
+    }
+
+    ex = sx + nx;
+    ey = sy + ny;
+    ez = sz + nz;
+
+    size_t size = nx*ny*nz*sizeof(iris_real);
+    *out_sendbuf = (iris_real *)memory::wmalloc(size); 
+    int n = 0;
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		(*out_sendbuf)[n++] = m_rho_plus[i][j][k];
+	    }
+	}
+    }
+    m_iris->send_event(m_local_comm->m_comm,
+		       m_proc_grid->m_hood[in_dim][in_dir],
+		       IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, size,
+		       *out_sendbuf, out_req, NULL);
+}
+
+void mesh::recv_rho_halo(int in_dim, int in_dir)
+{
+    event_t ev;
+    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][in_dir],
+			    IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, ev);
+
+    int A = -m_chass->m_ics_from;
+    int C = m_chass->m_ics_to;
+    if(m_chass->m_order % 2) {
+	C++;
+    }
+
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    if(in_dim == 0) {
+	if(in_dir == 0) {   // comes from left
+	    sx = A;
+	    nx = C;
+	}else {
+	    sx = m_own_size[0];
+	    nx = A;
+	}
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else if(in_dim == 1) { 
+	sx = 0;
+	nx = m_ext_size[0];
+
+	if(in_dir == 0) {
+	    sy = A;
+	    ny = C;
+	}else {
+	    sy = m_own_size[1];
+	    ny = A;
+	}
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else {  
+	sx = 0;
+	nx = m_ext_size[0];
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	if(in_dir == 0) {
+	    sz = A;
+	    nz = C;
+	}else {
+	    sz = m_own_size[2];
+	    nz = A;
+	}
+    }
+
+    ex = sx + nx;
+    ey = sy + ny;
+    ez = sz + nz;
+    
+    int n = 0;
+    iris_real *data = (iris_real *)ev.data;
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		m_rho_plus[i][j][k] += data[n++];
+	    }
+	}
+    }
+    
+    memory::wfree(ev.data);
+}
+
+// The halo is exchanged; extract rho from rho_plus
+void mesh::extract_rho()
+{
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    sx = sy = sz = -m_chass->m_ics_from;
+    ex = sx + m_own_size[0];
+    ey = sy + m_own_size[1];
+    ez = sz + m_own_size[2];
+
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		m_rho[i-sx][j-sy][k-sz] = m_rho_plus[i][j][k];
 	    }
 	}
     }
@@ -350,52 +499,28 @@ void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 
 void mesh::exchange_rho_halo()
 {
-    MPI_Request *req = new MPI_Request[m_iris->m_server_size];
-    halo_item_t **sendbufs = new halo_item_t *[m_iris->m_server_size];
+    iris_real *sendbufs[6];
+    MPI_Request req[6];
 
-    MPI_Win win;
-    int *pending = m_iris->stos_fence_pending(&win);
+    send_rho_halo(0, 0, &sendbufs[0], &req[0]);
+    send_rho_halo(0, 1, &sendbufs[1], &req[1]);
+    send_rho_halo(1, 0, &sendbufs[2], &req[2]);
+    send_rho_halo(1, 1, &sendbufs[3], &req[3]);
+    send_rho_halo(2, 0, &sendbufs[4], &req[4]);
+    send_rho_halo(2, 1, &sendbufs[5], &req[5]);
 
-    for(int peer=0;peer<m_iris->m_server_size;peer++) {
-	req[peer] = MPI_REQUEST_NULL;
-	sendbufs[peer] = NULL;
+    recv_rho_halo(0, 0);
+    recv_rho_halo(0, 1);
+    recv_rho_halo(1, 0);
+    recv_rho_halo(1, 1);
+    recv_rho_halo(2, 0);
+    recv_rho_halo(2, 1);
 
-	std::map<std::tuple<int, int, int>, iris_real> map = m_rho_halo[peer];
-	int count = map.size();  // number of halo items
-	int size = count * sizeof(halo_item_t);  // in bytes
-	if(count == 0) {
-	    continue;
-	}
+    extract_rho();
 
-	m_logger->trace("There are %d ρ halo items for %d", count, peer);
-
-	int i = 0;
-	sendbufs[peer] = (halo_item_t *)memory::wmalloc(size);
-    	for(auto j = map.begin(); j != map.end(); j++) {
-    	    sendbufs[peer][i].v = j->second;
-    	    sendbufs[peer][i].x = std::get<0>(j->first);
-    	    sendbufs[peer][i].y = std::get<1>(j->first);
-    	    sendbufs[peer][i++].z = std::get<2>(j->first);
-    	}
-
-	m_iris->send_event(m_local_comm->m_comm, peer, IRIS_TAG_RHO_HALO,
-			   size, sendbufs[peer], &req[peer], win);
-    }
-
-    m_iris->stos_process_pending(pending, win);
-
-    MPI_Waitall(m_iris->m_server_size, req, MPI_STATUSES_IGNORE);
-    delete req;
-    for(int i=0;i<m_iris->m_server_size;i++) {
+    MPI_Waitall(6, req, MPI_STATUSES_IGNORE);
+    for(int i=0;i<6;i++) {
 	memory::wfree(sendbufs[i]);
-    }
-}
-
-//TODO: openmp
-void mesh::add_rho_halo_items(halo_item_t *in_items, int in_nitems)
-{
-    for(int i=0;i<in_nitems;i++) {
-    	m_rho[in_items[i].x][in_items[i].y][in_items[i].z] += in_items[i].v;
     }
 }
 
