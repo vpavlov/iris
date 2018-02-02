@@ -45,7 +45,7 @@ using namespace ORG_NCSA_IRIS;
 
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_dirty(true),
-    m_initialized(false), m_halo(NULL), m_phi(NULL),
+    m_initialized(false), m_rho_halo(NULL), m_phi(NULL),
     m_Ex(NULL), m_Ey(NULL), m_Ez(NULL)
 {
 }
@@ -127,11 +127,11 @@ void mesh::commit()
 	memory::destroy_3d(m_Ez);
 	memory::create_3d(m_Ez, m_own_size[0], m_own_size[1], m_own_size[2]);
 	
-	if(m_halo != NULL) {
-	    delete [] m_halo;
+	if(m_rho_halo != NULL) {
+	    delete [] m_rho_halo;
 	}
 
-	m_halo = new std::map<std::tuple<int, int, int>, iris_real>[m_iris->m_server_size];
+	m_rho_halo = new std::map<std::tuple<int, int, int>, iris_real>[m_iris->m_server_size];
 
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
@@ -338,7 +338,7 @@ void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
 		    if(m_proc_grid->m_hood[nidx] != m_local_comm->m_rank) {
 			std::tuple<int, int, int> entry =
 			    std::make_tuple(ne_x, ne_y, ne_z);
-			m_halo[m_proc_grid->m_hood[nidx]][entry] += t3;
+			m_rho_halo[m_proc_grid->m_hood[nidx]][entry] += t3;
 		    }else {
 			m_rho[ne_x][ne_y][ne_z] += t3;
 		    }
@@ -348,7 +348,7 @@ void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
     }
 }
 
-void mesh::exchange_halo()
+void mesh::exchange_rho_halo()
 {
     MPI_Request *req = new MPI_Request[m_iris->m_server_size];
     halo_item_t **sendbufs = new halo_item_t *[m_iris->m_server_size];
@@ -360,14 +360,14 @@ void mesh::exchange_halo()
 	req[peer] = MPI_REQUEST_NULL;
 	sendbufs[peer] = NULL;
 
-	std::map<std::tuple<int, int, int>, iris_real> map = m_halo[peer];
+	std::map<std::tuple<int, int, int>, iris_real> map = m_rho_halo[peer];
 	int count = map.size();  // number of halo items
 	int size = count * sizeof(halo_item_t);  // in bytes
 	if(count == 0) {
 	    continue;
 	}
 
-	m_logger->trace("There are %d halo items for %d", count, peer);
+	m_logger->trace("There are %d ρ halo items for %d", count, peer);
 
 	int i = 0;
 	sendbufs[peer] = (halo_item_t *)memory::wmalloc(size);
@@ -392,7 +392,7 @@ void mesh::exchange_halo()
 }
 
 //TODO: openmp
-void mesh::add_halo_items(halo_item_t *in_items, int in_nitems)
+void mesh::add_rho_halo_items(halo_item_t *in_items, int in_nitems)
 {
     for(int i=0;i<in_nitems;i++) {
     	m_rho[in_items[i].x][in_items[i].y][in_items[i].z] += in_items[i].v;
@@ -405,4 +405,37 @@ void mesh::ijk_to_xyz(int i, int j, int k,
     x = m_domain->m_local_box.xlo + i * m_h[0];
     y = m_domain->m_local_box.ylo + j * m_h[1];
     z = m_domain->m_local_box.zlo + k * m_h[2];
+}
+
+void mesh::check_exyz()
+{
+    iris_real sum_ex = 0.0;
+    iris_real sum_ey = 0.0;
+    iris_real sum_ez = 0.0;
+
+    for(int i=0;i<m_own_size[2];i++) {
+	for(int j=0;j<m_own_size[1];j++) {
+	    for(int k=0;k<m_own_size[0];k++) {
+		sum_ex += m_Ex[k][j][i];
+		sum_ey += m_Ey[k][j][i];
+		sum_ez += m_Ez[k][j][i];
+	    }
+	}
+    }
+    m_logger->trace("Ex sum = %g", sum_ex);
+    m_logger->trace("Ey sum = %g", sum_ey);
+    m_logger->trace("Ez sum = %g", sum_ez);
+}
+
+void mesh::exchange_field_halo()
+{
+    // Ex, Ey and Ez are calculated. Now, in order to interpolate them back
+    // to the original atoms, each proc will need controbutions from its
+    // neighbours.
+    //
+    // When exchanging ρ halo, we could store outgoing contributions while
+    // we calculate charge assignment, collect them and then after all is done,
+    // distribute them to the neighbours. Now, its different, because we need
+    // incoming contribution from neighbours before we start interpolating the
+    // fields back to the charges.
 }

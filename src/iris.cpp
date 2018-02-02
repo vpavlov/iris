@@ -493,7 +493,7 @@ bool iris::handle_charges(event_t *event)
 bool iris::handle_commit_charges()
 {
     m_logger->trace("Commit charges received: initiating halo exchange");
-    m_mesh->exchange_halo();
+    m_mesh->exchange_rho_halo();
     m_logger->trace("Halo exchange done");
     solve();
     return false;  // no need to hodl
@@ -510,7 +510,7 @@ bool iris::handle_rho_halo(event_t *event)
     if(nitems != 0) {
 	m_logger->trace("Received %d halo items from %d: adding them to our ρ",
 			nitems, event->peer);
-	m_mesh->add_halo_items((halo_item_t *)event->data, nitems);
+	m_mesh->add_rho_halo_items((halo_item_t *)event->data, nitems);
 	m_logger->trace("Adding halo to ρ done");
     }
     return false;  // no need to hodl
@@ -528,10 +528,8 @@ void iris::set_rhs(rhs_fn_t fn)
     
 }
 
-void iris::solve()
+void iris::calculate_etot()
 {
-    m_solver->solve();
-
     iris_real sum = 0.0;
     iris_real dv = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
     for(int i=0;i<m_mesh->m_own_size[0];i++) {
@@ -553,3 +551,9 @@ void iris::solve()
     }
 }
 
+void iris::solve()
+{
+    m_solver->solve();
+    calculate_etot();
+    m_mesh->exchange_field_halo();
+}

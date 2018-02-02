@@ -184,6 +184,7 @@ namespace ORG_NCSA_IRIS {
 	bool handle_commit_charges();
 	bool handle_rho_halo(struct event_t *in_event);
 
+	void calculate_etot();  // calculate Hartree energy, for verification
     public:
 	int m_client_size;             // # of client nodes
 	int m_server_size;             // # of server nodes

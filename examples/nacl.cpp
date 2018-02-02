@@ -377,6 +377,7 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
+	x->m_mesh->check_exyz();
 	x->m_mesh->dump_exyz("field");
     }
 
