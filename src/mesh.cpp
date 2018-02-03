@@ -251,7 +251,7 @@ void mesh::dump_ascii(const char *fname, iris_real ***data)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%.16f ", data[k][j][i]);
+		fprintf(fp, "%.15g ", data[k][j][i]);
 	    }
 	}
     }
@@ -263,7 +263,7 @@ void mesh::dump_log(const char *name, iris_real ***data)
     for(int i=0;i<m_own_size[0];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[2];k++) {
-		m_logger->trace("%s[%d][%d][%d] = %.16f", name, i, j, k,
+		m_logger->trace("%s[%d][%d][%d] = %.15g", name, i, j, k,
 				data[i][j][k]);
 	    }
 	    m_logger->trace("");
@@ -402,7 +402,8 @@ void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 void mesh::recv_rho_halo(int in_dim, int in_dir)
 {
     event_t ev;
-    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][in_dir],
+
+    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
 			    IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, ev);
 
     int A = -m_chass->m_ics_from;
@@ -502,17 +503,20 @@ void mesh::exchange_rho_halo()
     iris_real *sendbufs[6];
     MPI_Request req[6];
 
+    MPI_Barrier(m_local_comm->m_comm);
+
     send_rho_halo(0, 0, &sendbufs[0], &req[0]);
     send_rho_halo(0, 1, &sendbufs[1], &req[1]);
-    send_rho_halo(1, 0, &sendbufs[2], &req[2]);
-    send_rho_halo(1, 1, &sendbufs[3], &req[3]);
-    send_rho_halo(2, 0, &sendbufs[4], &req[4]);
-    send_rho_halo(2, 1, &sendbufs[5], &req[5]);
-
     recv_rho_halo(0, 0);
     recv_rho_halo(0, 1);
+
+    send_rho_halo(1, 0, &sendbufs[2], &req[2]);
+    send_rho_halo(1, 1, &sendbufs[3], &req[3]);
     recv_rho_halo(1, 0);
     recv_rho_halo(1, 1);
+
+    send_rho_halo(2, 0, &sendbufs[4], &req[4]);
+    send_rho_halo(2, 1, &sendbufs[5], &req[5]);
     recv_rho_halo(2, 0);
     recv_rho_halo(2, 1);
 

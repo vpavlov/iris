@@ -187,7 +187,7 @@ void poisson_solver_psm::calculate_laplacian_ev()
     // for(int i=0;i<nx;i++) {
     // 	for(int j=0;j<ny;j++) {
     // 	    for(int k=0;k<nz;k++) {
-    // 		m_logger->trace("EV[%d][%d][%d] = %.16f", i, j, k, m_ev[i][j][k]);
+    // 		m_logger->trace("EV[%d][%d][%d] = %.15g", i, j, k, m_ev[i][j][k]);
     // 	    }
     // 	}
     // }
@@ -344,7 +344,7 @@ void poisson_solver_psm::dump_work(int idx)
     }
 
     for(int i=0;i<m_fft->m_count;i++) {
-	m_logger->trace("WORK%d[%d] = %.16f + j*%.16f",
+	m_logger->trace("WORK%d[%d] = %.15g + j*%.15g",
 			idx, i, data[i*2+0], data[i*2+1]);
     }
 }

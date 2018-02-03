@@ -146,9 +146,9 @@ void grid::setup_grid_details()
     // This call fills m_coords with the coordinates of the calling
     // process inside the grid (e.g. this proc is 3,1,0)
     MPI_Cart_get(cart_comm, 3, m_size, m_domain->m_pbc, m_coords);
-    MPI_Cart_shift(cart_comm, 0, 1, &m_hood[0][0], &m_hood[0][1]);
-    MPI_Cart_shift(cart_comm, 1, 1, &m_hood[1][0], &m_hood[1][1]);
-    MPI_Cart_shift(cart_comm, 2, 1, &m_hood[2][0], &m_hood[2][1]);
+    MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
+    MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
+    MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
 
     memory::destroy_3d(m_ranks);
     memory::create_3d(m_ranks, m_size[0], m_size[1], m_size[2]);

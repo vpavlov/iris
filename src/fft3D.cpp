@@ -335,7 +335,7 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 
 	// m_logger->trace("AFTER REMAP %d", i);
 	// for(int j=0;j<m_count;j++) {
-	//     m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+	//     m_logger->trace("FFT[%d] = %.15g + j*%.15g",
 	// 		    j, dest[j*2+0], dest[j*2+1]);
 	// }
 
@@ -348,7 +348,7 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 
 	// m_logger->trace("AFTER FFT %d", i);
 	// for(int j=0;j<m_count;j++) {
-	//     m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+	//     m_logger->trace("FFT[%d] = %.15g + j*%.15g",
 	// 		    j, dest[j*2+0], dest[j*2+1]);
 	// }
 
@@ -358,7 +358,7 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 
     // m_logger->trace("AFTER FINAL REMAP");
     // for(int j=0;j<m_count;j++) {
-    // 	m_logger->trace("FFT[%d] = %.16f + j*%.16f",
+    // 	m_logger->trace("FFT[%d] = %.15g + j*%.15g",
     // 			j, dest[j*2+0], dest[j*2+1]);
     // }
 

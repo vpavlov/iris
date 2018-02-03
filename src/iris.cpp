@@ -391,7 +391,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
 		      MPI_Win in_pending_win)
 {
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_tag, in_comm, req);
-    if(is_server() && in_pending_win != NULL) {
+    if(is_server() && in_pending_win) {
 	int one = 1;
 	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
 		in_pending_win);
@@ -530,13 +530,13 @@ void iris::calculate_etot()
 	}
     }
     sum *= 0.5;
-    m_logger->info("Partial Hartree energy: %.16f", sum);
+    m_logger->info("Partial Hartree energy: %.15g", sum);
 
     iris_real hartree;
     MPI_Reduce(&sum, &hartree, 1, IRIS_REAL, MPI_SUM, m_local_leader,
 	       m_local_comm->m_comm);
     if(is_leader()) {
-	m_logger->info("Full Hartree energy: %.16f", hartree);
+	m_logger->info("Full Hartree energy: %.15g", hartree);
     }
 }
 
