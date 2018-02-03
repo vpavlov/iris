@@ -637,14 +637,15 @@ void mesh::imtract_field()
 // This is how a line (let's say in X direction) of m_Ex_plus looks like:
 //
 // |000|eeeee|000|
-//       |000|eeeee|000|
-// |000|eeeee|000|
 //  \ / \   / \ /
 //   A    B    C
 // A = # of layers to receive from left;   = -m_chass->m_ics_from
 // B = # of layers of my own mesh; = m_own_size
 // C = # of layers to receive from right;  = m_chass->m_ics_to
 // The routines below take this into account
+//
+//
+// |x|YYeeeX|yy|
 //
 // TODO: optimization: handle the case when peer is self
 void mesh::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
@@ -663,11 +664,11 @@ void mesh::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
     if(in_dim == 0) {
 	int B = m_own_size[0];
 	if(in_dir == 0) {
-	    sx = A + B - C;
-	    nx = C;
+	    sx = B;
+	    nx = A;
 	}else {
 	    sx = A;
-	    nx = A;
+	    nx = C;
 	}
 
 	sy = 0;
@@ -682,11 +683,11 @@ void mesh::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 	nx = m_ext_size[0];
 
 	if(in_dir == 0) {
-	    sy = A + B - C;
-	    ny = C;
+	    sy = B;
+	    ny = A;
 	}else {
 	    sy = A;
-	    ny = A;
+	    ny = C;
 	}
 
 	sz = 0;
@@ -700,11 +701,11 @@ void mesh::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 	ny = m_ext_size[1];
 
 	if(in_dir == 0) {
-	    sz = A + B - C;
-	    nz = C;
+	    sz = B;
+	    nz = A;
 	}else {
 	    sz = A;
-	    nz = A;
+	    nz = C;
 	}
     }
 
@@ -752,7 +753,7 @@ void mesh::recv_field_halo(int in_dim, int in_dir)
 
 	if(in_dir == 0) {   // comes from left
 	    sx = 0;
-	    nx = C;
+	    nx = A;
 	}else {
 	    sx = A + B;
 	    nx = C;
@@ -770,7 +771,7 @@ void mesh::recv_field_halo(int in_dim, int in_dir)
 
 	if(in_dir == 0) {
 	    sy = 0;
-	    ny = C;
+	    ny = A;
 	}else {
 	    sy = A + B;
 	    ny = C;
@@ -788,7 +789,7 @@ void mesh::recv_field_halo(int in_dim, int in_dir)
 
 	if(in_dir == 0) {
 	    sz = 0;
-	    nz = C;
+	    nz = A;
 	}else {
 	    sz = A + B;
 	    nz = C;
@@ -902,13 +903,13 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	out_forces[n*3 + 1] = q * eky;
 	out_forces[n*3 + 2] = q * ekz;
 
-	// m_logger->trace("F(%.15g, %.15g, %.15g) = (%.15g, %.15g, %.15g)",
-	// 		in_charges[n*4+0],
-	// 		in_charges[n*4+1],
-	// 		in_charges[n*4+2],
-	// 		out_forces[n*3 + 0],
-	// 		out_forces[n*3 + 1],
-	// 		out_forces[n*3 + 2]);
+//	m_logger->trace("F(%.15g, %.15g, %.15g) = (%.15g, %.15g, %.15g)",
+//			in_charges[n*4+0],
+//			in_charges[n*4+1],
+//			in_charges[n*4+2],
+//			out_forces[n*3 + 0],
+//			out_forces[n*3 + 1],
+//			out_forces[n*3 + 2]);
 
     }
 
