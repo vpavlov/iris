@@ -378,8 +378,8 @@ main(int argc, char **argv)
 
     if(x->is_server()) {
 	//x->m_mesh->dump_log("RHO", x->m_mesh->m_rho);
-	x->m_mesh->check_exyz();
-	x->m_mesh->dump_exyz("field");
+	x->m_mesh->check_fxyz();
+	//x->m_mesh->dump_exyz("field");
     }
 
     // Cleanup

@@ -57,9 +57,10 @@ namespace ORG_NCSA_IRIS {
 	// start solving
 	void commit();
 
-	void assign_charges(iris_real *in_charges, int ncharges);
+	void assign_charges();
 	void exchange_rho_halo();
 	void exchange_field_halo();
+	void assign_forces();
 
 	void dump_bov(const char *in_fname, iris_real ***data);
 	void dump_ascii(const char *in_fname, iris_real ***data);
@@ -70,31 +71,52 @@ namespace ORG_NCSA_IRIS {
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
 
-	void check_exyz();
+	void check_fxyz();
 
     private:
+
+	void assign_charges1(int in_ncharges, iris_real *in_charges);
+	void assign_forces1(int in_ncharges, iris_real *in_charges,
+			    iris_real *out_forces);
+
 	void send_rho_halo(int in_dim, int in_dir,
 			   iris_real **out_sendbuf, MPI_Request *out_req);
 	void recv_rho_halo(int in_dim, int in_dir);
 	void extract_rho();
 
+	void send_field_halo(int in_dim, int in_dir,
+			   iris_real **out_sendbuf, MPI_Request *out_req);
+	void recv_field_halo(int in_dim, int in_dir);
+	void imtract_field();
+
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit
 	bool      m_initialized;
 	int       m_size[3];  // global mesh size: MxNxP mesh points in each dir
+
 	iris_real m_h[3];     // step of the mesh (h) in each direction
+	iris_real m_h3;       // dV
+
 	iris_real m_hinv[3];  // 1/h in each direction
 	iris_real m_h3inv;    // 1/dV
+
 	int       m_own_size[3];    // local mesh size: my portion only
 	int       m_own_offset[3];  // where does my mesh start from 
 	int       m_ext_size[3];    // local mesh + halo items
+
+	std::map<int, int> m_ncharges;         // per sending rank
+	std::map<int, iris_real *> m_charges;  // per sending rank
+	std::map<int, iris_real *> m_forces;   // per recv rank
 
 	iris_real ***m_rho;  // own charge density (ρ), part of RHS
 	iris_real ***m_rho_plus;  // ρ, own + halo items
 	iris_real ***m_phi;  // potential φ (unknown in the LHS)
 	iris_real ***m_Ex;   // Electical field x component
+	iris_real ***m_Ex_plus;  // Ex, own + halo items
 	iris_real ***m_Ey;   // Electical field y component
+	iris_real ***m_Ey_plus;  // Ex, own + halo items
 	iris_real ***m_Ez;   // Electical field z component
+	iris_real ***m_Ez_plus;  // Ex, own + halo items
 
     };
 }

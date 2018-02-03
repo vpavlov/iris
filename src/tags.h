@@ -41,3 +41,9 @@
 #define IRIS_TAG_RHO_HALO5        11
 #define IRIS_TAG_RHO_HALO6        12
 #define IRIS_TAG_REMAP            13
+#define IRIS_TAG_FIELD_HALO       14   // ..._FIELD_HALOx must be consequitive
+#define IRIS_TAG_FIELD_HALO2      15   
+#define IRIS_TAG_FIELD_HALO3      16
+#define IRIS_TAG_FIELD_HALO4      17
+#define IRIS_TAG_FIELD_HALO5      18
+#define IRIS_TAG_FIELD_HALO6      19

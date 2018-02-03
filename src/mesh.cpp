@@ -46,7 +46,8 @@ using namespace ORG_NCSA_IRIS;
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
     m_dirty(true), m_initialized(false), m_phi(NULL),
-    m_Ex(NULL), m_Ey(NULL), m_Ez(NULL)
+    m_Ex(NULL), m_Ey(NULL), m_Ez(NULL), m_Ex_plus(NULL), m_Ey_plus(NULL),
+    m_Ez_plus(NULL)
 {
 }
 
@@ -56,8 +57,18 @@ mesh::~mesh()
     memory::destroy_3d(m_rho_plus);
     memory::destroy_3d(m_phi);
     memory::destroy_3d(m_Ex);
+    memory::destroy_3d(m_Ex_plus);
     memory::destroy_3d(m_Ey);
+    memory::destroy_3d(m_Ey_plus);
     memory::destroy_3d(m_Ez);
+    memory::destroy_3d(m_Ez_plus);
+    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	memory::wfree(it->second);
+    }
+
+    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	memory::wfree(it->second);
+    }
 }
 
 void mesh::set_size(int nx, int ny, int nz)
@@ -90,6 +101,8 @@ void mesh::commit()
 	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
 	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
 	m_h[2] = m_domain->m_global_box.zsize / m_size[2];
+
+	m_h3 = m_h[0] * m_h[1] * m_h[2];
 
 	m_hinv[0] = m_size[0] / m_domain->m_global_box.xsize;
 	m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
@@ -142,6 +155,32 @@ void mesh::commit()
 			  m_ext_size[2],
 			  true);  // make sure ρ is cleared -- it's accumulating
 
+	memory::destroy_3d(m_Ex_plus);
+	memory::create_3d(m_Ex_plus, m_ext_size[0], m_ext_size[1],
+			  m_ext_size[2],
+			  true);
+
+	memory::destroy_3d(m_Ey_plus);
+	memory::create_3d(m_Ey_plus, m_ext_size[0], m_ext_size[1],
+			  m_ext_size[2],
+			  true);
+
+	memory::destroy_3d(m_Ez_plus);
+	memory::create_3d(m_Ez_plus, m_ext_size[0], m_ext_size[1],
+			  m_ext_size[2],
+			  true);
+
+	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	    memory::wfree(it->second);
+	}
+
+	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	    memory::wfree(it->second);
+	}
+
+	m_ncharges.clear();
+	m_charges.clear();
+	m_forces.clear();
 	
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
@@ -272,11 +311,18 @@ void mesh::dump_log(const char *name, iris_real ***data)
     }
 }
 
-void mesh::assign_charges(iris_real *in_charges, int in_ncharges)
+void mesh::assign_charges()
+{
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	int ncharges = it->second;
+	iris_real *charges = m_charges[it->first];
+	assign_charges1(ncharges, charges);
+    }
+}
+
+void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-
-    iris_real tmp = 0.0;
 
     for(int n=0;n<in_ncharges;n++) {
 	iris_real tx=(in_charges[n*4+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
@@ -336,8 +382,9 @@ void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
     int sz, nz, ez;
 
     if(in_dim == 0) {
+	int B = m_own_size[0];
 	if(in_dir == 0) {
-	    sx = m_own_size[0] + A;
+	    sx = A + B;
 	    nx = C;
 	}else {
 	    sx = 0;
@@ -350,11 +397,12 @@ void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 	sz = 0;
 	nz = m_ext_size[2];
     }else if(in_dim == 1) { 
+	int B = m_own_size[1];
 	sx = 0;
 	nx = m_ext_size[0];
 
 	if(in_dir == 0) {
-	    sy = m_own_size[1] + A;
+	    sy = A + B;
 	    ny = C;
 	}else {
 	    sy = 0;
@@ -364,6 +412,7 @@ void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 	sz = 0;
 	nz = m_ext_size[2];
     }else {  
+	int B = m_own_size[2];
 	sx = 0;
 	nx = m_ext_size[0];
 
@@ -371,7 +420,7 @@ void mesh::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 	ny = m_ext_size[1];
 
 	if(in_dir == 0) {
-	    sz = m_own_size[2] + A;
+	    sz = A + B;
 	    nz = C;
 	}else {
 	    sz = 0;
@@ -417,11 +466,13 @@ void mesh::recv_rho_halo(int in_dim, int in_dir)
     int sz, nz, ez;
 
     if(in_dim == 0) {
+	int B = m_own_size[0];
+
 	if(in_dir == 0) {   // comes from left
 	    sx = A;
 	    nx = C;
 	}else {
-	    sx = m_own_size[0];
+	    sx = B;
 	    nx = A;
 	}
 
@@ -431,6 +482,7 @@ void mesh::recv_rho_halo(int in_dim, int in_dir)
 	sz = 0;
 	nz = m_ext_size[2];
     }else if(in_dim == 1) { 
+	int B = m_own_size[1];
 	sx = 0;
 	nx = m_ext_size[0];
 
@@ -438,13 +490,14 @@ void mesh::recv_rho_halo(int in_dim, int in_dir)
 	    sy = A;
 	    ny = C;
 	}else {
-	    sy = m_own_size[1];
+	    sy = B;
 	    ny = A;
 	}
 
 	sz = 0;
 	nz = m_ext_size[2];
     }else {  
+	int B = m_own_size[2];
 	sx = 0;
 	nx = m_ext_size[0];
 
@@ -455,7 +508,7 @@ void mesh::recv_rho_halo(int in_dim, int in_dir)
 	    sz = A;
 	    nz = C;
 	}else {
-	    sz = m_own_size[2];
+	    sz = B;
 	    nz = A;
 	}
     }
@@ -536,35 +589,328 @@ void mesh::ijk_to_xyz(int i, int j, int k,
     z = m_domain->m_local_box.zlo + k * m_h[2];
 }
 
-void mesh::check_exyz()
+void mesh::check_fxyz()
 {
-    iris_real sum_ex = 0.0;
-    iris_real sum_ey = 0.0;
-    iris_real sum_ez = 0.0;
+    iris_real sum_fx = 0.0;
+    iris_real sum_fy = 0.0;
+    iris_real sum_fz = 0.0;
 
-    for(int i=0;i<m_own_size[2];i++) {
-	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<m_own_size[0];k++) {
-		sum_ex += m_Ex[k][j][i];
-		sum_ey += m_Ey[k][j][i];
-		sum_ez += m_Ez[k][j][i];
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	iris_real *forces = m_forces[it->first];
+	int ncharges = m_ncharges[it->first];
+	for(int i=0;i<ncharges;i++) {
+	    sum_fx += forces[i*3 + 0];
+	    sum_fy += forces[i*3 + 1];
+	    sum_fz += forces[i*3 + 2];
+	}
+    }
+    m_logger->trace("Fx sum = %g", sum_fx);
+    m_logger->trace("Fy sum = %g", sum_fy);
+    m_logger->trace("Fz sum = %g", sum_fz);
+}
+
+// Copy Ex, Ey and Ez to inner regions of Ex_plus, etc., thus preparing
+// to exchange halo for E
+void mesh::imtract_field()
+{
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    sx = sy = sz = -m_chass->m_ics_from;
+    ex = sx + m_own_size[0];
+    ey = sy + m_own_size[1];
+    ez = sz + m_own_size[2];
+    
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		m_Ex_plus[i][j][k] = m_Ex[i-sx][j-sy][k-sz];
+		m_Ey_plus[i][j][k] = m_Ey[i-sx][j-sy][k-sz];
+		m_Ez_plus[i][j][k] = m_Ez[i-sx][j-sy][k-sz];
 	    }
 	}
     }
-    m_logger->trace("Ex sum = %g", sum_ex);
-    m_logger->trace("Ey sum = %g", sum_ey);
-    m_logger->trace("Ez sum = %g", sum_ez);
 }
 
+//
+// This is how a line (let's say in X direction) of m_Ex_plus looks like:
+//
+// |000|eeeee|000|
+//       |000|eeeee|000|
+// |000|eeeee|000|
+//  \ / \   / \ /
+//   A    B    C
+// A = # of layers to receive from left;   = -m_chass->m_ics_from
+// B = # of layers of my own mesh; = m_own_size
+// C = # of layers to receive from right;  = m_chass->m_ics_to
+// The routines below take this into account
+//
+// TODO: optimization: handle the case when peer is self
+void mesh::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
+			   MPI_Request *out_req)
+{
+    int A = -m_chass->m_ics_from;
+    int C = m_chass->m_ics_to;
+    if(m_chass->m_order % 2) {
+	C++;
+    }
+
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    if(in_dim == 0) {
+	int B = m_own_size[0];
+	if(in_dir == 0) {
+	    sx = A + B - C;
+	    nx = C;
+	}else {
+	    sx = A;
+	    nx = A;
+	}
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else if(in_dim == 1) { 
+	int B = m_own_size[1];
+
+	sx = 0;
+	nx = m_ext_size[0];
+
+	if(in_dir == 0) {
+	    sy = A + B - C;
+	    ny = C;
+	}else {
+	    sy = A;
+	    ny = A;
+	}
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else {  
+	int B = m_own_size[2];
+	sx = 0;
+	nx = m_ext_size[0];
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	if(in_dir == 0) {
+	    sz = A + B - C;
+	    nz = C;
+	}else {
+	    sz = A;
+	    nz = A;
+	}
+    }
+
+    ex = sx + nx;
+    ey = sy + ny;
+    ez = sz + nz;
+
+    size_t size = 3*nx*ny*nz*sizeof(iris_real);
+    *out_sendbuf = (iris_real *)memory::wmalloc(size); 
+    int n = 0;
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		(*out_sendbuf)[n++] = m_Ex_plus[i][j][k];
+		(*out_sendbuf)[n++] = m_Ey_plus[i][j][k];
+		(*out_sendbuf)[n++] = m_Ez_plus[i][j][k];
+	    }
+	}
+    }
+    m_iris->send_event(m_local_comm->m_comm,
+		       m_proc_grid->m_hood[in_dim][in_dir],
+		       IRIS_TAG_FIELD_HALO + in_dim*2 + in_dir, size,
+		       *out_sendbuf, out_req, NULL);
+}
+
+void mesh::recv_field_halo(int in_dim, int in_dir)
+{
+    event_t ev;
+
+    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
+			    IRIS_TAG_FIELD_HALO + in_dim*2 + in_dir, ev);
+
+    int A = -m_chass->m_ics_from;
+    int C = m_chass->m_ics_to;
+    if(m_chass->m_order % 2) {
+	C++;
+    }
+
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    if(in_dim == 0) {
+	int B = m_own_size[0];
+
+	if(in_dir == 0) {   // comes from left
+	    sx = 0;
+	    nx = C;
+	}else {
+	    sx = A + B;
+	    nx = C;
+	}
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else if(in_dim == 1) { 
+	int B = m_own_size[1];
+	sx = 0;
+	nx = m_ext_size[0];
+
+	if(in_dir == 0) {
+	    sy = 0;
+	    ny = C;
+	}else {
+	    sy = A + B;
+	    ny = C;
+	}
+
+	sz = 0;
+	nz = m_ext_size[2];
+    }else {  
+	int B = m_own_size[2];
+	sx = 0;
+	nx = m_ext_size[0];
+
+	sy = 0;
+	ny = m_ext_size[1];
+
+	if(in_dir == 0) {
+	    sz = 0;
+	    nz = C;
+	}else {
+	    sz = A + B;
+	    nz = C;
+	}
+    }
+
+    ex = sx + nx;
+    ey = sy + ny;
+    ez = sz + nz;
+    
+    int n = 0;
+    iris_real *data = (iris_real *)ev.data;
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		m_Ex_plus[i][j][k] += data[n++];
+		m_Ey_plus[i][j][k] += data[n++];
+		m_Ez_plus[i][j][k] += data[n++];
+	    }
+	}
+    }
+    
+    memory::wfree(ev.data);
+}
+
+// Ex, Ey and Ez are calculated. Now, in order to interpolate them back
+// to the original atoms, each proc will need controbutions from its
+// neighbours.
 void mesh::exchange_field_halo()
 {
-    // Ex, Ey and Ez are calculated. Now, in order to interpolate them back
-    // to the original atoms, each proc will need controbutions from its
-    // neighbours.
-    //
-    // When exchanging ρ halo, we could store outgoing contributions while
-    // we calculate charge assignment, collect them and then after all is done,
-    // distribute them to the neighbours. Now, its different, because we need
-    // incoming contribution from neighbours before we start interpolating the
-    // fields back to the charges.
+    iris_real *sendbufs[6];
+    MPI_Request req[6];
+
+    MPI_Barrier(m_local_comm->m_comm);
+
+    imtract_field();
+
+    send_field_halo(0, 0, &sendbufs[0], &req[0]);
+    send_field_halo(0, 1, &sendbufs[1], &req[1]);
+    recv_field_halo(0, 0);
+    recv_field_halo(0, 1);
+
+    send_field_halo(1, 0, &sendbufs[2], &req[2]);
+    send_field_halo(1, 1, &sendbufs[3], &req[3]);
+    recv_field_halo(1, 0);
+    recv_field_halo(1, 1);
+
+    send_field_halo(2, 0, &sendbufs[4], &req[4]);
+    send_field_halo(2, 1, &sendbufs[5], &req[5]);
+    recv_field_halo(2, 0);
+    recv_field_halo(2, 1);
+
+    MPI_Waitall(6, req, MPI_STATUSES_IGNORE);
+    for(int i=0;i<6;i++) {
+	memory::wfree(sendbufs[i]);
+    }
 }
+
+void mesh::assign_forces()
+{
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	int ncharges = it->second;
+	iris_real *forces = (iris_real *)memory::wmalloc(3 * sizeof(IRIS_REAL) * ncharges);
+	m_forces[it->first] = forces;
+	assign_forces1(ncharges, m_charges[it->first], forces);
+    }
+}
+
+void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
+			  iris_real *out_forces)
+{
+    box_t<iris_real> *gbox = &(m_domain->m_global_box);
+
+    for(int n=0;n<in_ncharges;n++) {
+	iris_real tx=(in_charges[n*4+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	iris_real ty=(in_charges[n*4+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	iris_real tz=(in_charges[n*4+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+
+	// the index of the cell that is to the "left" of the atom
+	int ix = (int) (tx + m_chass->m_ics_bump);
+	int iy = (int) (ty + m_chass->m_ics_bump);
+	int iz = (int) (tz + m_chass->m_ics_bump);
+
+	// distance (increasing to the left!) from the center of the
+	// interpolation grid
+	iris_real dx = ix - tx + m_chass->m_ics_center;
+	iris_real dy = iy - ty + m_chass->m_ics_center;
+	iris_real dz = iz - tz + m_chass->m_ics_center;
+
+	m_chass->compute_weights(dx, dy, dz);
+
+	iris_real ekx = 0.0;
+	iris_real eky = 0.0;
+	iris_real ekz = 0.0;
+
+	for(int i = 0; i < m_chass->m_order; i++) {
+	    iris_real t1 = m_chass->m_weights[0][i];
+	    for(int j = 0; j < m_chass->m_order; j++) {
+		iris_real t2 = t1 * m_chass->m_weights[1][j];
+		for(int k = 0; k < m_chass->m_order; k++) {
+		    iris_real t3 = t2 * m_chass->m_weights[2][k];
+		    ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
+		    eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
+		    ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+		}
+	    }
+	}
+
+	iris_real q = in_charges[n*4 + 3];
+	out_forces[n*3 + 0] = q * ekx;
+	out_forces[n*3 + 1] = q * eky;
+	out_forces[n*3 + 2] = q * ekz;
+
+	// m_logger->trace("F(%.15g, %.15g, %.15g) = (%.15g, %.15g, %.15g)",
+	// 		in_charges[n*4+0],
+	// 		in_charges[n*4+1],
+	// 		in_charges[n*4+2],
+	// 		out_forces[n*3 + 0],
+	// 		out_forces[n*3 + 1],
+	// 		out_forces[n*3 + 2]);
+
+    }
+
+}
+

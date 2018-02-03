@@ -476,14 +476,16 @@ bool iris::handle_charges(event_t *event)
 	throw std::length_error("Unexpected message size while receiving charges!");
     }
 
-    int natoms = event->size / unit;
-    m_logger->trace("Received %d atoms from %d: initiating charge assignment", natoms, event->peer);
-    m_mesh->assign_charges((iris_real *)event->data, natoms);
-    m_logger->trace("Charge assignment from %d done", event->peer);
-    
+    int ncharges = event->size / unit;
+    m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
+
+    m_mesh->m_ncharges[event->peer] = ncharges;
+    m_mesh->m_charges[event->peer] = (iris_real *)event->data;
+
     if(!is_client()) {
 	MPI_Request req;
-	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK, event->comm, &req);
+	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
+		  event->comm, &req);
 	MPI_Request_free(&req);
     }
 
@@ -492,10 +494,14 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_logger->trace("Commit charges received: initiating halo exchange");
+    m_logger->trace("Commit charges received");
+
+    m_mesh->assign_charges();
     m_mesh->exchange_rho_halo();
-    m_logger->trace("Halo exchange done");
     solve();
+    m_mesh->exchange_field_halo();
+    m_mesh->assign_forces();
+
     return false;  // no need to hodl
 }
 
@@ -544,5 +550,4 @@ void iris::solve()
 {
     m_solver->solve();
     calculate_etot();
-    m_mesh->exchange_field_halo();
 }
