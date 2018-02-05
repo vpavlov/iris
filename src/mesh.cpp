@@ -325,9 +325,9 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
 
     for(int n=0;n<in_ncharges;n++) {
-	iris_real tx=(in_charges[n*4+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	iris_real ty=(in_charges[n*4+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	iris_real tz=(in_charges[n*4+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
 	
 	// the index of the cell that is to the "left" of the atom
 	int ix = (int) (tx + m_chass->m_ics_bump);
@@ -342,7 +342,7 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 
 	m_chass->compute_weights(dx, dy, dz);
 
-	iris_real t0 = m_mesh->m_h3inv * in_charges[n*4 + 3];  // q/V
+	iris_real t0 = m_mesh->m_h3inv * in_charges[n*5 + 3];  // q/V
 	for(int i = 0; i < m_chass->m_order; i++) {
 	    iris_real t1 = t0 * m_chass->m_weights[0][i];
 	    for(int j = 0; j < m_chass->m_order; j++) {
@@ -589,26 +589,6 @@ void mesh::ijk_to_xyz(int i, int j, int k,
     z = m_domain->m_local_box.zlo + k * m_h[2];
 }
 
-void mesh::check_fxyz()
-{
-    iris_real sum_fx = 0.0;
-    iris_real sum_fy = 0.0;
-    iris_real sum_fz = 0.0;
-
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
-	iris_real *forces = m_forces[it->first];
-	int ncharges = m_ncharges[it->first];
-	for(int i=0;i<ncharges;i++) {
-	    sum_fx += forces[i*3 + 0];
-	    sum_fy += forces[i*3 + 1];
-	    sum_fz += forces[i*3 + 2];
-	}
-    }
-    m_logger->trace("Fx sum = %g", sum_fx);
-    m_logger->trace("Fy sum = %g", sum_fy);
-    m_logger->trace("Fz sum = %g", sum_fz);
-}
-
 // Copy Ex, Ey and Ez to inner regions of Ex_plus, etc., thus preparing
 // to exchange halo for E
 void mesh::imtract_field()
@@ -850,11 +830,21 @@ void mesh::exchange_field_halo()
 
 void mesh::assign_forces()
 {
+    MPI_Comm comm = m_iris->is_client() ?
+	m_iris->m_local_comm->m_comm    :
+	m_iris->m_inter_comm->m_comm;
+
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	int peer = it->first;
 	int ncharges = it->second;
-	iris_real *forces = (iris_real *)memory::wmalloc(3 * sizeof(iris_real) * ncharges);
-	m_forces[it->first] = forces;
+	int size = 4 * sizeof(iris_real) * ncharges;
+	iris_real *forces = (iris_real *)memory::wmalloc(size);
+	m_forces[peer] = forces;
 	assign_forces1(ncharges, m_charges[it->first], forces);
+
+	MPI_Request req;
+	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
+	MPI_Request_free(&req);
     }
 }
 
@@ -862,12 +852,12 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 			  iris_real *out_forces)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-
+    
     for(int n=0;n<in_ncharges;n++) {
-	iris_real tx=(in_charges[n*4+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	iris_real ty=(in_charges[n*4+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	iris_real tz=(in_charges[n*4+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
-
+	iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	
 	// the index of the cell that is to the "left" of the atom
 	int ix = (int) (tx + m_chass->m_ics_bump);
 	int iy = (int) (ty + m_chass->m_ics_bump);
@@ -898,19 +888,11 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    }
 	}
 
-	iris_real q = in_charges[n*4 + 3];
-	out_forces[n*3 + 0] = q * ekx;
-	out_forces[n*3 + 1] = q * eky;
-	out_forces[n*3 + 2] = q * ekz;
-
-//	m_logger->trace("F(%.15g, %.15g, %.15g) = (%.15g, %.15g, %.15g)",
-//			in_charges[n*4+0],
-//			in_charges[n*4+1],
-//			in_charges[n*4+2],
-//			out_forces[n*3 + 0],
-//			out_forces[n*3 + 1],
-//			out_forces[n*3 + 2]);
-
+	iris_real q = in_charges[n*5 + 3];
+	out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
+	out_forces[n*4 + 1] = q * ekx;
+	out_forces[n*4 + 2] = q * eky;
+	out_forces[n*4 + 3] = q * ekz;
     }
 
 }

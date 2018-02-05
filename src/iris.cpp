@@ -91,6 +91,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
     m_rho_multiplier = -_4PI;
 
+    m_wff = NULL;
+
     m_uber_comm = new comm_rec(this, in_uber_comm);
     m_local_comm = new comm_rec(this, in_local_comm);
     m_inter_comm = NULL;
@@ -119,6 +121,11 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	throw std::invalid_argument("Inconsistent client size!");
     }
 
+    if(is_client()) {
+	m_wff = new bool[m_server_size];
+	clear_wff();
+    }
+
     m_logger = new logger(this);
 
     m_domain = NULL;
@@ -144,6 +151,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris::~iris()
 {
+    if(m_wff != NULL) {
+	delete [] m_wff;
+    }
+
     if(m_chass != NULL) {
 	delete m_chass;
     }
@@ -398,9 +409,9 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     }
 }
 
-void iris::broadcast_charges(int in_peer, iris_real *in_charges, int in_count)
+void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 {
-    ASSERT_CLIENT("broadcast_charges");
+    ASSERT_CLIENT("send_charges");
 
     MPI_Comm comm = server_comm();
     MPI_Win win;
@@ -410,8 +421,9 @@ void iris::broadcast_charges(int in_peer, iris_real *in_charges, int in_count)
     MPI_Request req;
     req = MPI_REQUEST_NULL;
     if(in_count != 0) {
+	m_wff[in_peer] = true;
 	send_event(comm, in_peer, IRIS_TAG_CHARGES,
-		   4*in_count*sizeof(iris_real),
+		   5*in_count*sizeof(iris_real),
 		   in_charges, &req, win);
 	if(!is_server()) {
 	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
@@ -471,7 +483,7 @@ void iris::quit()
 
 bool iris::handle_charges(event_t *event)
 {
-    int unit = 4 * sizeof(iris_real);
+    int unit = 5 * sizeof(iris_real);
     if(event->size % unit != 0) {
 	throw std::length_error("Unexpected message size while receiving charges!");
     }
@@ -494,14 +506,13 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_logger->trace("Commit charges received");
-
+    m_logger->trace("Client called 'commit_charges'. Initiating computation...");
     m_mesh->assign_charges();
     m_mesh->exchange_rho_halo();
     solve();
     m_mesh->exchange_field_halo();
     m_mesh->assign_forces();
-
+    
     return false;  // no need to hodl
 }
 
@@ -550,4 +561,55 @@ void iris::solve()
 {
     m_solver->solve();
     calculate_etot();
+}
+
+void iris::clear_wff()
+{
+    if(!is_client()) {
+	return;
+    }
+
+    for(int i=0;i<m_server_size;i++) {
+	m_wff[i] = false;
+    }
+}
+
+iris_real *iris::receive_forces(int **out_counts)
+{
+    if(!is_client()) {
+	*out_counts = NULL;
+	return NULL;
+    }
+
+    size_t hwm = 0;  // high water mark (in bytes)
+    iris_real *retval = NULL;
+
+    *out_counts = new int[m_server_size];
+
+    comm_rec *server_comm = is_server()?m_local_comm:m_inter_comm;
+
+    for(int i=0;i<m_server_size;i++) {
+	(*out_counts)[i] = 0;
+	if(m_wff[i]) {
+	    event_t ev;
+	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
+
+	    int unit = 4 * sizeof(iris_real);
+	    if(ev.size % unit != 0) {
+		throw std::length_error("Unexpected message size while receiving forces!");
+	    }
+	    (*out_counts)[i] = ev.size / unit;
+
+	    m_logger->trace("Received %d forces", (*out_counts)[i]);
+
+	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size);
+	    memcpy(retval + hwm, ev.data, ev.size);
+	    hwm += ev.size;
+
+	    memory::wfree(ev.data);
+	}
+    }
+    clear_wff();
+
+    return retval;
 }

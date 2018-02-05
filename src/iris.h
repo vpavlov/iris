@@ -160,9 +160,14 @@ namespace ORG_NCSA_IRIS {
 	// server's local_comm.
 	box_t<iris_real> *get_local_boxes();
 
-	// Use this to broadcast charges from a client node to a server node
-	void broadcast_charges(int in_peer, iris_real *in_charges, int in_count);
+	// Use this on a client node to send charges to a server node
+	void send_charges(int in_peer, iris_real *in_charges, int in_count);
+
 	void commit_charges();
+
+	// Use this on a client node to receive forces from server nodes
+	iris_real *receive_forces(int **out_count);
+
 	void solve();
 
 	void quit();
@@ -184,6 +189,9 @@ namespace ORG_NCSA_IRIS {
 	bool handle_commit_charges();
 	bool handle_rho_halo(struct event_t *in_event);
 
+	// initialize m_waiting_forces_from to sensible initial state
+	void clear_wff();
+
 	void calculate_etot();  // calculate Hartree energy, for verification
     public:
 	int m_client_size;             // # of client nodes
@@ -194,6 +202,9 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real m_rho_multiplier;  // see set_rho_multiplier above
 
+	// which server peers this client is waiting to receive forces from
+	bool *m_wff;
+	
 	class comm_rec        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec        *m_local_comm;  // ...within group (client/server)
 	class comm_rec        *m_inter_comm;  // ...between groups

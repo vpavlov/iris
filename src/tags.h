@@ -47,3 +47,4 @@
 #define IRIS_TAG_FIELD_HALO4      17
 #define IRIS_TAG_FIELD_HALO5      18
 #define IRIS_TAG_FIELD_HALO6      19
+#define IRIS_TAG_FORCES           20

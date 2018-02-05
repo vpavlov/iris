@@ -71,8 +71,6 @@ namespace ORG_NCSA_IRIS {
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
 
-	void check_fxyz();
-
     private:
 
 	void assign_charges1(int in_ncharges, iris_real *in_charges);

@@ -6,6 +6,7 @@
 #include <iris/memory.h>
 #include <iris/logger.h>
 #include <iris/mesh.h>
+#include <iris/comm_rec.h>
 
 #define NSTEPS 1
 
@@ -141,23 +142,24 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 	// Package and send the charges for each target client node
 	for(int i=0;i<pp_size;i++) {
 	    iris_real **sendbuf;
-	    memory::create_2d(sendbuf, vcharges[i].size(), 4);
+	    memory::create_2d(sendbuf, vcharges[i].size(), 5);
 	    int j = 0;
 	    for(auto it = vcharges[i].begin(); it != vcharges[i].end(); it++) {
 		sendbuf[j][0] = charges[*it][0];
 		sendbuf[j][1] = charges[*it][1];
 		sendbuf[j][2] = charges[*it][2];
 		sendbuf[j][3] = charges[*it][3];
+		sendbuf[j][4] = (iris_real) *it;
 		j++;
 	    }
 
 	    if(i != 0) {
-		MPI_Send(&(sendbuf[0][0]), 4*vcharges[i].size(), IRIS_REAL,
+		MPI_Send(&(sendbuf[0][0]), 5*vcharges[i].size(), IRIS_REAL,
 			 i, 1, local_comm);
 	    }else {
-		memory::create_2d(out_my_charges, vcharges[i].size(), 4);
+		memory::create_2d(out_my_charges, vcharges[i].size(), 5);
 		memcpy(&(out_my_charges[0][0]), &(sendbuf[0][0]),
-		       4*vcharges[i].size()*sizeof(iris_real));
+		       5*vcharges[i].size()*sizeof(iris_real));
 		out_my_count = vcharges[i].size();
 	    }
 	    memory::destroy_2d(sendbuf);
@@ -171,8 +173,8 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 	MPI_Probe(0, 1, local_comm, &status);
 	int nreals;
 	MPI_Get_count(&status, IRIS_REAL, &nreals);
-	int ncharges = nreals / 4;
-	memory::create_2d(out_my_charges, ncharges, 4);
+	int ncharges = nreals / 5;
+	memory::create_2d(out_my_charges, ncharges, 5);
 	MPI_Recv(&(out_my_charges[0][0]), nreals, IRIS_REAL, 0, 1, local_comm,
 		 MPI_STATUS_IGNORE);
 	out_my_count = ncharges;
@@ -187,7 +189,7 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 		  box_t<iris_real> *in_local_boxes)
 {
-    iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 4 * sizeof(iris_real));
+    iris_real *sendbuf = (iris_real *)memory::wmalloc(in_my_count * 5 * sizeof(iris_real));
     for(int i=0;i<in_iris->m_server_size;i++) {
 
 	// get the sever local box
@@ -207,6 +209,7 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 	    iris_real y = in_my_charges[j][1];
 	    iris_real z = in_my_charges[j][2];
 	    iris_real q = in_my_charges[j][3];
+	    iris_real id = in_my_charges[j][4];
 
 	    if(x >= x0 && x < x1 &&
 	       y >= y0 && y < y1 &&
@@ -216,13 +219,40 @@ void send_charges(iris *in_iris, iris_real **in_my_charges, size_t in_my_count,
 		sendbuf[idx++] = y;
 		sendbuf[idx++] = z;
 		sendbuf[idx++] = q;
+		sendbuf[idx++] = id;
 	    }
 	}
 
-	in_iris->broadcast_charges(i, sendbuf, idx/4);	
+	in_iris->send_charges(i, sendbuf, idx/5);
     }
 
     memory::wfree(sendbuf);
+}
+
+// Do whatever is needed with the forces that came back from IRIS
+// In this example we just sum them up to check if they come up as 0
+void handle_forces(iris *iris, int *nforces, iris_real *forces)
+{
+    iris_real fsum[3];
+    iris_real tot_fsum[3];
+
+    fsum[0] = fsum[1] = fsum[2] = 0.0;
+    int n = 0;
+    for(int i=0;i<iris->m_server_size;i++) {
+	for(int j=0;j<nforces[i];j++) {
+	    // forces[n*4 + 0] is the atom ID (encoded as iris_real)
+	    fsum[0] += forces[n*4 + 1];
+	    fsum[1] += forces[n*4 + 2];
+	    fsum[2] += forces[n*4 + 3];
+	    n++;
+	}
+    }
+    MPI_Reduce(&fsum, &tot_fsum, 3, IRIS_REAL, MPI_SUM, iris->m_local_leader,
+	       iris->m_local_comm->m_comm);
+    if(iris->is_leader()) {
+	iris->m_logger->trace("Total Fsum = (%.15g, %.15g, %.15g)",
+			      tot_fsum[0], tot_fsum[1], tot_fsum[2]);
+    }
 }
 
 main(int argc, char **argv)
@@ -332,8 +362,8 @@ main(int argc, char **argv)
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(M, N, P);
-    x->set_order(3);
-    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
+    x->set_order(4);
+    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 6);
     x->commit();
 
 
@@ -349,13 +379,13 @@ main(int argc, char **argv)
     //
     // This must be called on both clients and servers collectively.
     box_t<iris_real> *local_boxes = x->get_local_boxes();
-
-
+    
     // Main simulation loop in the clients
     if(x->is_client()) {
 
 	// On each step...
 	for(int i=0;i<NSTEPS;i++) {
+	    
 	    // The client must send the charges which befall into the server
 	    // procs' local boxes to the corrseponding server node.
 	    // It finds out which client sends which charges to which server
@@ -363,9 +393,21 @@ main(int argc, char **argv)
 	    // broadcast_charges()
 	    send_charges(x, my_charges, my_count, local_boxes);
 
+
 	    // Let the servers know that there are no more charges, so it can
 	    // go on and start calculating
 	    x->commit_charges();
+
+
+	    // Receive back the forces from the server
+	    int *nforces;
+	    iris_real *forces = x->receive_forces(&nforces);
+	    
+
+	    handle_forces(x, nforces, forces);	    
+
+	    delete [] nforces;
+	    memory::wfree(forces);
 	}
 
 	x->quit();  // this will break server loop
@@ -378,7 +420,7 @@ main(int argc, char **argv)
 
     if(x->is_server()) {
 	//x->m_mesh->dump_log("RHO", x->m_mesh->m_rho);
-	x->m_mesh->check_fxyz();
+	//x->m_mesh->check_fxyz();
 	//x->m_mesh->dump_exyz("field");
     }
 
