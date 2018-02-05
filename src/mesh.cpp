@@ -852,7 +852,7 @@ void mesh::assign_forces()
 {
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int ncharges = it->second;
-	iris_real *forces = (iris_real *)memory::wmalloc(3 * sizeof(IRIS_REAL) * ncharges);
+	iris_real *forces = (iris_real *)memory::wmalloc(3 * sizeof(iris_real) * ncharges);
 	m_forces[it->first] = forces;
 	assign_forces1(ncharges, m_charges[it->first], forces);
     }
