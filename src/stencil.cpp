@@ -33,8 +33,8 @@
 using namespace ORG_NCSA_IRIS;
 
 stencil::stencil(int in_dim, int in_order, int in_acc)
-    : m_dirty(true), m_data(NULL), m_dim(in_dim), m_order(in_order),
-      m_acc(in_acc)
+    : m_dirty(true), m_delta(NULL), m_gamma(NULL), m_dim(in_dim),
+      m_order(in_order), m_acc(in_acc), m_lhs_only (true)
 {
     if(m_acc % m_order) {
 	throw std::logic_error("Accuracy order of the stencil must be multiple of its order!");

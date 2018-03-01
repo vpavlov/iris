@@ -38,11 +38,19 @@ namespace ORG_NCSA_IRIS {
     // point of interest by using a numerical approximation routine.
     // 
     // The coefficients of the stencil in the different nodes are stored in the
-    // array, m_data. The class doesn't make any assumptions on the
-    // dimensionality m_dim of the stencil, it can be 1D, 2D, etc. This is left
-    // to the discretion of the derived classes. The accuracy order of the
-    // stencil (m_order) is a characteristic which the derived classes may
-    // use to calculate the amount of data necessary. 
+    // two arrays, m_delta and m_gamma. The stencil to be applied to the LHS
+    // is stored in m_delta. Some of the stencils resulting from a Pade approx.
+    // require manipulation of the RHS also. The stencil to be applied to the
+    // RHS is stored in m_gamma and in effect acts as a blur filter. In case
+    // the stencil does not need the blur filter, it only has a single 1 in the
+    // central position in m_gamma. The boolean flag m_lhs_only denotes this
+    // situation, so whoever applies the stencil can check it and do not bother
+    // to blur the RHS with a noop.
+    // The class doesn't make any assumptions on the dimensionality m_dim of
+    // the stencil, it can be 1D, 2D, etc. This is left to the discretion of 
+    // the derived classes. The accuracy order of the stencil (m_order) is a
+    // characteristic which the derived classes may use to calculate the amount
+    // of data necessary. 
     //
     class stencil {
 
@@ -58,7 +66,9 @@ namespace ORG_NCSA_IRIS {
 	int m_dim;     // dimensionality (e.g. 1D, 2D, 3D)
 	int m_order;   // first, second, third derivative
 	int m_acc;     // accuracy order in h
-	void *m_data;  // coefficients of the stencil
+	void *m_delta; // coefficients of the stencil for LHS
+	void *m_gamma; // coefficients of the stencil for RHS
+	bool m_lhs_only;  // m_gamma is a NOOP
     };
 }
 

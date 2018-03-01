@@ -84,7 +84,7 @@ void poisson_solver_psm::calculate_ddx_ev(int idx, first_derivative *ddx,
 
     A[0] = 0.0;
 
-    iris_real *data = (iris_real *)ddx->m_data;
+    iris_real *data = (iris_real *)ddx->m_delta;
 
     memory::destroy_1d(ddx_ev);
     memory::create_1d(ddx_ev, nx);
@@ -139,7 +139,7 @@ void poisson_solver_psm::calculate_laplacian_ev()
     
     A[0] = B[0] = C[0] = 1.0;
 
-    iris_real *data = (iris_real *)m_laplacian->m_data;
+    iris_real *data = (iris_real *)m_laplacian->m_delta;
 
     memory::destroy_3d(m_ev);
     memory::create_3d(m_ev, nx, ny, nz);

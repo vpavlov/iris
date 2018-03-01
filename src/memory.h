@@ -30,6 +30,8 @@
 #ifndef __IRIS_MEMORY_H__
 #define __IRIS_MEMORY_H__
 
+#include <stdlib.h>
+
 namespace ORG_NCSA_IRIS {
 
     class memory {
@@ -45,9 +47,14 @@ namespace ORG_NCSA_IRIS {
 	//**********************************************************************
 
 	template <typename T>
-	static T *create_1d(T *&array, int n1)
+	static T *create_1d(T *&array, int n1, bool clear = false)
 	{
 	    array =  (T *)wmalloc(sizeof(T) * n1);
+	    if(clear) {
+		for(int i=0;i<n1;i++) {
+		    array[i] = (T)0;
+		}
+	    }
 	    return array;
 	}
 
@@ -67,10 +74,16 @@ namespace ORG_NCSA_IRIS {
 	//**********************************************************************
 
 	template <typename T>
-	static T **create_2d(T **&array, int n1, int n2)
+	static T **create_2d(T **&array, int n1, int n2, bool clear = false)
 	{
+	    size_t nitems = n1 * n2;
 	    array =  (T **)wmalloc(sizeof(T *) * n1);
-	    T *data = (T *)wmalloc(sizeof(T) * n1 *n2);
+	    T *data = (T *)wmalloc(sizeof(T) * nitems);
+	    if(clear) {
+		for(int i=0;i<nitems;i++) {
+		    data[i] = (T)0;
+		}
+	    }
 
 	    size_t n = 0;
 	    for(int i = 0; i < n1; i++) {
@@ -101,12 +114,12 @@ namespace ORG_NCSA_IRIS {
 	static T ***create_3d(T ***&array, int n1, int n2, int n3,
 			      bool clear = false)
 	{
-	    size_t nbytes = n1 * n2 * n3;
+	    size_t nitems = n1 * n2 * n3;
 	    array   = (T ***) wmalloc(sizeof(T **) * n1);
 	    T **tmp = (T **)  wmalloc(sizeof(T *)  * n1 * n2);
-	    T *data = (T *)   wmalloc(sizeof(T)    * nbytes);
+	    T *data = (T *)   wmalloc(sizeof(T)    * nitems);
 	    if(clear) {
-		for(int i=0;i<nbytes;i++) {
+		for(int i=0;i<nitems;i++) {
 		    data[i] = (T)0;
 		}
 	    }

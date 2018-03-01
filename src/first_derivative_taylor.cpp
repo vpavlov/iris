@@ -95,22 +95,23 @@ void first_derivative_taylor::commit()
     }
 #undef ACC_ORDER_CASE
 
-    if(m_data != NULL) {
-	memory::wfree(m_data);
+    if(m_delta != NULL) {
+	memory::wfree(m_delta);
     }
-    m_data = memory::wmalloc(m_acc * sizeof(iris_real));
+    m_delta = memory::wmalloc(m_acc * sizeof(iris_real));
 
-    iris_real *data = (iris_real *)m_data;
+    iris_real *data = (iris_real *)m_delta;
     for(int i=0;i<m_acc;i++) {
 	data[i] = coeff[i] / denom;
     }
-
+    
+    m_lhs_only = true;
     m_dirty = false;
 }
 
 first_derivative_taylor::~first_derivative_taylor()
 {
-    if(m_data != NULL) {
-	memory::wfree(m_data);
+    if(m_delta != NULL) {
+	memory::wfree(m_delta);
     }
 }

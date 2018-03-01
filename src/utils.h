@@ -39,6 +39,13 @@ namespace ORG_NCSA_IRIS {
 
 #define ROW_MAJOR_OFFSET(x, y, z, ny, nz) ((z) + (nz)*((y) + (ny)*(x)))
 
+    iris_real *gauss(int n, iris_real **a, iris_real *b);
+    void pade_approximant(int m, int n, iris_real *input,
+			  iris_real *&out_nom,
+			  iris_real *&out_denom);
+
+    int binom(int n, int k);
+
 }
 
 #endif

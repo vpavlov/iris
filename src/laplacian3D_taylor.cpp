@@ -114,13 +114,13 @@ void laplacian3D_taylor::commit()
     }
 #undef ACC_ORDER_CASE
 
-    if(m_data != NULL) {
-	memory::wfree(m_data);
+    if(m_delta != NULL) {
+	memory::wfree(m_delta);
     }
     int cnt = m_acc/2 + 1;
     int cnt3 = cnt * cnt * cnt;
-    m_data = memory::wmalloc(cnt3 * sizeof(iris_real));
-    iris_real *data = (iris_real *)m_data;
+    m_delta = memory::wmalloc(cnt3 * sizeof(iris_real));
+    iris_real *data = (iris_real *)m_delta;
     for(int i=0;i<cnt3;i++) {
 	data[i] = 0.0;
     }
@@ -136,7 +136,7 @@ void laplacian3D_taylor::commit()
 
 laplacian3D_taylor::~laplacian3D_taylor()
 {
-    if(m_data != NULL) {
-	memory::wfree(m_data);
+    if(m_delta != NULL) {
+	memory::wfree(m_delta);
     }
 }

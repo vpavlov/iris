@@ -20,36 +20,60 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdio.h>
-#include <math.h>
-#include "first_derivative.h"
+#ifndef __IRIS_CDO3D_H__
+#define __IRIS_CDO3D_H__
 
-using namespace ORG_NCSA_IRIS;
+#include "real.h"
 
-void first_derivative::trace(const char *in_name)
-{
-    printf("---------------------------------\n");
-    printf("%s: 1D first derivative stencil\n", in_name);
-    printf("---------------------------------\n");
-    printf("Δx:          % g\n", m_h);
-    printf("Accurate to: % g (Δx^%d)\n\n", pow(m_h, m_acc), m_acc);
-    iris_real *data = (iris_real *)m_delta;
+namespace ORG_NCSA_IRIS {
 
-    for(int i=0;i<m_acc;i++) {
-	printf("%s[%+02d] =   % g\n", in_name, m_acc-i, data[i]);
-    }
+    // A 3D central difference operator stencil
+    class cdo3D {
 
-    printf("%s[ 0] =   % g\n", in_name, 0.0);
+    public:
+	// Create a 3D central difference operator stencil of accuracy order N
+	// (must be even) with a constant coefficient C, and X, Y and Z powers
+	// of δ being XP, YP and ZP respectively.
+	// Thus,
+	// 
+	// new cdo(2, 144, 0, 0, 0) will return a 27-point stencil with a
+	// central element 144
+	//
+	// new cdo(2, 144, 2, 0, 0) will return a 27-point stencil for δ^2x
+	// new cdo(2, 144, 2, 2, 2) for δ^2x + δ^2y + δ^2z
+	
+	cdo3D(int n, iris_real c, int xp, int yp, int zp);
+	~cdo3D();
 
-    for(int i=m_acc-1;i>=0;i--) {
-	printf("%s[%+02d] =   % g\n", in_name, i-m_acc, -data[i]);
-    }
-    printf("\n");
+	void dump();
+
+	void operator += (cdo3D &other);
+
+    private:
+
+	// Return the central difference operator of order n (δ^n) coefficients 
+	//
+	// The coefficients are n+1 and follow the formula:
+	// kth coeff is (-1)^k (n k)
+	//
+	//For example:
+	// for n = 1 coefficients are { 1, -1 }
+	// for n = 2 coefficients are { 1, -2, 1 }
+	// for n = 3 coefficients are { 1, -3, 3, -1 }
+	// for n = 4 coefficients are { 1, -4, 6, -4, 1 }, etc.
+	int *coeff(int n);
+
+	int m_n;  // order
+	iris_real ***m_data;
+    };
 }
+
+#endif

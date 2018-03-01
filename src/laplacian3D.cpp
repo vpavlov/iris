@@ -34,6 +34,23 @@
 
 using namespace ORG_NCSA_IRIS;
 
+// The first several terms (19 in this case) of the Taylor expansion of
+// 
+// (hD)^2 = 4*asinh(δ/2)^2
+// 
+// See iris/lisp/stencil_coeff.lisp for explanation of the theory behind this
+//
+// These should be more than enough, since they cover accuracy order of at
+// least up to h^20, which in case h = 1/128 is O(10^-43). If however, this is
+// somehow not enough, load the above mentioned lisp file and execute
+// (d2/dx2-taylor coeff 100) or something. It gives only odd (non-zero) coeffs.
+//
+static iris_real taylor_coeff[] = {
+    1.0, 0.0, -1.0/12, 0.0, 1.0/90, 0.0, -1.0/560, 0.0, 1.0/3150, 0.0,
+    -1.0/16632, 0.0, 1.0/84084, 0.0, -1.0/411840, 0.0, 1.0/1969110, 0.0,
+    -1.0/9237800
+};
+
 void laplacian3D::trace(const char *in_name)
 {
     printf("---------------------------------\n");
@@ -43,7 +60,7 @@ void laplacian3D::trace(const char *in_name)
     printf("Δy:          % g\n", m_hy);
     printf("Δz:          % g\n", m_hz);
     printf("Accurate to: % g (Δx^%d)\n\n", pow(m_hx, m_acc), m_acc);
-    iris_real *data = (iris_real *)m_data;
+    iris_real *data = (iris_real *)m_delta;
 
     int cnt = m_acc/2 + 1;
     int all = m_acc + 1;

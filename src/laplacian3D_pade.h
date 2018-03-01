@@ -27,29 +27,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdio.h>
-#include <math.h>
-#include "first_derivative.h"
+#ifndef __IRIS_LAPLACIAN3D_PADE_H__
+#define __IRIS_LAPLACIAN3D_PADE_H__
 
-using namespace ORG_NCSA_IRIS;
+#include "laplacian3D.h"
+#include "real.h"
 
-void first_derivative::trace(const char *in_name)
-{
-    printf("---------------------------------\n");
-    printf("%s: 1D first derivative stencil\n", in_name);
-    printf("---------------------------------\n");
-    printf("Δx:          % g\n", m_h);
-    printf("Accurate to: % g (Δx^%d)\n\n", pow(m_h, m_acc), m_acc);
-    iris_real *data = (iris_real *)m_delta;
+namespace ORG_NCSA_IRIS {
 
-    for(int i=0;i<m_acc;i++) {
-	printf("%s[%+02d] =   % g\n", in_name, m_acc-i, data[i]);
-    }
+    //
+    // A symmetrical stencil that approximates a 3D Laplacian:
+    //
+    // d2/dx^2 + d2/dy^2 + d2/dz^2
+    //
+    // using Pade approximation
+    class laplacian3D_pade : public laplacian3D {
+	
+    public:
+	laplacian3D_pade(int in_m, int in_n, bool in_cut);
+	laplacian3D_pade(int in_m, int in_n, bool in_cut,
+			 iris_real in_hx, iris_real in_hy, iris_real in_hz);
+	~laplacian3D_pade();
 
-    printf("%s[ 0] =   % g\n", in_name, 0.0);
+	void commit();
 
-    for(int i=m_acc-1;i>=0;i--) {
-	printf("%s[%+02d] =   % g\n", in_name, i-m_acc, -data[i]);
-    }
-    printf("\n");
+    private:
+
+	void compute_rhs(iris_real *denom);
+	void compute_lhs(iris_real *nom, iris_real *denom);
+
+	int m_m;  // The upper order of the Pade approximant P[m, n]
+	int m_n;  // The lower order of the Pade approximant P[m, n]
+	bool m_cut;  // Whether to cut to the desired accuracy or use all terms
+    };
+
 }
+
+#endif
