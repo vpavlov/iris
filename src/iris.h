@@ -45,7 +45,7 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_SERVER 0b10
 
 
-#define IRIS_LAPL_STYLE_TAYLOR 1
+#define IRIS_LAPL_STYLE_PADE 1
 
     static const iris_real _4PI = 12.566370614359172;
 
@@ -105,12 +105,7 @@ namespace ORG_NCSA_IRIS {
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
 
-	// Set the parameters of the Laplacian
-	// in_style:
-	//   - IRIS_LAPL_STYLE_TAYLOR - use Taylor approximation stencils
-	//   - IRIS_LAPL_STYLE_PADE   - use Pade approximation stencils
-	// in_order: 2, 4, 6, 8, 10 or 12 (accuracy order of the stencil)
-	void set_laplacian(int in_style, int in_order);
+	void set_laplacian(int in_style, int in_arg1, int in_arg2);
 
 	// Poisson's equation is:
 	//

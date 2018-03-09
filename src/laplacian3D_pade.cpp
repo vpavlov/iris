@@ -48,7 +48,8 @@ using namespace ORG_NCSA_IRIS;
 // These should be more than enough, since they cover accuracy order of at
 // least up to h^20, which in case h = 1/128 is O(10^-43). If however, this is
 // somehow not enough, load the above mentioned lisp file and execute
-// (d2/dx2-taylor coeff 100) or something. It gives only odd (non-zero) coeffs.
+// (d2/dx2-taylor coeff 100) or something. Do note that it gives only odd
+// (non-zero) coeffs.
 //
 static iris_real taylor_coeff[] = {
     1.0, 0.0, -1.0/12, 0.0, 1.0/90, 0.0, -1.0/560, 0.0, 1.0/3150, 0.0,
@@ -77,7 +78,13 @@ laplacian3D_pade::laplacian3D_pade(int in_m, int in_n, bool in_cut,
 laplacian3D_pade::~laplacian3D_pade()
 {
     if(m_delta != NULL) {
-	memory::wfree(m_delta);
+	cdo3D *data = (cdo3D *)m_delta;
+	delete data;
+    }
+
+    if(m_gamma != NULL) {
+	cdo3D *data = (cdo3D *)m_gamma;
+	delete data;
     }
 }
 
@@ -95,7 +102,7 @@ void laplacian3D_pade::commit()
 
 void laplacian3D_pade::compute_rhs(iris_real *denom)
 {
-    cdo3D retval(m_n, 0.0, 0, 0, 0);
+    cdo3D *retval = new cdo3D(m_n, 0.0, 0, 0, 0);
 
     for(int i=0;i<=m_n;i+=2) {     // even elements (odd powers of δ) are 0
 	for(int j=0;j<=m_n;j+=2) {
@@ -111,18 +118,20 @@ void laplacian3D_pade::compute_rhs(iris_real *denom)
 		// necessary to keep the first two terms only",
 		// which leaves out terms like δ^2x * δ^2y, which is obviously
 		// fourth order. Meanwhile, they keep the similar terms for the
-		// LHS. I'm not quite sure this is correct, but if it turns out
-		// to be, then the > below must become >=
+		// LHS. I don't see how this is correct, will have to talk to
+		// Godehard next time...
+		// [VNP]
 		if(m_cut && (i+j+k > m_acc)) {
 		    continue;
 		}
 
 		cdo3D next(m_n, denom[i]*denom[j]*denom[k], i, j, k);
-		retval += next;
+		(*retval) += next;
 	    }
 	}
     }
-    retval.dump();
+    m_gamma = (void *)retval;
+    m_lhs_only = (m_n == 0);
 }
 
 void laplacian3D_pade::compute_lhs(iris_real *nom, iris_real *denom)
@@ -131,7 +140,7 @@ void laplacian3D_pade::compute_lhs(iris_real *nom, iris_real *denom)
     iris_real hy2 = m_hy * m_hy;
     iris_real hz2 = m_hz * m_hz;
     int ord = MAX(m_m+2, m_n);
-    cdo3D retval (ord, 0.0, 0, 0, 0);
+    cdo3D *retval = new cdo3D(ord, 0.0, 0, 0, 0);
 
     // nom x * denom y * denom z
     for(int i=0;i<=m_m;i+=2) {     // even elements (odd powers of δ) are 0
@@ -143,7 +152,7 @@ void laplacian3D_pade::compute_lhs(iris_real *nom, iris_real *denom)
 		}
 
 		cdo3D next(ord, nom[i]*denom[j]*denom[k] / hx2, i+2, j, k);
-		retval += next;
+		(*retval) += next;
 	    }
 	}
     }
@@ -158,7 +167,7 @@ void laplacian3D_pade::compute_lhs(iris_real *nom, iris_real *denom)
 		}
 
 		cdo3D next(ord, denom[i]*nom[j]*denom[k] / hy2, i, j+2, k);
-		retval += next;
+		(*retval) += next;
 	    }
 	}
     }
@@ -173,11 +182,29 @@ void laplacian3D_pade::compute_lhs(iris_real *nom, iris_real *denom)
 		}
 
 		cdo3D next(ord, denom[i]*denom[j]*nom[k] / hz2, i, j, k+2);
-		retval += next;
+		(*retval) += next;
 	    }
 	}
     }
-    
-    retval.dump();
+    m_delta = (void *)retval;
 }
 
+inline iris_real laplacian3D_pade::get_delta(int i, int j, int k)
+{
+    return ((cdo3D *)m_delta)->m_data[i][j][k];
+}
+
+inline iris_real laplacian3D_pade::get_gamma(int i, int j, int k)
+{
+    return ((cdo3D *)m_gamma)->m_data[i][j][k];
+}
+
+inline int laplacian3D_pade::get_delta_extent() 
+{
+    return ((cdo3D *)m_delta)->m_n/2;
+};
+
+inline int laplacian3D_pade::get_gamma_extent()
+{
+    return ((cdo3D *)m_gamma)->m_n/2;
+};

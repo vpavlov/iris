@@ -51,6 +51,12 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 
+	int get_delta_extent();
+	int get_gamma_extent();
+
+	iris_real get_delta(int i, int j, int k);
+	iris_real get_gamma(int i, int j, int k);
+
     private:
 
 	void compute_rhs(iris_real *denom);

@@ -149,6 +149,57 @@ namespace ORG_NCSA_IRIS {
 	    wfree(array);
 	    array = NULL;
 	}
+
+	//**********************************************************************
+	// 4D Arrays
+	//**********************************************************************
+
+	template <typename T>
+	static T ****create_4d(T ****&array, int n1, int n2, int n3, int n4, 
+			       bool clear = false)
+	{
+	    size_t nitems = n1 * n2 * n3 * n4;
+	    array    = (T ****) wmalloc(sizeof(T ***) * n1);
+	    T ***tmp = (T ***) wmalloc(sizeof(T **) * n1 * n2);
+	    T **tmp2 = (T **)  wmalloc(sizeof(T *) * n1 * n2 * n3);
+	    T *data  = (T *)   wmalloc(sizeof(T) * nitems);
+
+	    if(clear) {
+		for(int i=0;i<nitems;i++) {
+		    data[i] = (T)0;
+		}
+	    }
+
+	    size_t p = 0, m = 0, n = 0;
+	    for(size_t k=0;k<n1;k++) {
+		array[k] = &tmp[p];
+		for(size_t j=0;j<n2;j++) {
+		    tmp[j + p] = &tmp2[m];
+		    for(size_t i=0;i<n3;i++) {
+			tmp2[i + m] = &data[n];
+			n += n4;
+		    }
+		    m += n3;
+		}
+		p += n2;
+	    }
+
+	    return array;
+	}
+
+	template <typename T>
+	static void destroy_4d(T ****&array)
+	{
+	    if(array == NULL) {
+		return;
+	    }
+	    
+	    wfree(array[0][0][0]);
+	    wfree(array[0][0]);
+	    wfree(array[0]);
+	    wfree(array);
+	    array = NULL;
+	}
     };
 
 }

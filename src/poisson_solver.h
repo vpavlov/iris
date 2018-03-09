@@ -42,15 +42,16 @@ namespace ORG_NCSA_IRIS {
 	poisson_solver(class iris *obj);
 	~poisson_solver();
 
-	void set_laplacian(int in_style, int in_order);
+	void set_laplacian(int in_style, int in_arg1, int in_arg2);
 
 	virtual void commit();
 	virtual void solve() = 0;
 
     public:
 	bool m_dirty;  // wether to recalculate on commit
-	int m_style;   // which approximation to use (Taylor or Pade)
-	int m_order;   // accuracy order of the Laplacian
+	int m_style;   // which approximation to use (Pade)
+	int m_arg1;    // For [M, N] Pade approximation: the nominator (M)
+	int m_arg2;    // For [M, N] Pade approximation: the denominator (N)
 	class laplacian3D *m_laplacian;  // the Laplacian stencil
 	class first_derivative *m_ddx;   // d/dx stencil
 	class first_derivative *m_ddy;   // d/dy stencil

@@ -232,13 +232,13 @@ void iris::set_poisson_solver(int in_solver)
     }
 }
 
-void iris::set_laplacian(int in_style, int in_order)
+void iris::set_laplacian(int in_style, int in_arg1, int in_arg2)
 {
     if(m_solver == NULL) {
 	set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
     }
 
-    m_solver->set_laplacian(in_style, in_order);
+    m_solver->set_laplacian(in_style, in_arg1, in_arg2);
 }
 
 void iris::commit()

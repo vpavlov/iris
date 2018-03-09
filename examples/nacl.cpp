@@ -362,8 +362,8 @@ main(int argc, char **argv)
     x->set_global_box(-50.39064, -50.39064, -50.39064,
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(M, N, P);
-    x->set_order(4);
-    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 6);
+    x->set_order(3);
+    x->set_laplacian(IRIS_LAPL_STYLE_PADE, 0, 10);
     x->commit();
 
 

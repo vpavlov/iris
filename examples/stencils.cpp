@@ -12,10 +12,11 @@ main()
     d_dx.commit();
     d_dx.trace("d/dx");
 
-    laplacian3D_taylor del(12, 0.01, 0.01, 0.01);
-    del.commit();
-    del.trace("Δ");
+    // laplacian3D_taylor del(4, 0.01, 0.01, 0.01);
+    // del.commit();
+    // del.trace("Δ");
 
-    laplacian3D_pade del2(0, 2, false, 0.01, 0.01, 0.01);
+    laplacian3D_pade del2(0, 4, false, 1.0, 1.0, 1.0);
     del2.commit();
+    del2.trace2("D[0,4]");
 }

@@ -53,7 +53,7 @@ namespace ORG_NCSA_IRIS {
 	cdo3D(int n, iris_real c, int xp, int yp, int zp);
 	~cdo3D();
 
-	void dump();
+	void dump(const char *name);
 
 	void operator += (cdo3D &other);
 
@@ -71,6 +71,8 @@ namespace ORG_NCSA_IRIS {
 	// for n = 4 coefficients are { 1, -4, 6, -4, 1 }, etc.
 	int *coeff(int n);
 
+
+    public:
 	int m_n;  // order
 	iris_real ***m_data;
     };

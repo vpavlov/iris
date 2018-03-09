@@ -31,6 +31,7 @@
 #include <math.h>
 #include "laplacian3D.h"
 #include "utils.h"
+#include "cdo3D.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -79,5 +80,23 @@ void laplacian3D::trace(const char *in_name)
 		}
 	    }
 	}
+    }
+}
+
+void laplacian3D::trace2(const char *in_name)
+{
+    printf("---------------------------------\n");
+    printf("%s: 3D Laplacian stencil (extents %d/%d)\n", in_name,
+	   get_delta_extent(), get_gamma_extent());
+    printf("---------------------------------\n");
+    printf("hx:          % g\n", m_hx);
+    printf("hy:          % g\n", m_hy);
+    printf("hz:          % g\n", m_hz);
+    printf("Accurate to: % g (hx^%d)\n\n", pow(m_hx, m_acc), m_acc);
+    cdo3D *delta = (cdo3D *)m_delta;
+    cdo3D *gamma = (cdo3D *)m_gamma;
+    delta->dump("Δ");
+    if(!m_lhs_only) {
+	gamma->dump("Γ");
     }
 }

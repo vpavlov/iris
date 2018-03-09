@@ -50,7 +50,19 @@ namespace ORG_NCSA_IRIS {
 	void set_hz(iris_real in_hz) { m_hz = in_hz; m_dirty = true; }
 
 	virtual void commit() = 0;
+
+	// How many additional layers beyond the center we look at?
+	// E.g. for a 7-point stencil or similar, we look at center + 1 layer,
+	// so extent is 1
+	virtual int get_delta_extent() = 0;
+	virtual int get_gamma_extent() = 0;
+
+	// Get the value of Δ[i, j, k]
+	virtual iris_real get_delta(int i, int j, int k) = 0;
+	virtual iris_real get_gamma(int i, int j, int k) = 0;
+
 	void trace(const char *in_name);
+	void trace2(const char *in_name);
 
     protected:
 	iris_real m_hx;  // Δx

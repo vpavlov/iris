@@ -50,8 +50,8 @@ static const iris_real _PI  =  3.141592653589793;
 static const iris_real _2PI =  6.283185307179586;
 
 poisson_solver_psm::poisson_solver_psm(iris *obj)
-    :poisson_solver(obj), m_ev(NULL), m_ddx_ev(NULL), m_ddy_ev(NULL),
-     m_ddz_ev(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL)
+    :poisson_solver(obj), m_ev(NULL), m_ddx_ev(NULL),
+     m_ddy_ev(NULL), m_ddz_ev(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL)
 {
     m_logger->info("Will use the Pseudo-spectral method for solving Poisson's equation");
 }
@@ -131,54 +131,83 @@ void poisson_solver_psm::calculate_laplacian_ev()
     // normalization coefficient (FFT is not normalized)
     int norm = gnx * gny * gnz;
 
-    int cnt = m_laplacian->m_acc/2;
-    int cnt1 = cnt+1;
+    int cnt_d = m_laplacian->get_delta_extent();
+    int cnt1_d = cnt_d+1;  // + the center point
+
+    int cnt_g = m_laplacian->get_gamma_extent();
+    int cnt1_g = cnt_g+1;  // + the center point
+
+    int cnt1 = MAX(cnt1_d, cnt1_g);
+
     iris_real *A = (iris_real *)memory::wmalloc(cnt1*sizeof(iris_real));
     iris_real *B = (iris_real *)memory::wmalloc(cnt1*sizeof(iris_real));
     iris_real *C = (iris_real *)memory::wmalloc(cnt1*sizeof(iris_real));
-    
-    A[0] = B[0] = C[0] = 1.0;
 
-    iris_real *data = (iris_real *)m_laplacian->m_delta;
+    // A[0] is what we multiply the center coeff with
+    // A[1] is what we multiply the coeff for 1-st additional layer with
+    // ...
+    // A[i] is what we multiply the coeff for the i-th additional layer with
+    // Same for B and C
+    A[0] = B[0] = C[0] = 1.0;
 
     memory::destroy_3d(m_ev);
     memory::create_3d(m_ev, nx, ny, nz);
     for(int x = sx; x < ex; x++) {
-    	iris_real t = _2PI * x / gnx;
-    	for(int c = 1; c <= cnt; c++) {
-    	    A[c] = 2*cos(c*t);
+    	iris_real tx = _2PI * x / gnx;
+    	for(int c = 1; c < cnt1; c++) {
+    	    A[c] = 2*cos(c*tx);
     	}
 	
     	for(int y = sy; y < ey; y++) {
-    	    iris_real t = _2PI * y / gny;
-    	    for(int c = 1; c <= cnt; c++) {
-    		B[c] = 2*cos(c*t);
+    	    iris_real ty = _2PI * y / gny;
+    	    for(int c = 1; c < cnt1; c++) {
+    		B[c] = 2*cos(c*ty);
     	    }
 	    
     	    for(int z = sz; z < ez; z++) {
-    		iris_real t = _2PI * z / gnz;
-    		for(int c = 1; c <= cnt; c++) {
-    		    C[c] = 2*cos(c*t);
+    		iris_real tz = _2PI * z / gnz;
+    		for(int c = 1; c < cnt1; c++) {
+    		    C[c] = 2*cos(c*tz);
     		}
 		
-    		iris_real val = (iris_real)0.0;
-    		for(int i=0;i<=cnt;i++) {
-    		    int xl = cnt - i;
-    		    for(int j=0;j<=cnt;j++) {
-    			int yl = cnt - j;
-    			for(int k=0;k<=cnt;k++) {
-    			    int zl = cnt - k;
-    			    iris_real sc = data[ROW_MAJOR_OFFSET(i, j, k, cnt1, cnt1)];
+    		iris_real val_d = (iris_real)0.0;
+    		for(int i=0;i<=cnt_d;i++) {
+    		    int xl = cnt_d - i;
+    		    for(int j=0;j<=cnt_d;j++) {
+    			int yl = cnt_d - j;
+    			for(int k=0;k<=cnt_d;k++) {
+    			    int zl = cnt_d - k;
+			    iris_real sc = m_laplacian->get_delta(i, j, k);
     			    iris_real tt = sc*A[xl]*B[yl]*C[zl];
-    			    val += tt;
+    			    val_d += tt;
     			}
     		    }
     		}
-		
-    		if(val == 0.0) {
-    		    val = std::numeric_limits<iris_real>::min();
+
+    		if(val_d == 0.0) {
+    		    val_d = std::numeric_limits<iris_real>::min();
+    		}
+
+    		iris_real val_g = (iris_real)0.0;
+    		for(int i=0;i<=cnt_g;i++) {
+    		    int xl = cnt_g - i;
+    		    for(int j=0;j<=cnt_g;j++) {
+    			int yl = cnt_g - j;
+    			for(int k=0;k<=cnt_g;k++) {
+    			    int zl = cnt_g - k;
+			    iris_real sc = m_laplacian->get_gamma(i, j, k);
+    			    iris_real tt = sc*A[xl]*B[yl]*C[zl];
+    			    val_g += tt;
+    			}
+    		    }
+    		}
+
+    		if(val_g == 0.0) {
+    		    val_g = std::numeric_limits<iris_real>::min();
     		}
 		
+		iris_real val = val_d / val_g;
+
     		m_ev[x-sx][y-sy][z-sz] = val * norm;
     	    }
     	}
@@ -204,6 +233,7 @@ void poisson_solver_psm::commit()
 	m_laplacian->set_hy(m_mesh->m_h[1]);
 	m_laplacian->set_hz(m_mesh->m_h[2]);
 	m_laplacian->commit();
+
 	calculate_laplacian_ev();
 
 	// setup the first derivatives in each direction, and their
@@ -319,6 +349,7 @@ void poisson_solver_psm::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 void poisson_solver_psm::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
+
     m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
     kspace_phi(m_work1);
 

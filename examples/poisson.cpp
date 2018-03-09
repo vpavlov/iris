@@ -54,7 +54,7 @@ main(int argc, char **argv)
     iris *x = new iris(MPI_COMM_WORLD);
     x->set_global_box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
     x->set_mesh_size(M, N, P);
-    x->set_laplacian(IRIS_LAPL_STYLE_TAYLOR, 4);
+    x->set_laplacian(IRIS_LAPL_STYLE_PADE, 0, 2);
     x->set_grid_pref(1, 0, 1);
     x->commit();
     x->set_rhs(example2_rhs);

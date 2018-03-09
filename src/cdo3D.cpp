@@ -29,6 +29,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <stdio.h>
+#include <string.h>
 #include "cdo3D.h"
 #include "memory.h"
 #include "utils.h"
@@ -80,16 +81,19 @@ int *cdo3D::coeff(int n)
     return c;
 }
 
-void cdo3D::dump()
+void cdo3D::dump(const char *name)
 {
+    int center = m_n / 2;
     for(int i=0;i<=m_n;i++) {
 	for(int j=0;j<=m_n;j++) {
 	    for(int k=0;k<=m_n;k++) {
-		printf("cdo[%d][%d][%d] = %g\n", i, j, k, m_data[i][j][k]);
+		if(m_data[i][j][k] != 0.0) {
+		    printf("%s[%+02d][%+02d][%+02d] = % g\n", name, i - center, j - center, k - center, m_data[i][j][k]);
+		}
 	    }
-	    printf("\n");
 	}
     }
+    printf("\n");
 }
 
 void cdo3D::operator += (cdo3D &other)
@@ -102,3 +106,4 @@ void cdo3D::operator += (cdo3D &other)
 	}
     }
 }
+
