@@ -43,6 +43,8 @@
 
 using namespace ORG_NCSA_IRIS;
 
+static iris_real coeff1[1][1] = {{ 1.0 }};
+
 static iris_real coeff2[2][2] =
     {{ 1/2.0,  1.0 },
      { 1/2.0, -1.0 }};
@@ -94,8 +96,8 @@ charge_assigner::~charge_assigner()
 
 void charge_assigner::set_order(int in_order)
 {
-    if(in_order < 2 || in_order > 7) {
-	throw std::invalid_argument("Orders below 2 and above 7 are not supported!");
+    if(in_order < 1 || in_order > 7) {
+	throw std::invalid_argument("Orders below 1 and above 7 are not supported!");
     }
 
     m_order = in_order;
@@ -107,7 +109,7 @@ void charge_assigner::commit()
 {
     // set default values
     if(m_order == 0) {
-	set_order(2);
+	set_order(1);
     }
 
     if(m_dirty) {
@@ -122,7 +124,9 @@ void charge_assigner::commit()
 	    m_ics_center = 0.5;
 	}
 	
-	if(m_order == 2) {
+	if(m_order == 1) {
+	    m_coeff = (iris_real *) coeff1;
+	}else if(m_order == 2) {
 	    m_coeff = (iris_real *) coeff2;
 	}else if(m_order == 3) {
 	    m_coeff = (iris_real *) coeff3;

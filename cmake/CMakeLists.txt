@@ -122,6 +122,9 @@ target_link_libraries(poisson iris)
 add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
 target_link_libraries(stencils iris)
 
+add_executable(gro-charges ${IRIS_SOURCE_DIR}/../examples/gro-charges.cpp)
+target_link_libraries(gro-charges iris)
+
 # Handle pkgconfig
 set(PKG_CFLAGS "")
 foreach (_def ${INSTALLED_DEFINITIONS})
