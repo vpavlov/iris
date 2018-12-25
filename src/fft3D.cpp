@@ -301,7 +301,7 @@ void fft3d::setup_plans(int in_which)
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous output
 			     n,       // distance to the next transform's data
-			     FFTW_FORWARD, // forward transformation
+			     FFTW_BACKWARD, // forward transformation; changed to backward to match lammps sign
 			     FFTW_ESTIMATE);
     m_bk_plans[in_which] =
 	FFTW_(plan_many_dft)(1,       // 1D
@@ -315,7 +315,7 @@ void fft3d::setup_plans(int in_which)
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous output
 			     n,       // distance to the next transform's data
-			     FFTW_BACKWARD, // backward transformation
+			     FFTW_FORWARD, // backward transformation; changed to forward to match lammps sign
 			     FFTW_ESTIMATE);
 #endif
 
@@ -326,7 +326,7 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
     // get data from the mesh
     int j = 0;
     for(int i=0;i<m_count;i++) {
-	dest[j++] = m_iris->m_rho_multiplier * src[i];
+	dest[j++] = src[i];
 	dest[j++] = 0.0;
     }
 

@@ -99,6 +99,9 @@ namespace ORG_NCSA_IRIS {
 	// Sets or resets the interpolation/stencil order
 	void set_order(int order);
 
+	// Sets or resets the Ewald splitting parameter (1/distance)
+	void set_alpha(iris_real in_alpha);
+
 	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
 	void set_grid_pref(int x, int y, int z);
 	
@@ -167,7 +170,6 @@ namespace ORG_NCSA_IRIS {
 
 	void quit();
 
-
 	// Helpers used in internode communication
 	MPI_Comm server_comm();
 	int *stos_fence_pending(MPI_Win *out_win);
@@ -195,8 +197,8 @@ namespace ORG_NCSA_IRIS {
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
 
-	iris_real m_rho_multiplier;  // see set_rho_multiplier above
-
+	iris_real m_rho_multiplier;    // see set_rho_multiplier above
+	iris_real m_alpha;             // Ewald splitting parameter (1/distance)
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 	
@@ -208,7 +210,7 @@ namespace ORG_NCSA_IRIS {
 	class proc_grid       *m_proc_grid;   // MPI Comm related stuff
 	class mesh            *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;       // Charge assignmen machinery
-	class poisson_solver  *m_solver;      // Which solver to use
+	class poisson_solver  *m_solver;      // The Poisson equation solver itself
 
     private:
 	volatile bool m_quit;  // quit the main loop

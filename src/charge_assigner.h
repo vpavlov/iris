@@ -60,6 +60,7 @@ namespace ORG_NCSA_IRIS {
 	// (total of 3^3 = 27 points). Orders between 2 and 7 are supported.
     public:
 	int m_order;         // charge assignment/interpolation order
+	iris_real *m_gfd_coeff;  // Hockney/Eastwood modified Green function denominator coefficients
 
 
 	// Finding the nearest N points to a charge (where N = order)

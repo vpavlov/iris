@@ -112,7 +112,7 @@ namespace ORG_NCSA_IRIS {
 
 	template <typename T>
 	static T ***create_3d(T ***&array, int n1, int n2, int n3,
-			      bool clear = false)
+			      bool clear = false, T init_val = 0)
 	{
 	    size_t nitems = n1 * n2 * n3;
 	    array   = (T ***) wmalloc(sizeof(T **) * n1);
@@ -120,7 +120,7 @@ namespace ORG_NCSA_IRIS {
 	    T *data = (T *)   wmalloc(sizeof(T)    * nitems);
 	    if(clear) {
 		for(int i=0;i<nitems;i++) {
-		    data[i] = (T)0;
+		    data[i] = init_val;
 		}
 	    }
 

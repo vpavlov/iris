@@ -40,6 +40,7 @@
 #include "comm_rec.h"
 #include "tags.h"
 #include "poisson_solver.h"
+#include "nlist.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -62,6 +63,11 @@ mesh::~mesh()
     memory::destroy_3d(m_Ey_plus);
     memory::destroy_3d(m_Ez);
     memory::destroy_3d(m_Ez_plus);
+
+    for(auto it = m_nlist.begin(); it != m_nlist.end(); it++) {
+	delete it->second;
+    }
+    
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	memory::wfree(it->second);
     }
@@ -170,6 +176,10 @@ void mesh::commit()
 			  m_ext_size[2],
 			  true);
 
+	for(auto it = m_nlist.begin(); it != m_nlist.end(); it++) {
+	    delete it->second;
+	}
+
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	    memory::wfree(it->second);
 	}
@@ -181,10 +191,11 @@ void mesh::commit()
 	m_ncharges.clear();
 	m_charges.clear();
 	m_forces.clear();
+	m_nlist.clear();
 	
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
-	    m_solver->m_dirty = true;
+	    m_solver->set_dirty(true);
 	}
 
 	m_dirty = false;
@@ -290,7 +301,9 @@ void mesh::dump_ascii(const char *fname, iris_real ***data)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%.15g ", data[k][j][i]);
+		if(data[k][j][i] != 0.0) {
+		    fprintf(fp, "X[%d][%d][%d] = %f\n", k, j, i, data[k][j][i]);
+		}
 	    }
 	}
     }
@@ -316,14 +329,15 @@ void mesh::assign_charges()
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int ncharges = it->second;
 	iris_real *charges = m_charges[it->first];
-	assign_charges1(ncharges, charges);
+	nlist *nl = m_nlist[it->first];
+	assign_charges1(ncharges, charges, nl);
+	nl->dump(m_logger);
     }
 }
 
-void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
+void mesh::assign_charges1(int in_ncharges, iris_real *in_charges, nlist *in_nlist)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-
     for(int n=0;n<in_ncharges;n++) {
 	iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
 	iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
@@ -333,6 +347,8 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 	int ix = (int) (tx + m_chass->m_ics_bump);
 	int iy = (int) (ty + m_chass->m_ics_bump);
 	int iz = (int) (tz + m_chass->m_ics_bump);
+
+	in_nlist->add_charge(ix, iy, iz, n);
 
 	// distance (increasing to the left!) from the center of the
 	// interpolation grid

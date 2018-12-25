@@ -25,7 +25,7 @@
 #define BOXZ 10.0
 
 //#define ATOMS 34573
-#define ATOMS 1
+#define ATOMS 2
 
 using namespace ORG_NCSA_IRIS;
 
@@ -381,10 +381,10 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(0.0, 0.0, 0.0, BOXX, BOXY, BOXZ);
     x->set_mesh_size(M, N, P);
-    x->set_order(5);
+    x->set_order(3);
     // 1/ε = -138.93545768032754292204224841008
-    x->set_rho_multiplier(1745.9144526866105);
-    x->set_laplacian(IRIS_LAPL_STYLE_PADE, 0, 4);
+    //x->set_rho_multiplier(1745.9144526866105);
+    x->set_alpha(2.3053423352800846);
     x->commit();
 
 
@@ -440,9 +440,9 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	//x->m_mesh->dump_log("RHO", x->m_mesh->m_rho);
+	x->m_mesh->dump_ascii("RHO", x->m_mesh->m_rho);
 	//x->m_mesh->check_fxyz();
-	x->m_mesh->dump_bov("phi", x->m_mesh->m_phi);
+	x->m_mesh->dump_ascii("phi", x->m_mesh->m_phi);
 	x->m_mesh->dump_ascii("fieldx", x->m_mesh->m_Ex);
 	x->m_mesh->dump_ascii("fieldy", x->m_mesh->m_Ey);
 	x->m_mesh->dump_ascii("fieldz", x->m_mesh->m_Ez);

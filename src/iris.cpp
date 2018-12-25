@@ -40,8 +40,8 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
-//#include "taylor_stencil.h"
-#include "poisson_solver_psm.h"
+#include "nlist.h"
+#include "poisson_solver.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -139,6 +139,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_proc_grid = new proc_grid(this);
 	m_mesh = new mesh(this);
 	m_chass = new charge_assigner(this);
+	m_solver = new poisson_solver(this);
     }
 
     m_quit = false;
@@ -209,6 +210,11 @@ void iris::set_order(int in_order)
     }
 }
 
+void iris::set_alpha(iris_real in_alpha)
+{
+    m_alpha = in_alpha;
+}
+
 void iris::set_grid_pref(int x, int y, int z)
 {
     if(is_server()) {
@@ -216,38 +222,9 @@ void iris::set_grid_pref(int x, int y, int z)
     }
 }
 
-void iris::set_poisson_solver(int in_solver)
-{
-    if(m_solver != NULL) {
-       delete m_solver;
-    }
-
-    switch(in_solver) {
-    case IRIS_POISSON_SOLVER_PSM:
-       m_solver = new poisson_solver_psm(this);
-       break;
-
-    default:
-       throw std::logic_error("Unknown poisson solver selected!");
-    }
-}
-
-void iris::set_laplacian(int in_style, int in_arg1, int in_arg2)
-{
-    if(m_solver == NULL) {
-	set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
-    }
-
-    m_solver->set_laplacian(in_style, in_arg1, in_arg2);
-}
-
 void iris::commit()
 {
     if(is_server()) {
-	if(m_solver == NULL) {
-	    set_poisson_solver(IRIS_POISSON_SOLVER_PSM);
-	}
-
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
 	m_chass->commit();      // does not depend on anything
@@ -493,6 +470,10 @@ bool iris::handle_charges(event_t *event)
 
     m_mesh->m_ncharges[event->peer] = ncharges;
     m_mesh->m_charges[event->peer] = (iris_real *)event->data;
+    m_mesh->m_nlist[event->peer] = new nlist(m_mesh->m_own_size[0],
+					     m_mesh->m_own_size[1],
+					     m_mesh->m_own_size[2],
+					     ncharges);
 
     if(!is_client()) {
 	MPI_Request req;

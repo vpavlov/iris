@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,67 +27,317 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
+#include <cmath>
 #include "poisson_solver.h"
-#include "laplacian3D_pade.h"
-#include "first_derivative_taylor.h"
+#include "domain.h"
+#include "mesh.h"
+#include "charge_assigner.h"
+#include "memory.h"
+#include "math_util.h"
+#include "logger.h"
+#include "fft3D.h"
+
+#define  _PI   3.141592653589793238462643383279
+#define _2PI   6.283185307179586476925286766559
+#define _4PI  12.56637061435917295385057353311
+#define  EPS   1.0e-7
 
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver::poisson_solver(class iris *obj)
-    : state_accessor(obj), m_dirty(true), m_style(0), m_arg1(0), m_arg2(0),
-      m_laplacian(NULL), m_ddx(NULL), m_ddy(NULL), m_ddz(NULL)
+    : state_accessor(obj), m_dirty(true), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL)
 {
 };
 
 poisson_solver::~poisson_solver()
 {
-    if(m_laplacian != NULL) { delete m_laplacian; }
-    if(m_ddx != NULL) { delete m_ddx; }
-    if(m_ddy != NULL) { delete m_ddy; }
-    if(m_ddz != NULL) { delete m_ddz; }
-};
-
-void poisson_solver::set_laplacian(int in_style, int in_arg1, int in_arg2)
-{
-    if(in_style == m_style && in_arg1 == m_arg1 && in_arg2 == m_arg2) {
-	return;
-    }
-
-    m_style = in_style;
-    m_arg1 = in_arg1;
-    m_arg2 = in_arg2;
-    m_dirty = true;
+    memory::destroy_3d(m_greenfn);
+    memory::destroy_1d(m_kx);
+    memory::destroy_1d(m_ky);
+    memory::destroy_1d(m_kz);
+    memory::destroy_1d(m_work1);
+    memory::destroy_1d(m_work2);
+    memory::destroy_1d(m_work3);
 }
 
 void poisson_solver::commit()
 {
-    // set defaults (if not configured)
-    if(m_style == 0) {
-	set_laplacian(IRIS_LAPL_STYLE_PADE, 0, 0);
-    }
-
     if(!m_dirty) {
 	return;
     }
 
-    if(m_laplacian != NULL) { delete m_laplacian; }
-    if(m_ddx != NULL) { delete m_ddx; }
-    if(m_ddy != NULL) { delete m_ddy; }
-    if(m_ddz != NULL) { delete m_ddz; }
+    memory::destroy_3d(m_greenfn);
+    memory::create_3d(m_greenfn, m_mesh->m_own_size[0], m_mesh->m_own_size[1], m_mesh->m_own_size[2]);
 
-    switch(m_style) {
-    case IRIS_LAPL_STYLE_PADE:
-	// TODO: also add cut as parameter
-	m_laplacian = new laplacian3D_pade(m_arg1, m_arg2, false);
-	m_ddx = new first_derivative_taylor((m_arg1 + 2)/2);
-	m_ddy = new first_derivative_taylor((m_arg1 + 2)/2);
-	m_ddz = new first_derivative_taylor((m_arg1 + 2)/2);
-	break;
+    memory::destroy_1d(m_kx);
+    memory::create_1d(m_kx, m_mesh->m_own_size[0]);
 
-    default:
-	throw std::logic_error("Unknown laplacian style selected!");
+    memory::destroy_1d(m_ky);
+    memory::create_1d(m_ky, m_mesh->m_own_size[1]);
+
+    memory::destroy_1d(m_kz);
+    memory::create_1d(m_kz, m_mesh->m_own_size[2]);
+
+    calculate_green_function();
+    calculate_k();
+
+    if(m_fft != NULL) { delete m_fft; }
+    m_fft = new fft3d(m_iris);
+    
+    int n = 2 * m_fft->m_count;
+    
+    memory::destroy_1d(m_work1);
+    memory::create_1d(m_work1, n);
+    
+    memory::destroy_1d(m_work2);
+    memory::create_1d(m_work2, n);
+
+    memory::destroy_1d(m_work3);
+    memory::create_1d(m_work3, n);
+    
+    m_dirty = false;
+}
+
+void poisson_solver::kspace_phi(iris_real *io_rho_phi)
+{
+    double scaleinv = 1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]);
+
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
+		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
+	    }
+	}
+    }
+}
+
+void poisson_solver::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		out_Ex[idx]   =  in_phi[idx+1]*m_kx[i];
+		out_Ex[idx+1] = -in_phi[idx  ]*m_kx[i];
+		idx+=2;
+	    }
+	}
+    }
+}
+
+void poisson_solver::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		out_Ey[idx]   =  in_phi[idx+1]*m_ky[j];
+		out_Ey[idx+1] = -in_phi[idx  ]*m_ky[j];
+		idx+=2;
+	    }
+	}
+    }
+}
+
+void poisson_solver::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		out_Ez[idx]   =  in_phi[idx+1]*m_kz[k];
+		out_Ez[idx+1] = -in_phi[idx  ]*m_kz[k];
+		idx+=2;
+	    }
+	}
+    }
+}
+
+void poisson_solver::solve()
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+
+    m_logger->trace("Solving Poisson's Equation now");
+
+    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
+    
+    kspace_phi(m_work1);
+
+    kspace_Ex(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
+
+    kspace_Ey(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
+
+    kspace_Ez(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
+
+    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
+}
+
+// Hockney/Eastwood modified Green function corresponding to the
+// charge assignment functions
+//
+// G(k) = _4PI/k^2 * [ sum_b(k.(k+b)/(k+b).(k+b)  *  Wn^2(k+b) * rho^2(k+b) ] / sum_b(Wn^2(k+b))^2
+//
+void poisson_solver::calculate_green_function()
+{
+    const iris_real alpha = m_iris->m_alpha;
+
+    const iris_real xL = m_domain->m_global_box.xsize;
+    const iris_real yL = m_domain->m_global_box.ysize;
+    const iris_real zL = m_domain->m_global_box.zsize;
+
+    const iris_real kxm = (_2PI/xL);
+    const iris_real kym = (_2PI/yL);
+    const iris_real kzm = (_2PI/zL);
+
+    const int xM = m_mesh->m_size[0];
+    const int yM = m_mesh->m_size[1];
+    const int zM = m_mesh->m_size[2];
+
+    const int nbx = static_cast<int> ((alpha*xL/(_PI*xM)) * pow(-log(EPS),0.25));
+    const int nby = static_cast<int> ((alpha*yL/(_PI*yM)) * pow(-log(EPS),0.25));
+    const int nbz = static_cast<int> ((alpha*zL/(_PI*zM)) * pow(-log(EPS),0.25));
+
+    const int _2n = 2*m_chass->m_order;
+
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int sx = m_mesh->m_own_offset[0];
+    int sy = m_mesh->m_own_offset[1];
+    int sz = m_mesh->m_own_offset[2];
+    
+    int ex = sx + nx;
+    int ey = sy + ny;
+    int ez = sz + nz;
+    
+    // k = 2pij/L
+    // h = L/M
+    // kh/2 = 2pij/L * L/M = 2pi*j/M
+    int n = 0;
+    for(int x = sx; x < ex; x++) {
+	int xj = x - xM*(2*x/xM);
+	iris_real sinx2 = square(sin(_PI*xj/xM));
+	
+	for(int y = sy; y < ey; y++) {
+	    int yj = y - yM*(2*y/yM);
+	    iris_real siny2 = square(sin(_PI*yj/yM));
+	    
+	    for(int z = sz; z < ez; z++) {
+		int zj = z - zM*(2*z/zM);  // convert from 0..P to 0..P/2, -P/2...-1
+		iris_real sinz2 = square(sin(_PI*zj/zM));  // sin^2(k*delta/2)
+
+		iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
+		
+		if(ksq != 0.0) {
+		    iris_real part1 = _4PI / ksq;
+		    iris_real part2 = 0.0;
+
+		    for(int bx = -nbx; bx <= nbx; bx++) {
+			iris_real xkplusb = kxm * (xj + xM*bx);
+			iris_real xrho = exp(-0.25*square(xkplusb/alpha));
+			iris_real xwnsq = pow_sinx_x(xkplusb*xL/(2*xM), _2n);
+
+			for(int by = -nby; by <= nby; by++) {
+			    iris_real ykplusb = kym * (yj + yM*by);
+			    iris_real yrho = exp(-0.25*square(ykplusb/alpha));
+			    iris_real ywnsq = pow_sinx_x(ykplusb*yL/(2*yM), _2n);
+
+			    for(int bz = -nbz; bz <= nbz; bz++) {
+				iris_real zkplusb = kzm * (zj + zM*bz);
+				iris_real zrho = exp(-0.25*square(zkplusb/alpha));
+				iris_real zwnsq = pow_sinx_x(zkplusb*zL/(2*zM), _2n);
+
+				// k . (k+b)
+				iris_real k_dot_kplusb =
+				    kxm * xj * xkplusb +
+				    kym * yj * ykplusb +
+				    kzm * zj * zkplusb;
+
+				// (k+b) . (k+b)
+				iris_real kplusb_sq = xkplusb * xkplusb + ykplusb*ykplusb + zkplusb*zkplusb;
+
+				part2 += (k_dot_kplusb/kplusb_sq) * xrho*yrho*zrho * xwnsq * ywnsq * zwnsq;
+			    }
+			}
+		    }
+		    iris_real part3 = denominator(sinx2, siny2, sinz2);
+
+		    m_greenfn[x-sx][y-sy][z-sz] = part1 * part2 / part3;
+		}else {
+		    m_greenfn[x-sx][y-sy][z-sz] = 0.0;
+		}
+	    }
+	}
+    }
+}
+
+void poisson_solver::calculate_k()
+{
+    const iris_real xL = m_domain->m_global_box.xsize;
+    const iris_real yL = m_domain->m_global_box.ysize;
+    const iris_real zL = m_domain->m_global_box.zsize;
+
+    const iris_real kxm = (_2PI/xL);
+    const iris_real kym = (_2PI/yL);
+    const iris_real kzm = (_2PI/zL);
+
+    const int xM = m_mesh->m_size[0];
+    const int yM = m_mesh->m_size[1];
+    const int zM = m_mesh->m_size[2];
+
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int sx = m_mesh->m_own_offset[0];
+    int sy = m_mesh->m_own_offset[1];
+    int sz = m_mesh->m_own_offset[2];
+    
+    int ex = sx + nx;
+    int ey = sy + ny;
+    int ez = sz + nz;
+    
+    // k = 2pij/L
+    // h = L/M
+    // kh/2 = 2pij/L * L/M = 2pi*j/M
+
+    for(int x = sx; x < ex; x++) {
+	int xj = x - xM*(2*x/xM);
+	m_kx[x-sx] = kxm * xj;
+	printf("kx[%d]: %f\n", x-sx, m_kx[x-sx]);
     }
 
-    m_dirty = false;
+    for(int y = sy; y < ey; y++) {
+	int yj = y - yM*(2*y/yM);
+	m_ky[y-sy] = kym * yj;
+    }
+
+    for(int z = sz; z < ez; z++) {
+	int zj = z - zM*(2*z/zM);
+	m_kz[z-sz] = kzm * zj;
+    }
 }

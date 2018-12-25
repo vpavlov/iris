@@ -363,7 +363,6 @@ main(int argc, char **argv)
     		      50.39064,  50.39064,  50.39064);
     x->set_mesh_size(M, N, P);
     x->set_order(3);
-    x->set_laplacian(IRIS_LAPL_STYLE_PADE, 0, 10);
     x->commit();
 
 

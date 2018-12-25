@@ -116,8 +116,8 @@ endif()
 add_executable(nacl ${IRIS_SOURCE_DIR}/../examples/nacl.cpp)
 target_link_libraries(nacl iris)
 
-add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
-target_link_libraries(poisson iris)
+# add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
+# target_link_libraries(poisson iris)
 
 add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
 target_link_libraries(stencils iris)

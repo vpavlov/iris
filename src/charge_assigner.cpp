@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -84,6 +84,23 @@ static iris_real coeff7[7][7] =
      {   722/46080.0,  -236/3840.0,   74/768.0, -20/288.0,   2/192.0,  4/240.0,  -6/720.0 },
      {     1/46080.0,    -1/3840.0,    1/768.0,  -1/288.0,   1/192.0, -1/240.0,   1/720.0 }};
 
+// Hockney and Eastwood modified Green function
+//
+// See for example Appendix A of
+// "Comments on P3M, FMM, and the Ewald Method for Large Periodic Coulombic Systems"
+// by E. L. Pollock and Jim Glosli
+
+// Green's Function Denominator coefficients. They depend only on the order
+// If you want higher order support, you can use lisp/gf_denom_coeff.lisp to
+// calculate higher order coefficents and then ammend this code to include it.
+static iris_real gfd_coeff1[] = { 1.0 };
+static iris_real gfd_coeff2[] = { 1.0, -2.0/3 };
+static iris_real gfd_coeff3[] = { 1.0, -1.0, 2.0/15 };
+static iris_real gfd_coeff4[] = { 1.0, -4.0/3, 2.0/5, -4.0/315 };
+static iris_real gfd_coeff5[] = { 1.0, -5.0/3, 7.0/9, -17.0/189, 2.0/2835 };
+static iris_real gfd_coeff6[] = { 1.0, -2.0, 19.0/15, -256.0/945, 62.0/4725, -4.0/155925 };
+static iris_real gfd_coeff7[] = { 1.0, -7.0/3, 28.0/15, -16.0/27, 26.0/405, -2.0/1485, 4.0/6081075 };
+
 charge_assigner::charge_assigner(iris *obj)
     :state_accessor(obj), m_order(0), m_dirty(true), m_weights(NULL)
 {
@@ -126,18 +143,25 @@ void charge_assigner::commit()
 	
 	if(m_order == 1) {
 	    m_coeff = (iris_real *) coeff1;
+	    m_gfd_coeff = (iris_real *) gfd_coeff1;
 	}else if(m_order == 2) {
 	    m_coeff = (iris_real *) coeff2;
+	    m_gfd_coeff = (iris_real *) gfd_coeff2;
 	}else if(m_order == 3) {
 	    m_coeff = (iris_real *) coeff3;
+	    m_gfd_coeff = (iris_real *) gfd_coeff3;
 	}else if(m_order == 4) {
 	    m_coeff = (iris_real *) coeff4;
+	    m_gfd_coeff = (iris_real *) gfd_coeff4;
 	}else if(m_order == 5) {
 	    m_coeff = (iris_real *) coeff5;
+	    m_gfd_coeff = (iris_real *) gfd_coeff5;
 	}else if(m_order == 6) {
 	    m_coeff = (iris_real *) coeff6;
+	    m_gfd_coeff = (iris_real *) gfd_coeff6;
 	}else if(m_order == 7) {
 	    m_coeff = (iris_real *) coeff7;
+	    m_gfd_coeff = (iris_real *) gfd_coeff7;
 	}
 
 	memory::destroy_2d(m_weights);
