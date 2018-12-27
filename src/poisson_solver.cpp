@@ -346,12 +346,7 @@ void poisson_solver::solve()
 
     m_logger->trace("Solving Poisson's Equation now");
 
-    double stime = MPI_Wtime();
     m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
-    double etime = MPI_Wtime();
-    double wtick = MPI_Wtick();
-    m_iris->m_logger->info("wtick: %f", wtick);
-    m_iris->m_logger->info("FFT Time: %f", etime-stime);
 
     if(m_iris->m_compute_global_energy) {
 	kspace_eng(m_work1);

@@ -268,7 +268,7 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     MPI_Reduce(&fsum, &tot_fsum, 3, IRIS_REAL, MPI_SUM, iris->m_local_leader,
 	       iris->m_local_comm->m_comm);
     if(iris->is_leader()) {
-	iris->m_logger->trace("Total Fsum = (%.15g, %.15g, %.15g)",
+	iris->m_logger->info("Total Fsum = (%.15g, %.15g, %.15g)",
 			      tot_fsum[0], tot_fsum[1], tot_fsum[2]);
     }
 
@@ -406,7 +406,6 @@ main(int argc, char **argv)
 
 	// On each step...
 	for(int i=0;i<NSTEPS;i++) {
-	    double stime = MPI_Wtime();
 	    // The client must send the charges which befall into the server
 	    // procs' local boxes to the corrseponding server node.
 	    // It finds out which client sends which charges to which server
@@ -422,15 +421,13 @@ main(int argc, char **argv)
 	    int *nforces;
 	    iris_real *forces = x->receive_forces(&nforces);
 
-	    //handle_forces(x, nforces, forces);
+	    handle_forces(x, nforces, forces);
 
 	    iris_real etot = x->global_energy();
 	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
 
 	    delete [] nforces;
 	    memory::wfree(forces);
-	    double etime = MPI_Wtime();
-	    x->m_logger->info("Loop time: %f", etime - stime);
 	}
 
 	x->quit();  // this will break server loop
