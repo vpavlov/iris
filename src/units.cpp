@@ -27,62 +27,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_H__
-#define __IRIS_POISSON_SOLVER_H__
+#include <stdexcept>
+#include "units.h"
 
-#include "state_accessor.h"
-#include "charge_assigner.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
+units::units(EUnits style)
+{
+    switch(style) {
+    case real:
+	init_real();
+	break;
 
-    class poisson_solver : protected state_accessor {
+    case md:
+	init_md();
+	break;
 
-    public:
-	poisson_solver(class iris *obj);
-	~poisson_solver();
+    default:
+	throw std::invalid_argument("Unit style not supported!");
+    }
 
-	void commit();
-	void solve();
-
-	void set_dirty(bool in_dirty) { m_dirty = in_dirty; };
-	
-    private:
-	void kspace_phi(iris_real *io_rho_phi);
-	void kspace_eng(iris_real *in_rho_phi);
-	void kspace_Ex(iris_real *in_phi, iris_real *out_Ex);
-	void kspace_Ey(iris_real *in_phi, iris_real *out_Ey);
-	void kspace_Ez(iris_real *in_phi, iris_real *out_Ez);
-
-	void calculate_green_function();
-	void calculate_k();
-
-	inline iris_real denominator(const iris_real &x, const iris_real &y, const iris_real &z)
-	{
-	    iris_real sx, sy, sz;
-	    sx = sy = sz = 0.0;
-	    for(int i = m_chass->m_order - 1; i >= 0; i--) {
-		iris_real c = m_chass->m_gfd_coeff[i];
-		sx = c + sx * x;
-		sy = c + sy * y;
-		sz = c + sz * z;
-	    }
-	    iris_real s = sx * sy * sz;
-	    return s*s;
-	}
-
-    private:
-	bool m_dirty;  // wether to recalculate on commit
-	iris_real ***m_greenfn;  // green function table, actually a 3D array
-	iris_real *m_kx;
-	iris_real *m_ky;
-	iris_real *m_kz;
-	class fft3d *m_fft;
-
-	// FFT workspaces
-	iris_real *m_work1;
-	iris_real *m_work2;
-	iris_real *m_work3;  // temporary, to be removed
-    };
 }
 
-#endif
+units::~units()
+{
+}
+
+// Length: Anstrom
+// Charge: # of Elementary charges
+// Energy: Kcal/mol
+void units::init_real()
+{
+    this->e  = 1.0;
+    this->ecf = 332.0637129954289;
+    this->ang = 1.0;
+    this->energy_unit = "Kcal/mol";
+}
+
+
+// Length: nm
+// Charge: # of Elementary charges
+// Energy: KJ/mol
+void units::init_md()
+{
+    this->e  = 1.0;
+    this->ecf = 138.93545751728743;
+    this->ang = 0.1;
+    this->energy_unit = "KJ/mol";
+}
+

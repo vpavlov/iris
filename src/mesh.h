@@ -78,7 +78,7 @@ namespace ORG_NCSA_IRIS {
 
     private:
 
-	void assign_charges1(int in_ncharges, iris_real *in_charges, class nlist *in_nlist);
+	void assign_charges1(int in_ncharges, iris_real *in_charges);
 	void assign_forces1(int in_ncharges, iris_real *in_charges,
 			    iris_real *out_forces);
 
@@ -107,10 +107,12 @@ namespace ORG_NCSA_IRIS {
 	int       m_own_offset[3];  // where does my mesh start from 
 	int       m_ext_size[3];    // local mesh + halo items
 
+	iris_real m_qtot;  // total charge (must be 0)
+	iris_real m_q2tot; // total charge squared (must be != 0)
+
 	std::map<int, int> m_ncharges;           // per sending rank
 	std::map<int, iris_real *> m_charges;    // per sending rank
 	std::map<int, iris_real *> m_forces;     // per recv rank
-	std::map<int, class nlist *> m_nlist;  // per sending rank
 
 	iris_real ***m_rho;  // own charge density (ρ), part of RHS
 	iris_real ***m_rho_plus;  // ρ, own + halo items

@@ -406,7 +406,7 @@ main(int argc, char **argv)
 
 	// On each step...
 	for(int i=0;i<NSTEPS;i++) {
-	    
+	    double stime = MPI_Wtime();
 	    // The client must send the charges which befall into the server
 	    // procs' local boxes to the corrseponding server node.
 	    // It finds out which client sends which charges to which server
@@ -414,21 +414,23 @@ main(int argc, char **argv)
 	    // broadcast_charges()
 	    send_charges(x, my_charges, my_count, local_boxes);
 
-
 	    // Let the servers know that there are no more charges, so it can
 	    // go on and start calculating
 	    x->commit_charges();
 
-
 	    // Receive back the forces from the server
 	    int *nforces;
 	    iris_real *forces = x->receive_forces(&nforces);
-	    
 
-	    handle_forces(x, nforces, forces);	    
+	    //handle_forces(x, nforces, forces);
+
+	    iris_real etot = x->global_energy();
+	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
 
 	    delete [] nforces;
 	    memory::wfree(forces);
+	    double etime = MPI_Wtime();
+	    x->m_logger->info("Loop time: %f", etime - stime);
 	}
 
 	x->quit();  // this will break server loop
@@ -440,12 +442,12 @@ main(int argc, char **argv)
     }
 
     if(x->is_server()) {
-	x->m_mesh->dump_ascii("RHO", x->m_mesh->m_rho);
-	//x->m_mesh->check_fxyz();
-	x->m_mesh->dump_ascii("phi", x->m_mesh->m_phi);
-	x->m_mesh->dump_ascii("fieldx", x->m_mesh->m_Ex);
-	x->m_mesh->dump_ascii("fieldy", x->m_mesh->m_Ey);
-	x->m_mesh->dump_ascii("fieldz", x->m_mesh->m_Ez);
+	// x->m_mesh->dump_ascii("RHO", x->m_mesh->m_rho);
+	// //x->m_mesh->check_fxyz();
+	// x->m_mesh->dump_ascii("phi", x->m_mesh->m_phi);
+	// x->m_mesh->dump_ascii("fieldx", x->m_mesh->m_Ex);
+	// x->m_mesh->dump_ascii("fieldy", x->m_mesh->m_Ey);
+	// x->m_mesh->dump_ascii("fieldz", x->m_mesh->m_Ez);
     }
 
     // Cleanup

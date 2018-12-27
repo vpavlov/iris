@@ -67,7 +67,8 @@ namespace ORG_NCSA_IRIS {
 	    m_proc_grid(obj->m_proc_grid),
 	    m_mesh(obj->m_mesh),
 	    m_chass(obj->m_chass),
-	    m_solver(obj->m_solver)
+	    m_solver(obj->m_solver),
+	    m_units(obj->m_units)
 	{};
 
 	virtual ~state_accessor() {};
@@ -83,6 +84,7 @@ namespace ORG_NCSA_IRIS {
 	mesh *&m_mesh;
 	charge_assigner *&m_chass;
 	poisson_solver *&m_solver;
+	units *&m_units;
     };
 
 }

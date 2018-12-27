@@ -40,7 +40,6 @@
 #include "comm_rec.h"
 #include "tags.h"
 #include "poisson_solver.h"
-#include "nlist.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -63,10 +62,6 @@ mesh::~mesh()
     memory::destroy_3d(m_Ey_plus);
     memory::destroy_3d(m_Ez);
     memory::destroy_3d(m_Ez_plus);
-
-    for(auto it = m_nlist.begin(); it != m_nlist.end(); it++) {
-	delete it->second;
-    }
     
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	memory::wfree(it->second);
@@ -89,7 +84,7 @@ void mesh::set_size(int nx, int ny, int nz)
 
     m_initialized = true;
     m_dirty = true;
-    m_logger->info("Discretization mesh is %d x %d x %d",
+    m_logger->trace("Discretization mesh is %d x %d x %d",
 		    m_size[0], m_size[1], m_size[2]);
 }
 
@@ -176,10 +171,6 @@ void mesh::commit()
 			  m_ext_size[2],
 			  true);
 
-	for(auto it = m_nlist.begin(); it != m_nlist.end(); it++) {
-	    delete it->second;
-	}
-
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	    memory::wfree(it->second);
 	}
@@ -190,9 +181,7 @@ void mesh::commit()
 
 	m_ncharges.clear();
 	m_charges.clear();
-	m_forces.clear();
-	m_nlist.clear();
-	
+	m_forces.clear();	
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
 	    m_solver->set_dirty(true);
@@ -200,10 +189,10 @@ void mesh::commit()
 
 	m_dirty = false;
 
-	m_logger->info("Local mesh is %d x %d x %d starting at [%d, %d, %d]",
+	m_logger->trace("Local mesh is %d x %d x %d starting at [%d, %d, %d]",
 			m_own_size[0], m_own_size[1], m_own_size[2],
 			m_own_offset[0], m_own_offset[1], m_own_offset[2]);
-	m_logger->info("Hx = %g, Hy = %g, Hz = %g", m_h[0], m_h[1], m_h[2]);
+	m_logger->trace("Hx = %g, Hy = %g, Hz = %g", m_h[0], m_h[1], m_h[2]);
     }
 }
 
@@ -326,16 +315,29 @@ void mesh::dump_log(const char *name, iris_real ***data)
 
 void mesh::assign_charges()
 {
+    iris_real sendbuf[2];
+    iris_real recvbuf[2];
+    sendbuf[0] = 0.0;
+    sendbuf[1] = 0.0;
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int ncharges = it->second;
 	iris_real *charges = m_charges[it->first];
-	nlist *nl = m_nlist[it->first];
-	assign_charges1(ncharges, charges, nl);
-	nl->dump(m_logger);
+
+	for(int i = 0; i < ncharges; i++) {
+	    iris_real q = charges[i*5 + 3];
+	    sendbuf[0] += q;
+	    sendbuf[1] += q*q;
+	}
+
+	assign_charges1(ncharges, charges);
     }
+
+    MPI_Allreduce(sendbuf, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+    m_qtot = recvbuf[0];
+    m_q2tot = recvbuf[1];
 }
 
-void mesh::assign_charges1(int in_ncharges, iris_real *in_charges, nlist *in_nlist)
+void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
     for(int n=0;n<in_ncharges;n++) {
@@ -347,8 +349,6 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges, nlist *in_nli
 	int ix = (int) (tx + m_chass->m_ics_bump);
 	int iy = (int) (ty + m_chass->m_ics_bump);
 	int iz = (int) (tz + m_chass->m_ics_bump);
-
-	in_nlist->add_charge(ix, iy, iz, n);
 
 	// distance (increasing to the left!) from the center of the
 	// interpolation grid
@@ -904,11 +904,11 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    }
 	}
 
-	iris_real q = in_charges[n*5 + 3];
+	iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
 	out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
-	out_forces[n*4 + 1] = q * ekx;
-	out_forces[n*4 + 2] = q * eky;
-	out_forces[n*4 + 3] = q * ekz;
+	out_forces[n*4 + 1] = factor * ekx;
+	out_forces[n*4 + 2] = factor * eky;
+	out_forces[n*4 + 3] = factor * ekz;
     }
 
 }

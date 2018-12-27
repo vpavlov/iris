@@ -40,10 +40,12 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
-#include "nlist.h"
 #include "poisson_solver.h"
 
 using namespace ORG_NCSA_IRIS;
+
+#define _SQRT_PI  1.772453850905516027298167483341
+#define _2PI      6.283185307179586476925286766559
 
 // OAOO: helper macro to assert that client-to-server sending routines are
 //       only called from client nodes
@@ -89,7 +91,8 @@ iris::iris(int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-    m_rho_multiplier = -_4PI;
+    m_compute_global_energy = true;
+    m_units = new units(real);
 
     m_wff = NULL;
 
@@ -144,7 +147,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     m_quit = false;
 
-    m_logger->info("Node initialized as %s %d %s",
+    m_logger->trace("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
 		   is_leader()?"(leader)":"");
@@ -172,7 +175,7 @@ iris::~iris()
 	delete m_domain;
     }
 
-    m_logger->info("Shutting down node");  // before m_uber_comm
+    m_logger->trace("Shutting down node");  // before m_uber_comm
     delete m_logger;
 
     if(m_inter_comm != NULL) {
@@ -187,6 +190,12 @@ bool iris::is_leader()
 {
     return m_local_comm->m_rank == m_local_leader;
 };
+
+void iris::set_units(EUnits in_units)
+{
+    delete m_units;
+    m_units = new units(in_units);
+}
 
 void iris::set_global_box(iris_real x0, iris_real y0, iris_real z0,
 			  iris_real x1, iris_real y1, iris_real z1)
@@ -331,7 +340,7 @@ void iris::process_event(event_t *event)
     }
 }
 
-inline MPI_Comm iris::server_comm()
+MPI_Comm iris::server_comm()
 {
     // in shared mode we only have m_local_comm; in SOC mode we use intercomm
     return is_server()?m_local_comm->m_comm:m_inter_comm->m_comm;
@@ -470,10 +479,6 @@ bool iris::handle_charges(event_t *event)
 
     m_mesh->m_ncharges[event->peer] = ncharges;
     m_mesh->m_charges[event->peer] = (iris_real *)event->data;
-    m_mesh->m_nlist[event->peer] = new nlist(m_mesh->m_own_size[0],
-					     m_mesh->m_own_size[1],
-					     m_mesh->m_own_size[2],
-					     ncharges);
 
     if(!is_client()) {
 	MPI_Request req;
@@ -515,33 +520,28 @@ void iris::set_rhs(rhs_fn_t fn)
     
 }
 
-void iris::calculate_etot()
-{
-    iris_real sum = 0.0;
-    iris_real dv = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
-    for(int i=0;i<m_mesh->m_own_size[0];i++) {
-	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-		iris_real tt = (m_mesh->m_phi[i][j][k] * m_mesh->m_rho[i][j][k] * dv);
-		sum += tt;
-	    }
-	}
-    }
-    sum *= 0.5;
-    m_logger->info("Partial Hartree energy: %.15g", sum);
-
-    iris_real hartree;
-    MPI_Reduce(&sum, &hartree, 1, IRIS_REAL, MPI_SUM, m_local_leader,
-	       m_local_comm->m_comm);
-    if(is_leader()) {
-	m_logger->info("Full Hartree energy: %.15g", hartree);
-    }
-}
-
 void iris::solve()
 {
+    if(m_compute_global_energy) {
+	m_global_energy = 0.0;
+    }
+
     m_solver->solve();
-    calculate_etot();
+
+    if(m_compute_global_energy) {
+	iris_real etot;
+	iris_real volume =
+	    m_domain->m_global_box.xsize * 
+	    m_domain->m_global_box.ysize *
+	    m_domain->m_global_box.zsize;
+
+	MPI_Allreduce(&m_global_energy, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
+	m_global_energy = etot;
+	m_global_energy *= 0.5 * volume;
+	m_global_energy -= m_alpha * m_mesh->m_q2tot / _SQRT_PI + 
+	    _2PI * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
+	m_global_energy *= m_units->ecf;
+    }
 }
 
 void iris::clear_wff()

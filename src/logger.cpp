@@ -56,7 +56,7 @@ logger::logger(iris *obj)
     char *x;
     x = getenv("IRIS_LOG_LEVEL");
     if(x == NULL) {
-	m_log_level = IRIS_LOG_LEVEL_ERROR;
+	m_log_level = IRIS_LOG_LEVEL_INFO;
     }else {
 	std::string xx = x;
 	if(xx == "error") {

@@ -119,7 +119,7 @@ void charge_assigner::set_order(int in_order)
 
     m_order = in_order;
     m_dirty = true;
-    m_logger->info("Charge assignment/interpolation order set to %d", m_order);
+    m_logger->trace("Charge assignment/interpolation order set to %d", m_order);
 }
 
 void charge_assigner::commit()

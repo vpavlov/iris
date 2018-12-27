@@ -100,7 +100,7 @@ void poisson_solver::commit()
 
 void poisson_solver::kspace_phi(iris_real *io_rho_phi)
 {
-    double scaleinv = 1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]);
+    iris_real scaleinv = 1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]);
 
     int nx = m_mesh->m_own_size[0];
     int ny = m_mesh->m_own_size[1];
@@ -112,6 +112,27 @@ void poisson_solver::kspace_phi(iris_real *io_rho_phi)
 	    for(int k=0;k<nz;k++) {
 		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
 		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
+	    }
+	}
+    }
+}
+
+void poisson_solver::kspace_eng(iris_real *in_rho_phi)
+{
+    iris_real s2 = square(1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]));
+
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+    
+    int idx = 0;
+    for(int i=0;i<nx;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nz;k++) {
+		m_iris->m_global_energy += s2 * m_greenfn[i][j][k] *
+		    (in_rho_phi[idx  ] * in_rho_phi[idx  ] +
+		     in_rho_phi[idx+1] * in_rho_phi[idx+1]);
+		idx += 2;
 	    }
 	}
     }
@@ -169,30 +190,6 @@ void poisson_solver::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 	    }
 	}
     }
-}
-
-void poisson_solver::solve()
-{
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
-
-    m_logger->trace("Solving Poisson's Equation now");
-
-    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
-    
-    kspace_phi(m_work1);
-
-    kspace_Ex(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
-
-    kspace_Ey(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
-
-    kspace_Ez(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
-
-    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }
 
 // Hockney/Eastwood modified Green function corresponding to the
@@ -328,7 +325,6 @@ void poisson_solver::calculate_k()
     for(int x = sx; x < ex; x++) {
 	int xj = x - xM*(2*x/xM);
 	m_kx[x-sx] = kxm * xj;
-	printf("kx[%d]: %f\n", x-sx, m_kx[x-sx]);
     }
 
     for(int y = sy; y < ey; y++) {
@@ -340,4 +336,37 @@ void poisson_solver::calculate_k()
 	int zj = z - zM*(2*z/zM);
 	m_kz[z-sz] = kzm * zj;
     }
+}
+
+void poisson_solver::solve()
+{
+    int nx = m_mesh->m_own_size[0];
+    int ny = m_mesh->m_own_size[1];
+    int nz = m_mesh->m_own_size[2];
+
+    m_logger->trace("Solving Poisson's Equation now");
+
+    double stime = MPI_Wtime();
+    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
+    double etime = MPI_Wtime();
+    double wtick = MPI_Wtick();
+    m_iris->m_logger->info("wtick: %f", wtick);
+    m_iris->m_logger->info("FFT Time: %f", etime-stime);
+
+    if(m_iris->m_compute_global_energy) {
+	kspace_eng(m_work1);
+    }
+
+    kspace_phi(m_work1);
+
+    kspace_Ex(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
+    
+    kspace_Ey(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
+    
+    kspace_Ez(m_work1, m_work2);
+    m_fft->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
+
+    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }

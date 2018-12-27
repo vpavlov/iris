@@ -74,7 +74,7 @@ void grid::set_pref(int x, int y, int z)
     m_pref[1] = y;
     m_pref[2] = z;
     m_dirty = true;
-    m_logger->info("%s grid preference set to %d x %d x %d", m_name, x, y, z);
+    m_logger->trace("%s grid preference set to %d x %d x %d", m_name, x, y, z);
 }
 
 void grid::commit()
@@ -100,7 +100,7 @@ void grid::select_grid_size()
     }
     
     select_best_factor(num_factors, factors, m_size);
-    m_logger->info("%s grid is %d x %d x %d", m_name,
+    m_logger->trace("%s grid is %d x %d x %d", m_name,
 		   m_size[0], m_size[1], m_size[2]);
     memory::destroy_2d(factors);
 }

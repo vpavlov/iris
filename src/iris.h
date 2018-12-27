@@ -36,6 +36,7 @@
 #include "real.h"
 #include "box.h"
 #include "event.h"
+#include "units.h"
 
 namespace ORG_NCSA_IRIS {
 
@@ -43,7 +44,6 @@ namespace ORG_NCSA_IRIS {
     // Internal note: coded in binary to underline the fact that it is a bitmask
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
-
 
 #define IRIS_LAPL_STYLE_PADE 1
 
@@ -110,38 +110,14 @@ namespace ORG_NCSA_IRIS {
 
 	void set_laplacian(int in_style, int in_arg1, int in_arg2);
 
-	// Poisson's equation is:
-	//
-	// Δφ = f
-	// 
-	// When applied to electrostatics, it takes the form:
-	//
-	// Δφ = -4πρ (when working in Gaussian units) 
-	//
-	// OR
-	//
-	// Δφ = -ρ/ε (when working in SI units)
-	//
-	// For gravity, the equation takes the form
-	//
-	// Δφ = 4πGρ
-	//
-	// We set ρ in one of two ways: either directly (with the set_rhs call)
-	// or by interpolation from a set of charges (bodies). Either way, we
-	// end up with ρ. By using this function, the user can then specify 
-	// the multiplier in front of ρ, so as to choose which one of the above
-	// three (or possibly another) situations he/she requires.
-	// 
-	// By default, we set the multiplier to -4π, as to handle electrostatics
-	// in Gaussian units.
-	void set_rho_multiplier(iris_real in_rho_multiplier)
-	{
-	    m_rho_multiplier = in_rho_multiplier;
-	}
+	void set_units(EUnits in_units);
 
 	// Set the right hand side directly (skips all charge assignment and
 	// whatnot, usful for testing)
 	void set_rhs(rhs_fn_t fn);
+
+	void set_compute_global_energy(bool in_flag) { m_compute_global_energy = in_flag; };
+
 
 	// Call this when all configuration is done. When called, it will
 	// signal all internal components to:
@@ -165,6 +141,7 @@ namespace ORG_NCSA_IRIS {
 
 	// Use this on a client node to receive forces from server nodes
 	iris_real *receive_forces(int **out_count);
+	iris_real global_energy() { return m_global_energy; };
 
 	void solve();
 
@@ -190,6 +167,8 @@ namespace ORG_NCSA_IRIS {
 	void clear_wff();
 
 	void calculate_etot();  // calculate Hartree energy, for verification
+
+
     public:
 	int m_client_size;             // # of client nodes
 	int m_server_size;             // # of server nodes
@@ -197,10 +176,12 @@ namespace ORG_NCSA_IRIS {
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
 
-	iris_real m_rho_multiplier;    // see set_rho_multiplier above
 	iris_real m_alpha;             // Ewald splitting parameter (1/distance)
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
+
+	bool                   m_compute_global_energy;  // whether to compute global long-range energy
+	iris_real              m_global_energy;  // global long-range energy
 	
 	class comm_rec        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec        *m_local_comm;  // ...within group (client/server)
@@ -211,7 +192,7 @@ namespace ORG_NCSA_IRIS {
 	class mesh            *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;       // Charge assignmen machinery
 	class poisson_solver  *m_solver;      // The Poisson equation solver itself
-
+	class units           *m_units;       // Units system to use
     private:
 	volatile bool m_quit;  // quit the main loop
     };
