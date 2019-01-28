@@ -141,7 +141,7 @@ namespace ORG_NCSA_IRIS {
 
 	// Use this on a client node to receive forces from server nodes
 	iris_real *receive_forces(int **out_count);
-	iris_real global_energy() { return m_global_energy; };
+	iris_real global_energy();
 
 	void solve();
 
@@ -162,6 +162,7 @@ namespace ORG_NCSA_IRIS {
 	bool handle_charges(struct event_t *in_event);
 	bool handle_commit_charges();
 	bool handle_rho_halo(struct event_t *in_event);
+	bool handle_get_global_energy(struct event_t *in_event);
 
 	// initialize m_waiting_forces_from to sensible initial state
 	void clear_wff();

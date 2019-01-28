@@ -41,6 +41,7 @@
 #include "memory.h"
 #include "tags.h"
 #include "poisson_solver.h"
+#include "timer.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -333,6 +334,11 @@ void iris::process_event(event_t *event)
     case IRIS_TAG_RHO_HALO:
 	hodl = handle_rho_halo(event);
 	break;
+
+    case IRIS_TAG_GET_GLOBAL_ENERGY:
+	hodl = handle_get_global_energy(event);
+	break;
+
     }
 
     if(!hodl) {
@@ -403,7 +409,6 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
     MPI_Win win;
     int *pending = stos_fence_pending(&win);
 
-    int offset = 0;
     MPI_Request req;
     req = MPI_REQUEST_NULL;
     if(in_count != 0) {
@@ -557,6 +562,7 @@ void iris::clear_wff()
 
 iris_real *iris::receive_forces(int **out_counts)
 {
+    int unit = 4 * sizeof(iris_real);
     if(!is_client()) {
 	*out_counts = NULL;
 	return NULL;
@@ -575,7 +581,6 @@ iris_real *iris::receive_forces(int **out_counts)
 	    event_t ev;
 	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
 
-	    int unit = 4 * sizeof(iris_real);
 	    if(ev.size % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
@@ -584,7 +589,7 @@ iris_real *iris::receive_forces(int **out_counts)
 	    m_logger->trace("Received %d forces", (*out_counts)[i]);
 
 	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size);
-	    memcpy(retval + hwm, ev.data, ev.size);
+	    memcpy(((unsigned char *)retval) + hwm, ev.data, ev.size);
 	    hwm += ev.size;
 
 	    memory::wfree(ev.data);
@@ -593,4 +598,27 @@ iris_real *iris::receive_forces(int **out_counts)
     clear_wff();
 
     return retval;
+}
+
+iris_real iris::global_energy()
+{
+    // all servers have the global energy anyway, just return it
+    if(is_server()) {
+	return m_global_energy;
+    }
+
+    // we are definitely a pure client; ask one of the servers for the value
+    iris_real eng;
+    MPI_Comm comm = server_comm();
+    MPI_Request req;
+    send_event(comm, 0, IRIS_TAG_GET_GLOBAL_ENERGY, 0, NULL, &req, NULL);
+    MPI_Recv(&eng, 1, IRIS_REAL, 0, IRIS_TAG_GLOBAL_ENERGY, comm, MPI_STATUS_IGNORE);
+    MPI_Wait(&req, MPI_STATUS_IGNORE);
+    return eng;
+}
+
+bool iris::handle_get_global_energy(struct event_t *event)
+{
+    MPI_Send(&m_global_energy, 1, IRIS_REAL, event->peer, IRIS_TAG_GLOBAL_ENERGY, event->comm);
+    return false;  // no need to hodl
 }

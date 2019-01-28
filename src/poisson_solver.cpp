@@ -45,7 +45,7 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver::poisson_solver(class iris *obj)
-    : state_accessor(obj), m_dirty(true), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL)
+    : state_accessor(obj), m_dirty(true), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL), m_work3(NULL)
 {
 };
 

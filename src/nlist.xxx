@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,52 +27,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "units.h"
+#include "nlist.h"
+#include "memory.h"
+#include "logger.h"
 
 using namespace ORG_NCSA_IRIS;
 
-units::units(EUnits style)
+nlist::nlist(int in_nx, int in_ny, int in_nz, int in_num_charges)
+    : m_nx(in_nx), m_ny(in_ny), m_nz(in_nz), m_ncharges(in_num_charges)
 {
-    switch(style) {
-    case real:
-	init_real();
-	break;
+    memory::create_3d(m_head, in_nx, in_ny, in_nz, true, -1);
+    memory::create_1d(m_list, in_num_charges);
+}
 
-    case md:
-	init_md();
-	break;
+nlist::~nlist()
+{
+    memory::destroy_3d(m_head);
+    memory::destroy_1d(m_list);
+}
 
-    default:
-	throw std::invalid_argument("Unit style not supported!");
+void nlist::add_charge(int in_ix, int in_iy, int in_iz, int in_n)
+{
+    m_list[in_n] = m_head[in_ix][in_iy][in_iz];
+    m_head[in_ix][in_iy][in_iz] = in_n;
+}
+
+void nlist::dump(logger *logger)
+{
+    for(int i=0;i<m_nx;i++) {
+	for(int j=0;j<m_ny;j++) {
+	    for(int k=0;k<m_nz;k++) {
+		if(m_head[i][j][k] != -1) {
+		    logger->info("HEAD[%d][%d][%d] = %d", 
+				 i, j, k, m_head[i][j][k]);
+		}
+	    }
+	}
     }
-
+    for(int i=0;i<m_ncharges;i++) {
+	logger->info("LIST[%d] = %d", i, m_list[i]);
+    }
 }
-
-units::~units()
-{
-}
-
-// Length: Angstrom
-// Charge: # of Elementary charges
-// Energy: Kcal/mol
-void units::init_real()
-{
-    this->e  = 1.0;
-    this->ecf = 332.0637129954289;
-    this->ang = 1.0;
-    this->energy_unit = "Kcal/mol";
-}
-
-
-// Length: nm
-// Charge: # of Elementary charges
-// Energy: KJ/mol
-void units::init_md()
-{
-    this->e  = 1.0;
-    this->ecf = 138.93545751728743;
-    this->ang = 0.1;
-    this->energy_unit = "KJ/mol";
-}
-

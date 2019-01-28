@@ -27,52 +27,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "units.h"
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <mpi.h>
+#include "timer.h"
 
 using namespace ORG_NCSA_IRIS;
 
-units::units(EUnits style)
+timer::timer()
 {
-    switch(style) {
-    case real:
-	init_real();
-	break;
-
-    case md:
-	init_md();
-	break;
-
-    default:
-	throw std::invalid_argument("Unit style not supported!");
-    }
-
+    reset();
 }
 
-units::~units()
+timer::~timer()
 {
 }
 
-// Length: Angstrom
-// Charge: # of Elementary charges
-// Energy: Kcal/mol
-void units::init_real()
+void timer::reset()
 {
-    this->e  = 1.0;
-    this->ecf = 332.0637129954289;
-    this->ang = 1.0;
-    this->energy_unit = "Kcal/mol";
+    m_cpu_accum = m_cpu_prev = m_wall_accum = m_wall_prev = 0.0;
 }
 
-
-// Length: nm
-// Charge: # of Elementary charges
-// Energy: KJ/mol
-void units::init_md()
+void timer::start()
 {
-    this->e  = 1.0;
-    this->ecf = 138.93545751728743;
-    this->ang = 0.1;
-    this->energy_unit = "KJ/mol";
+    m_cpu_prev = CPU_Time();
+    m_wall_prev = MPI_Wtime();
 }
 
+void timer::stop()
+{
+    double cpu_curr = CPU_Time();
+    double wall_curr = MPI_Wtime();
+
+    m_cpu_accum += cpu_curr - m_cpu_prev;
+    m_wall_accum += wall_curr - m_wall_prev;
+}
+
+inline double timer::CPU_Time()
+{
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    double retval = (double) ru.ru_utime.tv_sec;
+    retval += (double) ru.ru_utime.tv_usec * 0.000001;
+    return retval;
+}

@@ -27,52 +27,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdexcept>
-#include "units.h"
+#ifndef __IRIS_TIMER_H__
+#define __IRIS_TIMER_H__
 
-using namespace ORG_NCSA_IRIS;
+namespace ORG_NCSA_IRIS {
 
-units::units(EUnits style)
-{
-    switch(style) {
-    case real:
-	init_real();
-	break;
+    class timer {
 
-    case md:
-	init_md();
-	break;
+    public:
+	timer();
+	~timer();
 
-    default:
-	throw std::invalid_argument("Unit style not supported!");
-    }
+	void reset();
+	void start();
+	void stop();
+	double read_cpu() { return m_cpu_accum; };
+	double read_wall() { return m_wall_accum; };
+
+    private:
+
+	double CPU_Time();
+	
+	double m_cpu_accum;
+	double m_cpu_prev;
+
+	double m_wall_accum;
+	double m_wall_prev;
+
+    };
 
 }
 
-units::~units()
-{
-}
-
-// Length: Angstrom
-// Charge: # of Elementary charges
-// Energy: Kcal/mol
-void units::init_real()
-{
-    this->e  = 1.0;
-    this->ecf = 332.0637129954289;
-    this->ang = 1.0;
-    this->energy_unit = "Kcal/mol";
-}
-
-
-// Length: nm
-// Charge: # of Elementary charges
-// Energy: KJ/mol
-void units::init_md()
-{
-    this->e  = 1.0;
-    this->ecf = 138.93545751728743;
-    this->ang = 0.1;
-    this->energy_unit = "KJ/mol";
-}
-
+#endif
