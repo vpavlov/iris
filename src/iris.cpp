@@ -28,6 +28,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <stdexcept>
+#include <cmath>
 #include <unistd.h>
 #include <mpi.h>
 #include <omp.h>
@@ -42,10 +43,12 @@
 #include "tags.h"
 #include "poisson_solver.h"
 #include "timer.h"
+#include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
 
 #define _SQRT_PI  1.772453850905516027298167483341
+#define _SQRT_2PI 2.506628274631000502415765284811
 #define _2PI      6.283185307179586476925286766559
 
 // OAOO: helper macro to assert that client-to-server sending routines are
@@ -92,6 +95,18 @@ iris::iris(int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+    // initially, all calculation parameters are un-set (thus - free)
+    m_qtot2 = 0.0;
+    m_cutoff = 0.0;
+    m_natoms = 0;
+    m_accuracy_free = true;
+    m_alpha_free = true;
+    m_order_free = true;
+    m_hx_free = true;
+    m_hy_free = true;
+    m_hz_free = true;
+    m_dirty = true;
+
     m_compute_global_energy = true;
     m_units = new units(real);
 
@@ -187,6 +202,63 @@ iris::~iris()
     delete m_uber_comm;
 }
 
+void iris::config_auto_tune(int in_natoms, iris_real in_qtot2,
+			    iris_real in_cutoff)
+{
+    if(is_server()) {
+	m_qtot2 = fabs_fn(in_qtot2);
+	m_cutoff = fabs_fn(in_cutoff);
+	m_natoms = abs(in_natoms);
+	m_dirty = true;
+    }
+}
+
+void iris::set_accuracy(iris_real in_accuracy)
+{
+    if(is_server()) {
+	m_accuracy = fabs_fn(in_accuracy);
+	m_accuracy_free = false;
+	m_dirty = true;
+    }
+}
+
+void iris::set_alpha(iris_real in_alpha)
+{
+    m_alpha = in_alpha;
+    m_alpha_free = false;
+    m_dirty = true;
+}
+
+void iris::set_order(int in_order)
+{
+    if(is_server()) {
+	if(in_order < 1 || in_order > 7) {
+	    throw std::invalid_argument("Orders below 1 and above 7 are not supported!");
+	}
+	m_order_user = in_order;
+	m_order_free = false;
+	m_dirty = true;
+    }
+}
+
+void iris::set_mesh_size(int nx, int ny, int nz)
+{
+    if(is_server()) {
+	if(nx > 0) {
+	    m_hx_free = false;
+	    m_dirty = true;
+	}
+	if(ny > 0) {
+	    m_hy_free = false;
+	    m_dirty = true;
+	}
+	if(nz > 0) {
+	    m_hz_free = false;
+	    m_dirty = true;
+	}
+    }
+}
+
 bool iris::is_leader()
 {
     return m_local_comm->m_rank == m_local_leader;
@@ -206,25 +278,6 @@ void iris::set_global_box(iris_real x0, iris_real y0, iris_real z0,
     }
 }
 
-void iris::set_mesh_size(int nx, int ny, int nz)
-{
-    if(is_server()) {
-	m_mesh->set_size(nx, ny, nz);
-    }
-}
-
-void iris::set_order(int in_order)
-{
-    if(is_server()) {
-	m_chass->set_order(in_order);
-    }
-}
-
-void iris::set_alpha(iris_real in_alpha)
-{
-    m_alpha = in_alpha;
-}
-
 void iris::set_grid_pref(int x, int y, int z)
 {
     if(is_server()) {
@@ -235,6 +288,10 @@ void iris::set_grid_pref(int x, int y, int z)
 void iris::commit()
 {
     if(is_server()) {
+	if(m_dirty) {
+	    auto_tune_parameters();
+	}
+
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
 	m_chass->commit();      // does not depend on anything
@@ -622,3 +679,198 @@ bool iris::handle_get_global_energy(struct event_t *event)
     MPI_Send(&m_global_energy, 1, IRIS_REAL, event->peer, IRIS_TAG_GLOBAL_ENERGY, event->comm);
     return false;  // no need to hodl
 }
+
+// We have several parameters:
+//   - accuracy ε
+//   - order P
+//   - mesh step hx, hy, hz
+//   - splitting parameter α
+//
+// Additionally, we need Q2 (sum of all charges squared) and rc (real-space
+// cutoff)
+//
+// Based on some of them, we can calculate the others.
+//
+// Reference:
+// [1] Deserno M., Hold C. "How to mesh up Ewald sums (II): An accurate error estimate for the P3M algorithm" arXiv:cond-mat/9807100v1
+//
+void iris::auto_tune_parameters()
+{
+    // Scenario 1
+    // ----------
+    //
+    // The user supplies desired accuracy and order of interpolation. The code
+    // calculates the splitting parameter and mesh step so that the accuracy
+    // can be satisfied.
+    //
+    // Given: ε and P
+    // 
+    // Calculate: α, hx, hy, hz
+    if(!m_accuracy_free &&
+       !m_order_free &&
+       m_alpha_free &&
+       (m_hx_free || m_hy_free || m_hz_free))
+    {
+	atp_scenario1();
+    }
+}
+
+iris_real opt_acc_fn(iris_real alpha, void *obj)
+{
+    iris *p = (iris *)obj;
+    iris_real Q2 = p->m_qtot2;
+    iris_real rc = p->m_cutoff;
+    int N = p->m_natoms;
+    iris_real Lx = p->m_domain->m_global_box.xsize;
+    iris_real Ly = p->m_domain->m_global_box.ysize;
+    iris_real Lz = p->m_domain->m_global_box.zsize;
+    int nx = p->m_mesh->m_size[0];
+    int ny = p->m_mesh->m_size[1];
+    int nz = p->m_mesh->m_size[2];
+
+    iris_real rerr = 2.0 * Q2 * exp_fn(-alpha*alpha * rc*rc) /
+	sqrt_fn(N*rc*Lx*Ly*Lz);
+
+    iris_real kx = p->kspace_error(Lx / nx, Lx, alpha);
+    iris_real ky = p->kspace_error(Ly / ny, Ly, alpha);
+    iris_real kz = p->kspace_error(Lz / nz, Lz, alpha);
+
+    iris_real kerr = sqrt(kx * kx + ky * ky + kz * kz) / sqrt(3.0);
+
+    p->m_accuracy = kerr;
+    return rerr - kerr;
+}
+
+void iris::atp_scenario1()
+{
+    m_logger->trace("Auto-tuning parameters (scenario 1):");
+    m_logger->trace("  Desired accuracy: %g", m_accuracy);
+    m_logger->trace("  Desired order: %d", m_order_user);
+    
+    if(m_qtot2 == 0.0 || m_cutoff == 0.0 || m_natoms == 0 ||
+       m_accuracy == 0.0 || !m_domain->m_initialized)
+    {
+	const char *err = "  Cannot proceed with auto-tuning because Q2, rc, N or domain are not initialized!";
+	m_logger->error(err);
+	throw std::invalid_argument(err);
+    }
+
+    iris_real alpha, eps;
+    initial_alpha_estimate(&alpha, &eps);
+    m_logger->trace("  Initial α = %f; ε = %g", alpha, eps);
+    int nx = h_estimate(0, alpha, eps);
+    int ny = h_estimate(1, alpha, eps);
+    int nz = h_estimate(2, alpha, eps);
+    m_mesh->set_size(nx, ny, nz);
+    m_alpha = root_of(opt_acc_fn, alpha, this);
+    m_logger->trace("  Final   α = %f; ε = %g", m_alpha, m_accuracy);
+    exit(-1);
+}
+
+// Based on [1], equation (23) for the real-space contribution to the error
+// 
+// ε ~= 2*Q2 / sqrt(N*rc*L^3) exp(-α^2 rc^2)
+//
+// Solving for α (everything else is given), we have:
+//
+// exp(-(α*rc)^2) =   ε * sqrt(N*rc*L^3) / 2*Q2
+// -(α*rc)^2 =   log(0.5 * ε * sqrt(N*rc*L^3) / Q2)
+//  α = sqrt(- log(0.5 * ε * sqrt(N*rc*L^3) / Q2)) / rc
+// 
+// Naturally, this has real solutions for α only in case the expression
+// in the last square root is positive. For it to be positive, the log
+// expression must be negative. If it is not, and since N, rc and L^3 are
+// fixed by the problem solved (cannot change), the only way to make this
+// work is to actually *lower* the ε. This problem can only occur if the
+// user sets ε to a large value, e.g. 1.0 This means that he/she has
+// very very low requirements for the accuracy, and by lowering ε, we are
+// actually meeting these requirements...
+void iris::initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps)
+{
+    iris_real eps = m_accuracy;
+    iris_real rc = m_cutoff;
+    iris_real N = m_natoms;
+    iris_real Q2 = m_qtot2;
+    iris_real L3 = 
+	m_domain->m_global_box.xsize * 
+	m_domain->m_global_box.ysize *
+	m_domain->m_global_box.zsize;
+    iris_real alpha;
+
+    do {
+	alpha = sqrt_fn(-log_fn(0.5 * eps * sqrt_fn(N*rc*L3) / Q2)) / rc;
+	if(!isnan(alpha) && alpha > 0.0) {
+	    break;
+	}
+	eps /= 10.0;
+    }while(42);
+
+    *out_alpha = alpha;
+    *out_eps = eps;
+}
+
+// Eqn (38) of [1]
+static iris_real am[][7] = 
+    {{2.0 / 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+     {1.0 / 50.0, 5.0 / 294.0, 0.0, 0.0, 0.0, 0.0, 0.0},
+     {1.0 / 588.0, 7.0 / 1440.0, 21.0 / 3872.0, 0.0, 0.0, 0.0, 0.0},
+     {1.0 / 4320.0, 3.0 / 1936.0, 7601.0 / 2271360.0, 143.0 / 28800.0, 0.0, 0.0, 0.0},
+     {1.0 / 23232.0, 7601.0 / 13628160.0, 143.0 / 69120.0, 517231.0 / 106536960.0, 106640677.0 / 11737571328.0, 0.0, 0.0},
+     { 691.0 / 68140800.0, 13.0 / 57600.0, 47021.0 / 35512320.0, 9694607.0 / 2095994880.0, 733191589.0 / 59609088000.0, 326190917.0 / 11700633600.0, 0.0},
+     { 1.0 / 345600.0, 3617.0 / 35512320.0, 745739.0 / 838397952.0, 56399353.0 / 12773376000.0, 25091609.0 / 1560084480.0, 1755948832039.0 / 36229939200000.0, 4887769399.0 / 37838389248.0}};
+
+iris_real iris::kspace_error(iris_real h, iris_real L, iris_real alpha)
+{
+    int N = m_natoms;
+    iris_real Q2 = m_qtot2;
+    int P = (double) m_order_user;
+    iris_real ha = h * alpha;
+    iris_real *a = am[P-1];
+
+    iris_real s = 0.0;
+    for(int m=0;m<P;m++) {
+	s += a[m]*pow_fn(ha, 2*m);
+    }
+
+    return Q2 * pow_fn(ha, P) * sqrt_fn(alpha*L*_SQRT_2PI*s/N) / (L*L);
+}
+
+int iris::h_estimate(int dim, iris_real alpha, iris_real eps)
+{
+    bool h_free;
+    iris_real L;
+    int n;
+    switch(dim) {
+    case 0:
+	h_free = m_hx_free;
+	L = m_domain->m_global_box.xsize;
+	n = m_nx_user;
+	break;
+
+    case 1:
+	h_free = m_hy_free;
+	L = m_domain->m_global_box.ysize;
+	n = m_ny_user;
+	break;
+
+    case 2:
+	h_free = m_hz_free;
+	L = m_domain->m_global_box.zsize;
+	n = m_nz_user;
+	break;
+    }
+
+    if(h_free) {
+	iris_real h = 1 / alpha;
+	n = static_cast<int>(L / h) + 1;
+	iris_real kerr = kspace_error(h, L, alpha);
+	while(kerr > eps) {
+	    n++;
+	    h = L / n;
+	    kerr = kspace_error(h, L, alpha);
+	}
+    }
+
+    return n;
+}
+

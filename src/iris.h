@@ -45,8 +45,6 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
 
-#define IRIS_LAPL_STYLE_PADE 1
-
     static const iris_real _4PI = 12.566370614359172;
 
     // type of function called to set pieces of the right-hand side
@@ -86,6 +84,19 @@ namespace ORG_NCSA_IRIS {
 	bool is_both() { return is_client() && is_server(); };
 	bool is_leader();
 
+	// Pass the sum of all charges squared and the real-space cutoff.
+	// This is needed in order to perform automatic calculation of free
+	// parameters.
+	void config_auto_tune(int in_natoms, iris_real in_qtot2,
+			      iris_real in_cutoff);
+
+	// Set desired accuracy (absolute accuracy in the selected units of
+	// force)
+	void set_accuracy(iris_real in_accuracy);
+
+	// Sets or resets the interpolation/stencil order
+	void set_order(int order);
+
 	// Sets or resets the simulation box extents. Has no effect if called
 	// from a purely client node.
 	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
@@ -96,8 +107,6 @@ namespace ORG_NCSA_IRIS {
 	// purely client node.
 	void set_mesh_size(int nx, int ny, int nz);
 
-	// Sets or resets the interpolation/stencil order
-	void set_order(int order);
 
 	// Sets or resets the Ewald splitting parameter (1/distance)
 	void set_alpha(iris_real in_alpha);
@@ -155,6 +164,8 @@ namespace ORG_NCSA_IRIS {
 			int in_size, void *in_data, MPI_Request *req,
 			MPI_Win in_pending_win);
 
+	iris_real kspace_error(iris_real h, iris_real L, iris_real alpha);
+
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
@@ -169,6 +180,10 @@ namespace ORG_NCSA_IRIS {
 
 	void calculate_etot();  // calculate Hartree energy, for verification
 
+	void auto_tune_parameters();
+	void atp_scenario1();
+	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
+	int h_estimate(int dim, iris_real alpha, iris_real eps);
 
     public:
 	int m_client_size;             // # of client nodes
@@ -177,13 +192,31 @@ namespace ORG_NCSA_IRIS {
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
 
-	iris_real m_alpha;             // Ewald splitting parameter (1/distance)
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
 	iris_real              m_global_energy;  // global long-range energy
-	
+
+	iris_real              m_qtot2;       // Q^2 (sum of all charges squared)
+	iris_real              m_cutoff;      // real-space cutoff
+	int                    m_natoms;      // total number of atoms
+
+	bool m_accuracy_free;
+	bool m_alpha_free;
+	bool m_order_free;
+	bool m_hx_free;
+	bool m_hy_free;
+	bool m_hz_free;
+
+	iris_real m_alpha;             // Ewald splitting parameter (1/distance)
+	iris_real m_accuracy;          // Desired accuracy
+	int       m_order_user;
+	int       m_nx_user;           // Desired mesh size
+	int       m_ny_user;
+	int       m_nz_user;
+	bool      m_dirty;
+
 	class comm_rec        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec        *m_local_comm;  // ...within group (client/server)
 	class comm_rec        *m_inter_comm;  // ...between groups

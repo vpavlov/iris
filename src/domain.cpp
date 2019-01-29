@@ -36,8 +36,7 @@
 using namespace ORG_NCSA_IRIS;
 
 domain::domain(iris *obj)
-    :state_accessor(obj), m_initialized(false), m_dirty(true),
-     m_pbc{true, true, true}
+    :state_accessor(obj), m_initialized(false), m_dirty(true)
 {
 }
 
@@ -74,8 +73,6 @@ void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
 		    m_global_box.xlo, m_global_box.xhi,
 		    m_global_box.ylo, m_global_box.yhi,
 		    m_global_box.zlo, m_global_box.zhi);
-    m_logger->trace("Global box periodicity is %d, %d, %d",
-		    m_pbc[0], m_pbc[1], m_pbc[2]);
 }
 
 void domain::commit()

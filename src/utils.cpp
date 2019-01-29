@@ -29,10 +29,14 @@
 //==============================================================================
 #include <string.h>
 #include <stdexcept>
+#include <cmath>
 #include "utils.h"
 #include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
+
+#define H 1e-7
+#define SMALL 1e-15
 
 // Calculate the binomial coefficient (n|k) using the multiplicative formula
 int ORG_NCSA_IRIS::binom (int n, int k)
@@ -234,5 +238,21 @@ void ORG_NCSA_IRIS::pade_approximant(int m, int n,
     memory::destroy_2d(a);
     memory::destroy_1d(b);
     memory::destroy_1d(pc);
+}
+
+// Find the root of the simple function FN using a finite-difference
+// approximation of Newton-Raphson's method (you can also say this is
+// the secant method)
+iris_real ORG_NCSA_IRIS::root_of(simple_fn fn, iris_real x0, void *obj)
+{
+    iris_real x = x0;
+    for(int i=0;i<10;i++) {
+	iris_real fx = fn(x, obj);
+	if(fabs(fx) < SMALL) {
+	    break;
+	}
+	x -= fx*H/(fn(x+H, obj) - fx);
+    }
+    return x;
 }
 

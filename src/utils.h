@@ -39,6 +39,8 @@ namespace ORG_NCSA_IRIS {
 
 #define ROW_MAJOR_OFFSET(x, y, z, ny, nz) ((z) + (nz)*((y) + (ny)*(x)))
 
+    typedef iris_real (*simple_fn)(iris_real x, void *obj);
+
     iris_real *gauss(int n, iris_real **a, iris_real *b);
     void pade_approximant(int m, int n, iris_real *input,
 			  iris_real *&out_nom,
@@ -46,6 +48,7 @@ namespace ORG_NCSA_IRIS {
 
     int binom(int n, int k);
 
+    iris_real root_of(simple_fn fn, iris_real x0, void *obj);  // using secant method
 }
 
 #endif

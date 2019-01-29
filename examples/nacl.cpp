@@ -2,15 +2,18 @@
 #include <string.h>
 #include <stdlib.h>
 #include <vector>
+#include <cmath>
 #include <iris/iris.h>
 #include <iris/memory.h>
 #include <iris/logger.h>
 #include <iris/mesh.h>
 #include <iris/comm_rec.h>
+#include <iris/utils.h>
 
 iris_real g_boxx, g_boxy, g_boxz;
 
 #define NATOMS 27000
+#define CUTOFF 10  // 10 angstroms
 
 #define M 128
 #define N 128
@@ -38,13 +41,13 @@ char **split(char *line, int max)
     (DEST)[((END)-(START)+1)] = '\0';
 
 
-void read_nacl(char *fname, iris_real **&charges)
+iris_real read_nacl(char *fname, iris_real **&charges)
 {
 
     FILE *fp = fopen(fname, "r");
     if(fp == NULL) {
 	printf("Cannot open data file!");
-	return;
+	return 0.0;
     }
 
     memory::create_2d(charges, NATOMS, 4);
@@ -54,6 +57,8 @@ void read_nacl(char *fname, iris_real **&charges)
 
     int count = 0;
     char tmp[80];
+    iris_real qtot2 = 0.0;
+
     while(getline(&line, &sz, fp) != -1) {
 	iris_real charge = 0.0;
 	int atom_id = 0;
@@ -88,6 +93,7 @@ void read_nacl(char *fname, iris_real **&charges)
 		charge = (iris_real)-1.0;
 	    }
 	    charges[atom_id-1][3] = charge;
+	    qtot2 += (charge * charge);
 	}else if(!strcmp(tmp, "END   ")) {
 	    break;
 	}
@@ -95,17 +101,19 @@ void read_nacl(char *fname, iris_real **&charges)
 
     free(line);
     fclose(fp);
+    return qtot2;
 }
 
-void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
-		  MPI_Comm local_comm,
-		  iris_real **&out_my_charges, int &out_my_count)
+iris_real read_charges(iris *in_iris, char *fname, int rank, int pp_size,
+		       MPI_Comm local_comm,
+		       iris_real **&out_my_charges, int &out_my_count)
 {
+    iris_real qtot2 = 0.0;
     if(rank == 0) {
 
 	// read the charges from the input file
 	iris_real **charges;
-	read_nacl(fname, charges);
+	qtot2 = read_nacl(fname, charges);
 
 	// the global box; for simplicity, hardcoded in this example
 	box_t<iris_real> gb {
@@ -190,6 +198,8 @@ void read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 		 MPI_STATUS_IGNORE);
 	out_my_count = ncharges;
     }
+
+    return qtot2;
 }
 
 
@@ -366,17 +376,17 @@ main(int argc, char **argv)
     // So this part would have usually been done already in some other way.
     iris_real **my_charges = NULL;
     int my_count = 0;
+    iris_real qtot2;
     if(x->is_client()) {
-	read_charges(x, fname, rank, client_size, local_comm, my_charges, my_count);
-	x->m_logger->trace("Client has %d charges", my_count);
+	qtot2 = read_charges(x, fname, rank, client_size, local_comm, my_charges, my_count);
+	x->m_logger->trace("Client has %d charges", my_count, qtot2);
     }
 
     MPI_Bcast(&g_boxx, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
     MPI_Bcast(&g_boxy, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
     MPI_Bcast(&g_boxz, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&qtot2, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
 
-
-    
     // Setup IRIS. Although called by both client and server nodes, only
     // nodes for which this information is meaningful will do something with it
     // others will just noop.
@@ -386,9 +396,9 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
-    x->set_mesh_size(M, N, P);
+    x->config_auto_tune(NATOMS, qtot2, CUTOFF);
     x->set_order(3);
-    x->set_alpha(2.3053423352800846);
+    x->set_accuracy(1e-5);
     x->commit();
 
 

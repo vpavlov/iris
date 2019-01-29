@@ -35,12 +35,22 @@
 typedef double iris_real;
 
 #define IRIS_REAL MPI_DOUBLE
+#define log_fn  log
+#define fabs_fn fabs
+#define sqrt_fn sqrt
+#define pow_fn  pow
+#define exp_fn  exp
 
 #else
 
 typedef float iris_real;
 
 #define IRIS_REAL MPI_FLOAT
+#define log_fn  logf
+#define fabs_fn fabsf
+#define sqrt_fn sqrtf
+#define pow_fn  powf
+#define exp_fn  expf
 
 #endif
 

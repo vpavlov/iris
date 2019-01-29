@@ -45,32 +45,11 @@ namespace ORG_NCSA_IRIS {
 	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
 			    iris_real x1, iris_real y1, iris_real z1);
 
-	void set_periodicity(int dir, int in_value)
-	{
-	    if(dir < 0 || dir > 2) {
-		throw std::invalid_argument("Invalid direction for periodicity!");
-	    }
-
-	    if(in_value < 0 || in_value > 1) {
-		throw std::invalid_argument("Invalid periodicity!");
-	    }
-
-	    m_pbc[dir] = in_value;
-	}
-
-	void set_periodocity(int in_x, int in_y, int in_z)
-	{
-	    set_periodicity(0, in_x);
-	    set_periodicity(1, in_y);
-	    set_periodicity(2, in_z);
-	}
-
 	void commit();
 
     public:
 	bool m_dirty;
 	bool m_initialized;
-	int m_pbc[3];   // periodicity of the box for each direction
 	box_t<iris_real> m_global_box;
 	box_t<iris_real> m_local_box;
 

@@ -140,12 +140,12 @@ int grid::select_best_factor(int n, int **factors, int *out_best)
 void grid::setup_grid_details()
 {
     MPI_Comm cart_comm;
-    MPI_Cart_create(m_local_comm->m_comm, 3, m_size,
-		    m_domain->m_pbc, 0, &cart_comm);
+    int pbc[] = { 1, 1, 1 };
+    MPI_Cart_create(m_local_comm->m_comm, 3, m_size, pbc, 0, &cart_comm);
 
     // This call fills m_coords with the coordinates of the calling
     // process inside the grid (e.g. this proc is 3,1,0)
-    MPI_Cart_get(cart_comm, 3, m_size, m_domain->m_pbc, m_coords);
+    MPI_Cart_get(cart_comm, 3, m_size, pbc, m_coords);
     MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
     MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
     MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
