@@ -44,12 +44,15 @@
 #include "poisson_solver.h"
 #include "timer.h"
 #include "utils.h"
+#include "factorizer.h"
 
 using namespace ORG_NCSA_IRIS;
 
 #define _SQRT_PI  1.772453850905516027298167483341
 #define _SQRT_2PI 2.506628274631000502415765284811
 #define _2PI      6.283185307179586476925286766559
+
+#define FACTOR_QUALITY_THRESHOLD 3
 
 // OAOO: helper macro to assert that client-to-server sending routines are
 //       only called from client nodes
@@ -213,10 +216,16 @@ void iris::config_auto_tune(int in_natoms, iris_real in_qtot2,
     }
 }
 
-void iris::set_accuracy(iris_real in_accuracy)
+void iris::set_accuracy(iris_real in_accuracy, bool is_relative)
 {
     if(is_server()) {
-	m_accuracy = fabs_fn(in_accuracy);
+	iris_real acc = fabs_fn(in_accuracy);
+	if(is_relative) {
+	    acc *= ((m_units->ecf * m_units->e * m_units->e) /
+		    (m_units->ang * m_units->ang));
+	}
+	m_accuracy = acc;
+	
 	m_accuracy_free = false;
 	m_dirty = true;
     }
@@ -232,10 +241,7 @@ void iris::set_alpha(iris_real in_alpha)
 void iris::set_order(int in_order)
 {
     if(is_server()) {
-	if(in_order < 1 || in_order > 7) {
-	    throw std::invalid_argument("Orders below 1 and above 7 are not supported!");
-	}
-	m_order_user = in_order;
+	m_chass->set_order(in_order);
 	m_order_free = false;
 	m_dirty = true;
     }
@@ -246,14 +252,17 @@ void iris::set_mesh_size(int nx, int ny, int nz)
     if(is_server()) {
 	if(nx > 0) {
 	    m_hx_free = false;
+	    m_nx_user = nx;
 	    m_dirty = true;
 	}
 	if(ny > 0) {
 	    m_hy_free = false;
+	    m_ny_user = ny;
 	    m_dirty = true;
 	}
 	if(nz > 0) {
 	    m_hz_free = false;
+	    m_nz_user = nz;
 	    m_dirty = true;
 	}
     }
@@ -669,8 +678,8 @@ iris_real iris::global_energy()
     MPI_Comm comm = server_comm();
     MPI_Request req;
     send_event(comm, 0, IRIS_TAG_GET_GLOBAL_ENERGY, 0, NULL, &req, NULL);
-    MPI_Recv(&eng, 1, IRIS_REAL, 0, IRIS_TAG_GLOBAL_ENERGY, comm, MPI_STATUS_IGNORE);
     MPI_Wait(&req, MPI_STATUS_IGNORE);
+    MPI_Recv(&eng, 1, IRIS_REAL, 0, IRIS_TAG_GLOBAL_ENERGY, comm, MPI_STATUS_IGNORE);
     return eng;
 }
 
@@ -743,9 +752,9 @@ iris_real opt_acc_fn(iris_real alpha, void *obj)
 
 void iris::atp_scenario1()
 {
-    m_logger->trace("Auto-tuning parameters (scenario 1):");
+    m_logger->trace("Auto-tuning parameters:");
     m_logger->trace("  Desired accuracy: %g", m_accuracy);
-    m_logger->trace("  Desired order: %d", m_order_user);
+    m_logger->trace("  Desired order: %d", m_chass->m_order);
     
     if(m_qtot2 == 0.0 || m_cutoff == 0.0 || m_natoms == 0 ||
        m_accuracy == 0.0 || !m_domain->m_initialized)
@@ -764,7 +773,6 @@ void iris::atp_scenario1()
     m_mesh->set_size(nx, ny, nz);
     m_alpha = root_of(opt_acc_fn, alpha, this);
     m_logger->trace("  Final   α = %f; ε = %g", m_alpha, m_accuracy);
-    exit(-1);
 }
 
 // Based on [1], equation (23) for the real-space contribution to the error
@@ -823,7 +831,7 @@ iris_real iris::kspace_error(iris_real h, iris_real L, iris_real alpha)
 {
     int N = m_natoms;
     iris_real Q2 = m_qtot2;
-    int P = (double) m_order_user;
+    int P = (double) m_chass->m_order;
     iris_real ha = h * alpha;
     iris_real *a = am[P-1];
 
@@ -864,7 +872,7 @@ int iris::h_estimate(int dim, iris_real alpha, iris_real eps)
 	iris_real h = 1 / alpha;
 	n = static_cast<int>(L / h) + 1;
 	iris_real kerr = kspace_error(h, L, alpha);
-	while(kerr > eps) {
+	while(kerr > eps || !good_factor_quality(n)) {
 	    n++;
 	    h = L / n;
 	    kerr = kspace_error(h, L, alpha);
@@ -872,5 +880,24 @@ int iris::h_estimate(int dim, iris_real alpha, iris_real eps)
     }
 
     return n;
+}
+
+// Return true if N has at least K integer factors.
+bool iris::good_factor_quality(int n)
+{
+    int *factors;
+    int *powers;
+    int nfactors = factorize(n, &factors, &powers);
+    int nfact_tot = 0;
+    for(int i=0;i<nfactors;i++) {
+	nfact_tot += powers[i];
+    }
+    delete factors;
+    delete powers;
+    if(nfact_tot >= FACTOR_QUALITY_THRESHOLD) {
+	return true;
+    }else {
+	return false;
+    }
 }
 

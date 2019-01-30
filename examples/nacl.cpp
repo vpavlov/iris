@@ -257,7 +257,9 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     iris_real fsum[3];
     iris_real tot_fsum[3];
 
-    FILE *fp = fopen("forces-iris.dat", "wt");
+    char fname[256];
+    sprintf(fname, "forces%d.dat", iris->m_local_comm->m_rank);
+    FILE *fp = fopen(fname, "wt");
 
     fsum[0] = fsum[1] = fsum[2] = 0.0;
     int n = 0;
@@ -398,7 +400,7 @@ main(int argc, char **argv)
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
     x->config_auto_tune(NATOMS, qtot2, CUTOFF);
     x->set_order(3);
-    x->set_accuracy(1e-5);
+    x->set_accuracy(1e-6, true);
     x->commit();
 
 

@@ -90,9 +90,10 @@ namespace ORG_NCSA_IRIS {
 	void config_auto_tune(int in_natoms, iris_real in_qtot2,
 			      iris_real in_cutoff);
 
-	// Set desired accuracy (absolute accuracy in the selected units of
-	// force)
-	void set_accuracy(iris_real in_accuracy);
+	// Set desired accuracy (absolute or relative accuracy in the selected
+	// units of force). Relative accuracy is relative in regards to the
+	// force between two elementary charges 1 angstrom apart.
+	void set_accuracy(iris_real in_accuracy, bool is_relative);
 
 	// Sets or resets the interpolation/stencil order
 	void set_order(int order);
@@ -183,7 +184,8 @@ namespace ORG_NCSA_IRIS {
 	void auto_tune_parameters();
 	void atp_scenario1();
 	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
-	int h_estimate(int dim, iris_real alpha, iris_real eps);
+	int  h_estimate(int dim, iris_real alpha, iris_real eps);
+	bool good_factor_quality(int n);
 
     public:
 	int m_client_size;             // # of client nodes
@@ -211,7 +213,6 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real m_alpha;             // Ewald splitting parameter (1/distance)
 	iris_real m_accuracy;          // Desired accuracy
-	int       m_order_user;
 	int       m_nx_user;           // Desired mesh size
 	int       m_ny_user;
 	int       m_nz_user;
