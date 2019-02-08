@@ -299,6 +299,7 @@ void iris::commit()
     if(is_server()) {
 	if(m_dirty) {
 	    auto_tune_parameters();
+	    m_dirty = false;
 	}
 
 	// Beware: order is important. Some configurations depend on other

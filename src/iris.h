@@ -167,6 +167,8 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real kspace_error(iris_real h, iris_real L, iris_real alpha);
 
+	iris_real alpha() { return m_alpha; };
+
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
