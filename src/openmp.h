@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -20,77 +20,38 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FFT3D_H__
-#define __IRIS_FFT3D_H__
+#ifndef __IRIS_OMP_H__
+#define __IRIS_OMP_H__
 
-#include "state_accessor.h"
-
-#ifdef FFT_FFTW
-
-#include "fftw3.h"
-
-#if IRIS_DOUBLE == 0
-
-typedef fftwf_complex complex_t;
-#define FFTW_(func)  fftwf_##func
-
-#elif IRIS_DOUBLE == 1
-
-typedef fftw_complex complex_t;
-#define FFTW_(func)  fftw_##func
-
-#else 
-
-#error "Unknown IRIS_DOUBLE setting!"
-
-#endif  // IRIS_DOUBLE
-
-#endif  // FFT_FFTW
-
+#include <omp.h>
 
 namespace ORG_NCSA_IRIS {
 
-    class fft3d : protected state_accessor {
-
-    public:
-	fft3d(class iris *obj);
-	~fft3d();
-
-	iris_real *compute_fw(iris_real *src, iris_real *dest);
-	void compute_bk(iris_real *src, iris_real *dest);
-
-	void dump_workspace();
-
-    private:
-	void setup_grid(int in_which);
-	void setup_remap(int in_which);
-	void setup_plans(int in_which);
-
-    public:
-	int m_count;               // number of items in own mesh
-
-    private:
-	class grid *m_grids[3];    // proc grids in which 1 proc a whole dim
-	int m_own_size[3][3];      // sizes for each of the grid
-	int m_own_offset[3][3];    // offsets for each of the grid
-	class remap *m_remaps[4];  // remaps between mesh->1d ffts->mesh
-	iris_real *m_scratch;      // scratch space for remapping
-
-#ifdef FFT_FFTW
-	FFTW_(plan) m_fw_plans[3];
-	FFTW_(plan) m_bk_plans[3];
+#if defined _OPENMP
+#define THREAD_ID omp_get_thread_num()
+#else
+#define THREAD_ID 0
 #endif
 
-    };
+}
 
+static inline void setup_work_sharing(int in_total_items, int in_nthreads, int *out_from, int *out_to)
+{
+#if defined _OPENMP
+    const int items_per_thread = in_total_items/in_nthreads + 1;
+    *out_from = THREAD_ID * items_per_thread;
+    *out_to = MIN(*out_from + items_per_thread, in_total_items);
+#else
+    *out_from = 0;
+    *out_to = in_total_items;
+#endif
 }
 
 #endif

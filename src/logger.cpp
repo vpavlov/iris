@@ -34,6 +34,7 @@
 #include <omp.h>
 #include "logger.h"
 #include "comm_rec.h"
+#include "openmp.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -46,7 +47,7 @@ using namespace ORG_NCSA_IRIS;
 	vsprintf(str, fmt, args);					\
 	va_end(args);							\
 	printf("[IRIS %d:%d:%0.6f] " TEXT_LEVEL ": %s\n",		\
-	       m_uber_comm->m_rank, omp_get_thread_num(),		\
+	       m_uber_comm->m_rank, THREAD_ID,				\
 	       time - m_start_time, str);				\
     }
 

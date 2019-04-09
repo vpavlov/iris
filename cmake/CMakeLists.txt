@@ -84,9 +84,24 @@ option(CMAKE_VERBOSE_MAKEFILE "Verbose makefile" OFF)
 ###
 ### We need an FFT library...
 ###
-set(FFT "FFTW3" CACHE STRING "FFT Library")
+set(FFT "FFTW" CACHE STRING "FFT Library")
 set_property(CACHE FFT PROPERTY STRINGS FFTW3 MKL)
-find_package(${FFT} REQUIRED)
+
+if(IRIS_DOUBLE)
+  if(IRIS_OPENMP)
+    find_package(${FFT} REQUIRED COMPONENTS OMP)
+  else()
+    find_package(${FFT} REQUIRED)
+  endif()
+else()
+  if(IRIS_OPENMP)
+    find_package(${FFT} REQUIRED COMPONENTS OMP SIMPLE)
+  else()
+    find_package(${FFT} REQUIRED COMPONENTS SIMPLE)
+  endif()
+endif()
+
+
 add_definitions(-DFFT_${FFT})
 include_directories(${${FFT}_INCLUDE_DIRS})
 list(APPEND IRIS_LINK_LIBS ${${FFT}_LIBRARIES})

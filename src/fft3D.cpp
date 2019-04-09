@@ -48,6 +48,14 @@ fft3d::fft3d(class iris *obj)
     m_bk_plans { NULL, NULL, NULL },
     m_scratch(NULL)
 {
+
+#if defined _OPENMP
+#if defined FFT_FFTW
+    FFTW_(init_threads);
+    FFTW_(plan_with_nthreads(m_iris->m_nthreads));
+#endif
+#endif
+
     for(int i=0;i<3;i++) {
 	setup_grid(i);
     }
@@ -82,13 +90,22 @@ fft3d::~fft3d()
 
     for(int i=0;i<3;i++) {
 	if(m_fw_plans[i] != NULL) {
-#ifdef FFT_FFTW3
+#ifdef FFT_FFTW
 	    FFTW_(destroy_plan)(m_fw_plans[i]);
 	    FFTW_(destroy_plan)(m_bk_plans[i]);
 #endif
 	}
 
     }
+
+#ifdef FFT_FFTW
+#ifdef _OPENMP
+    FFTW_(cleanup_threads);
+#else
+    FFTW_(cleanup);
+#endif
+#endif
+
 }
 
 // To make all 1D FFTs local, we need to make sure that a proc owns
@@ -288,7 +305,7 @@ void fft3d::setup_plans(int in_which)
     int n = m_mesh->m_size[x];
     int howmany = m_own_size[in_which][y] * m_own_size[in_which][z];
     
-#ifdef FFT_FFTW3
+#ifdef FFT_FFTW
     m_fw_plans[in_which] = 
 	FFTW_(plan_many_dft)(1,       // 1D
 			     &n,      // M elements
@@ -340,7 +357,7 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 	// }
 
 
-#ifdef FFT_FFTW3
+#ifdef FFT_FFTW
 	FFTW_(execute_dft)(m_fw_plans[i],
 			   (complex_t *)dest,
 			   (complex_t *)dest);
@@ -371,7 +388,7 @@ void fft3d::compute_bk(iris_real *src, iris_real *dest)
     for(int i=0;i<3;i++) {
 	m_remaps[i]->perform(src, src, m_scratch);
 
-#ifdef FFT_FFTW3
+#ifdef FFT_FFTW
 	FFTW_(execute_dft)(m_bk_plans[i],
 			   (complex_t *)src,
 			   (complex_t *)src);

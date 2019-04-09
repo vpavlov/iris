@@ -35,11 +35,11 @@
 #include "mesh.h"
 #include "proc_grid.h"
 #include "comm_rec.h"
-
 #include "memory.h"
 #include "domain.h"
 #include "logger.h"
 #include "event.h"
+#include "openmp.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -108,7 +108,7 @@ charge_assigner::charge_assigner(iris *obj)
 
 charge_assigner::~charge_assigner()
 {
-    memory::destroy_2d(m_weights);
+    memory::destroy_3d(m_weights);
 }
 
 void charge_assigner::set_order(int in_order)
@@ -164,8 +164,8 @@ void charge_assigner::commit()
 	    m_gfd_coeff = (iris_real *) gfd_coeff7;
 	}
 
-	memory::destroy_2d(m_weights);
-	memory::create_2d(m_weights, 3, m_order);
+	memory::destroy_3d(m_weights);
+	memory::create_3d(m_weights, m_iris->m_nthreads, 3, m_order);
 	if(m_mesh != NULL) {
 	    m_mesh->m_dirty = true;
 	}
@@ -177,7 +177,7 @@ void charge_assigner::commit()
 void charge_assigner::compute_weights(iris_real dx, iris_real dy, iris_real dz)
 {
     iris_real r1, r2, r3;
-
+    int tid = THREAD_ID;
     for(int i = 0; i < m_order; i++) {
 	r1 = r2 = r3 = (iris_real)0.0;
 	
@@ -187,8 +187,8 @@ void charge_assigner::compute_weights(iris_real dx, iris_real dy, iris_real dz)
 	    r3 = m_coeff[i*m_order + j] + r3 * dz;
 	}
 	
-	m_weights[0][i] = r1;
-	m_weights[1][i] = r2;
-	m_weights[2][i] = r3;
+	m_weights[tid][0][i] = r1;
+	m_weights[tid][1][i] = r2;
+	m_weights[tid][2][i] = r3;
     }
 }

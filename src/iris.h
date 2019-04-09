@@ -195,7 +195,7 @@ namespace ORG_NCSA_IRIS {
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
-
+	int m_nthreads;                // # of threads to use
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 

@@ -40,6 +40,7 @@
 #include "comm_rec.h"
 #include "tags.h"
 #include "poisson_solver.h"
+#include "openmp.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -340,32 +341,75 @@ void mesh::assign_charges()
 void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-    for(int n=0;n<in_ncharges;n++) {
-	iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
-	
-	// the index of the cell that is to the "left" of the atom
-	int ix = (int) (tx + m_chass->m_ics_bump);
-	int iy = (int) (ty + m_chass->m_ics_bump);
-	int iz = (int) (tz + m_chass->m_ics_bump);
 
-	// distance (increasing to the left!) from the center of the
-	// interpolation grid
-	iris_real dx = ix - tx + m_chass->m_ics_center;
-	iris_real dy = iy - ty + m_chass->m_ics_center;
-	iris_real dz = iz - tz + m_chass->m_ics_center;
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(m_ext_size[2], m_iris->m_nthreads, &from, &to);
 
-	m_chass->compute_weights(dx, dy, dz);
+	for(int n=0;n<in_ncharges;n++) {
+	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	    
+	    // the index of the cell that is to the "left" of the atom
+	    int iz = (int) (tz + m_chass->m_ics_bump);
 
-	iris_real t0 = m_mesh->m_h3inv * in_charges[n*5 + 3];  // q/V
-	for(int i = 0; i < m_chass->m_order; i++) {
-	    iris_real t1 = t0 * m_chass->m_weights[0][i];
-	    for(int j = 0; j < m_chass->m_order; j++) {
-		iris_real t2 = t1 * m_chass->m_weights[1][j];
-		for(int k = 0; k < m_chass->m_order; k++) {
-		    iris_real t3 = t2 * m_chass->m_weights[2][k];
-		    m_rho_plus[ix+i][iy+j][iz+k] += t3;
+	    // If this particle's Z coord is so much to the left so that
+	    // even the rightmost (+m_order-1) cell of its interpolant
+	    // is on the left of this thread's area, OR
+	    // is too much to the right, so that even the leftmost (+0)
+	    // cell of its interpolant is on the right of this thread's
+	    // area, do not do anything.
+	    //
+	    // Note that this is not enough: the area of the
+	    // interpolant may overlap with the thread's area of
+	    // work sharing only partially. Further filtering must
+	    // be implemented, see below.
+	    if( iz+m_chass->m_order-1 < from ||  // is on the left
+		iz >= to)                        // is on the right
+	    {
+		continue;
+	    }
+
+	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+
+	    int ix = (int) (tx + m_chass->m_ics_bump);
+	    int iy = (int) (ty + m_chass->m_ics_bump);
+
+	    // distance (increasing to the left!) from the center of the
+	    // interpolation grid
+	    iris_real dx = ix - tx + m_chass->m_ics_center;
+	    iris_real dy = iy - ty + m_chass->m_ics_center;
+	    iris_real dz = iz - tz + m_chass->m_ics_center;
+	    
+	    m_chass->compute_weights(dx, dy, dz);
+	    
+	    iris_real t0 = m_mesh->m_h3inv * in_charges[n*5 + 3];  // q/V
+	    for(int i = 0; i < m_chass->m_order; i++) {
+		iris_real t1 = t0 * m_chass->m_weights[tid][0][i];
+		for(int j = 0; j < m_chass->m_order; j++) {
+		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j];
+		    for(int k = 0; k < m_chass->m_order; k++) {
+			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
+
+			// If it moves out of the thread's area, no need
+			// to bother with the rest of the cycle (since
+			// k increases and future values will also be
+			// out of the area.
+			if(iz+k >= to) {
+			    break;
+			}
+
+			// Wait untill it overlaps the thread's area
+			if(iz+k < from) {
+			    continue;
+			}
+
+			m_rho_plus[ix+i][iy+j][iz+k] += t3;
+		    }
 		}
 	    }
 	}
@@ -868,48 +912,56 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 			  iris_real *out_forces)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
-    
-    for(int n=0;n<in_ncharges;n++) {
-	iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
-	
-	// the index of the cell that is to the "left" of the atom
-	int ix = (int) (tx + m_chass->m_ics_bump);
-	int iy = (int) (ty + m_chass->m_ics_bump);
-	int iz = (int) (tz + m_chass->m_ics_bump);
 
-	// distance (increasing to the left!) from the center of the
-	// interpolation grid
-	iris_real dx = ix - tx + m_chass->m_ics_center;
-	iris_real dy = iy - ty + m_chass->m_ics_center;
-	iris_real dz = iz - tz + m_chass->m_ics_center;
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(in_ncharges, m_iris->m_nthreads, &from, &to);
 
-	m_chass->compute_weights(dx, dy, dz);
-
-	iris_real ekx = 0.0;
-	iris_real eky = 0.0;
-	iris_real ekz = 0.0;
-
-	for(int i = 0; i < m_chass->m_order; i++) {
-	    iris_real t1 = m_chass->m_weights[0][i];
-	    for(int j = 0; j < m_chass->m_order; j++) {
-		iris_real t2 = t1 * m_chass->m_weights[1][j];
-		for(int k = 0; k < m_chass->m_order; k++) {
-		    iris_real t3 = t2 * m_chass->m_weights[2][k];
-		    ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
-		    eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
-		    ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+	for(int n=from;n<to;n++) {
+	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	    
+	    // the index of the cell that is to the "left" of the atom
+	    int ix = (int) (tx + m_chass->m_ics_bump);
+	    int iy = (int) (ty + m_chass->m_ics_bump);
+	    int iz = (int) (tz + m_chass->m_ics_bump);
+	    
+	    // distance (increasing to the left!) from the center of the
+	    // interpolation grid
+	    iris_real dx = ix - tx + m_chass->m_ics_center;
+	    iris_real dy = iy - ty + m_chass->m_ics_center;
+	    iris_real dz = iz - tz + m_chass->m_ics_center;
+	    
+	    m_chass->compute_weights(dx, dy, dz);
+	    
+	    iris_real ekx = 0.0;
+	    iris_real eky = 0.0;
+	    iris_real ekz = 0.0;
+	    
+	    for(int i = 0; i < m_chass->m_order; i++) {
+		iris_real t1 = m_chass->m_weights[tid][0][i];
+		for(int j = 0; j < m_chass->m_order; j++) {
+		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j];
+		    for(int k = 0; k < m_chass->m_order; k++) {
+			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
+			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
+			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
+			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+		    }
 		}
 	    }
+	    
+	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
+	    out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[n*4 + 1] = factor * ekx;
+	    out_forces[n*4 + 2] = factor * eky;
+	    out_forces[n*4 + 3] = factor * ekz;
 	}
-
-	iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
-	out_forces[n*4 + 1] = factor * ekx;
-	out_forces[n*4 + 2] = factor * eky;
-	out_forces[n*4 + 3] = factor * ekz;
     }
-
 }
 

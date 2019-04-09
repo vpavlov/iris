@@ -100,7 +100,7 @@ namespace ORG_NCSA_IRIS {
 	iris_real m_ics_center;  // even orders: 0.5; odd order: 0.0
 	iris_real m_ics_bump;    // even orders: 0.0; odd orders: 0.5
 
-	iris_real **m_weights;   // interpolation weights, depend on charge pos
+	iris_real ***m_weights;  // interpolation weights, depend on charge pos
 
     private:
 	iris_real *m_coeff;      // interpolation coefficients, depend on order

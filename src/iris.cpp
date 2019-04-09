@@ -45,6 +45,7 @@
 #include "timer.h"
 #include "utils.h"
 #include "factorizer.h"
+#include "openmp.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -98,6 +99,14 @@ iris::iris(int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+
+#if defined _OPENMP
+#pragma omp parallel default(none)
+    m_nthreads = omp_get_num_threads();
+#else
+    m_nthreads = 1;
+#endif
+
     // initially, all calculation parameters are un-set (thus - free)
     m_qtot2 = 0.0;
     m_cutoff = 0.0;

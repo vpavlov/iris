@@ -9,10 +9,10 @@
 #include <iris/mesh.h>
 #include <iris/comm_rec.h>
 #include <iris/utils.h>
+#include <iris/timer.h>
 
 iris_real g_boxx, g_boxy, g_boxz;
 
-#define NATOMS 27000
 #define CUTOFF 10  // 10 angstroms
 
 #define M 128
@@ -20,6 +20,8 @@ iris_real g_boxx, g_boxy, g_boxz;
 #define P 128
 
 using namespace ORG_NCSA_IRIS;
+
+int natoms;
 
 char **split(char *line, int max)
 {
@@ -50,7 +52,7 @@ iris_real read_nacl(char *fname, iris_real **&charges)
 	return 0.0;
     }
 
-    memory::create_2d(charges, NATOMS, 4);
+    memory::create_2d(charges, natoms, 4);
 
     char *line = NULL;
     size_t sz = 0;
@@ -58,10 +60,9 @@ iris_real read_nacl(char *fname, iris_real **&charges)
     int count = 0;
     char tmp[80];
     iris_real qtot2 = 0.0;
-
+    int atom_id = 0;
     while(getline(&line, &sz, fp) != -1) {
 	iris_real charge = 0.0;
-	int atom_id = 0;
 	SUBSTR(tmp, line, 1, 6);
 	if(!strcmp(tmp, "CRYST1")) {
 	    SUBSTR(tmp, line, 7, 15);
@@ -74,17 +75,15 @@ iris_real read_nacl(char *fname, iris_real **&charges)
 	    g_boxz = atof(tmp);
 
 	}else if(!strcmp(tmp, "ATOM  ")) {
-	    SUBSTR(tmp, line, 7, 11);
-	    atom_id = atoi(tmp);
 
 	    SUBSTR(tmp, line, 31, 38);
-	    charges[atom_id-1][0] = (iris_real) atof(tmp);
+	    charges[atom_id][0] = (iris_real) atof(tmp);
 
 	    SUBSTR(tmp, line, 39, 46);
-	    charges[atom_id-1][1] = (iris_real) atof(tmp);
+	    charges[atom_id][1] = (iris_real) atof(tmp);
 
 	    SUBSTR(tmp, line, 47, 54);
-	    charges[atom_id-1][2] = (iris_real) atof(tmp);
+	    charges[atom_id][2] = (iris_real) atof(tmp);
 
 	    SUBSTR(tmp, line, 13, 16);
 	    if(!strcmp(tmp, " Na+")) {
@@ -92,8 +91,10 @@ iris_real read_nacl(char *fname, iris_real **&charges)
 	    }else if(!strcmp(tmp, " Cl-")) {
 		charge = (iris_real)-1.0;
 	    }
-	    charges[atom_id-1][3] = charge;
+	    charges[atom_id][3] = charge;
 	    qtot2 += (charge * charge);
+
+	    atom_id++;
 	}else if(!strcmp(tmp, "END   ")) {
 	    break;
 	}
@@ -146,7 +147,7 @@ iris_real read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 	// is maybe not the best way to do it, but this is outside IRIS and the
 	// client MD code should have already have mechanisms for this in place.
 	std::vector<int> *vcharges = new std::vector<int>[pp_size];
-	for(int i=0;i<NATOMS;i++) {
+	for(int i=0;i<natoms;i++) {
 	    for(int j=0;j<pp_size;j++) {
 		if(charges[i][0] >= xmin[j] && charges[i][0] < xmax[j]) {
 		    vcharges[j].push_back(i);
@@ -289,8 +290,8 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
 
 main(int argc, char **argv)
 {
-    if(argc < 3) {
-	printf("Usage: %s <path-to-NaCl.data> <mode>\n", argv[0]);
+    if(argc < 4) {
+	printf("Usage: %s <path-to-NaCl.data> <natoms> <mode>\n", argv[0]);
 	printf("  mode = 0 is all nodes are client/server\n");
 	printf("  mode = 1 is half nodes are clients, half nodes are server\n");
 	exit(-1);
@@ -298,7 +299,8 @@ main(int argc, char **argv)
 
     // handle arguments
     char *fname = argv[1];
-    int mode = atoi(argv[2]);
+    natoms = atoi(argv[2]);
+    int mode = atoi(argv[3]);
 
     int rank, size;
     MPI_Init(&argc, &argv);
@@ -398,7 +400,7 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
-    x->config_auto_tune(NATOMS, qtot2, CUTOFF);
+    x->config_auto_tune(natoms, qtot2, CUTOFF);
     x->set_order(3);
     x->set_accuracy(1e-6, true);
     x->commit();
@@ -416,7 +418,7 @@ main(int argc, char **argv)
     //
     // This must be called on both clients and servers collectively.
     box_t<iris_real> *local_boxes = x->get_local_boxes();
-    
+    timer tm_sc, tm_cc, tm_rf, tm;
     // Main simulation loop in the clients
     if(x->is_client()) {
 
@@ -428,18 +430,26 @@ main(int argc, char **argv)
 	    // It finds out which client sends which charges to which server
 	    // by whatever means it wants, and at the end it calls IRIS's
 	    // broadcast_charges()
-	    send_charges(x, my_charges, my_count, local_boxes);
+	    tm.start();
 
+	    tm_sc.start();
+	    send_charges(x, my_charges, my_count, local_boxes);
+	    tm_sc.stop();
 
 	    // Let the servers know that there are no more charges, so it can
 	    // go on and start calculating
+	    tm_cc.start();
 	    x->commit_charges();
+	    tm_cc.stop();
 
 
 	    // Receive back the forces from the server
 	    int *nforces;
+	    tm_rf.start();
 	    iris_real *forces = x->receive_forces(&nforces);
-	    
+	    tm_rf.stop();
+
+	    tm.stop();
 
 	    handle_forces(x, nforces, forces);	    
 
@@ -457,6 +467,11 @@ main(int argc, char **argv)
 	// the quit() above
 	x->run();
     }
+
+    x->m_logger->info("Send Charges wall/cpu time %lf/%lf (%.2lf%% util)", tm_sc.read_wall(), tm_sc.read_cpu(), (tm_sc.read_cpu() * 100.0) /tm_sc.read_wall());
+    x->m_logger->info("Commit Charges wall/cpu time %lf/%lf (%.2lf%% util)", tm_cc.read_wall(), tm_cc.read_cpu(), (tm_cc.read_cpu() * 100.0) /tm_cc.read_wall());
+    x->m_logger->info("Receive Forces wall/cpu time %lf/%lf (%.2lf%% util)", tm_rf.read_wall(), tm_rf.read_cpu(), (tm_rf.read_cpu() * 100.0) /tm_rf.read_wall());
+    x->m_logger->info("Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 
     if(x->is_server()) {
 	//x->m_mesh->dump_log("RHO", x->m_mesh->m_rho);
