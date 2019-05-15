@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <mpi.h>
 #include <omp.h>
+#include <string.h>
 #include "iris.h"
 #include "logger.h"
 #include "comm_rec.h"
@@ -895,6 +896,10 @@ int iris::h_estimate(int dim, iris_real alpha, iris_real eps)
 // Return true if N has at least K integer factors.
 bool iris::good_factor_quality(int n)
 {
+	if(n % m_server_size != 0) {
+		return false;
+	}
+
     int *factors;
     int *powers;
     int nfactors = factorize(n, &factors, &powers);

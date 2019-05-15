@@ -27,7 +27,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #==============================================================================
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 2.8)
 
 project(iris)
 set(SOVERSION 0)
@@ -134,11 +134,11 @@ target_link_libraries(nacl iris)
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
 
-add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
-target_link_libraries(stencils iris)
+#add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
+#target_link_libraries(stencils iris)
 
-add_executable(gro-charges ${IRIS_SOURCE_DIR}/../examples/gro-charges.cpp)
-target_link_libraries(gro-charges iris)
+#add_executable(gro-charges ${IRIS_SOURCE_DIR}/../examples/gro-charges.cpp)
+#target_link_libraries(gro-charges iris)
 
 # Handle pkgconfig
 set(PKG_CFLAGS "")

@@ -123,8 +123,8 @@ iris_real read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 
 	// the global box; for simplicity, hardcoded in this example
 	box_t<iris_real> gb {
-	    -g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
-		g_boxx/2.0, g_boxy/2.0, g_boxz/2.0,
+	    -g_boxx/2, -g_boxy/2, -g_boxz/2,
+		g_boxx/2, g_boxy/2, g_boxz/2,
 		g_boxx, g_boxy, g_boxz};
 
 	// "domain decomposition" in the client. In this example, we use a
@@ -307,10 +307,16 @@ main(int argc, char **argv)
     natoms = atoi(argv[2]);
     int mode = atoi(argv[3]);
 
+	char proc_name[256];
+	int name_len;
+
     int rank, size;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	MPI_Get_processor_name(proc_name, &name_len);
+	proc_name[name_len] = 0;
     
     // debugging facility
     bool ready = false;
@@ -337,7 +343,7 @@ main(int argc, char **argv)
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(MPI_COMM_WORLD);
-	x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
+	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
     }else if(mode == 1) {
 	// split the world communicator in two groups:
 	// - client group: the one that "uses" IRIS. It provides charge coords
@@ -373,6 +379,7 @@ main(int argc, char **argv)
 	exit(-1);
     }
 
+	x->m_logger->info("Processor name = %s", proc_name);
 
     // Client nodes must have somehow aquired knowledge about charges. In this
     // example, we read them from a DL_POLY CONFIG file. For demonstration
@@ -405,6 +412,7 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
+	//x->set_mesh_size(128, 64, 64);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
     x->set_order(3);
 	//x->set_mesh_size(108, 108, 108);
