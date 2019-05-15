@@ -218,7 +218,7 @@ void iris::config_auto_tune(int in_natoms, iris_real in_qtot2,
 			    iris_real in_cutoff)
 {
     if(is_server()) {
-	m_qtot2 = fabs_fn(in_qtot2);
+	m_qtot2 = fabs_fn(in_qtot2) * m_units->ecf;
 	m_cutoff = fabs_fn(in_cutoff);
 	m_natoms = abs(in_natoms);
 	m_dirty = true;
@@ -727,8 +727,8 @@ void iris::auto_tune_parameters()
     // Calculate: α, hx, hy, hz
     if(!m_accuracy_free &&
        !m_order_free &&
-       m_alpha_free &&
-       (m_hx_free || m_hy_free || m_hz_free))
+       m_alpha_free /* &&
+		       (m_hx_free || m_hy_free || m_hz_free) */)
     {
 	atp_scenario1();
     }

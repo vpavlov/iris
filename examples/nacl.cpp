@@ -95,6 +95,11 @@ iris_real read_nacl(char *fname, iris_real **&charges)
 	    qtot2 += (charge * charge);
 
 	    atom_id++;
+
+	    // printf("%7d      1   1%8.3f%10.5f%10.5f%10.5f   0   0   0\n", atom_id, charge,
+	    // 	   charges[atom_id-1][0],
+	    // 	   charges[atom_id-1][1],
+	    // 	   charges[atom_id-1][2]);
 	}else if(!strcmp(tmp, "END   ")) {
 	    break;
 	}
@@ -402,7 +407,8 @@ main(int argc, char **argv)
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
     x->set_order(3);
-    x->set_accuracy(1e-6, true);
+	//x->set_mesh_size(108, 108, 108);
+    x->set_accuracy(1e-4, true);
     x->commit();
 
 
@@ -474,7 +480,7 @@ main(int argc, char **argv)
     x->m_logger->info("Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 
     if(x->is_server()) {
-	//x->m_mesh->dump_log("RHO", x->m_mesh->m_rho);
+	//x->m_mesh->dump_bov("RHO", x->m_mesh->m_rho);
 	//x->m_mesh->check_fxyz();
 	//x->m_mesh->dump_exyz("field");
     }
