@@ -62,7 +62,11 @@ namespace ORG_NCSA_IRIS {
     class fft3d : protected state_accessor {
 
     public:
-	fft3d(class iris *obj);
+	fft3d(class iris *obj,
+	      int *in_in_offset, int *in_in_size,
+	      int *in_out_offset, int *in_out_size,
+	      char *in_name);
+
 	~fft3d();
 
 	iris_real *compute_fw(iris_real *src, iris_real *dest);
@@ -79,6 +83,12 @@ namespace ORG_NCSA_IRIS {
 	int m_count;               // number of items in own mesh
 
     private:
+	char *m_name;
+	int m_in_size[3];
+	int m_in_offset[3];
+	int m_out_size[3];
+	int m_out_offset[3];
+
 	class grid *m_grids[3];    // proc grids in which 1 proc a whole dim
 	int m_own_size[3][3];      // sizes for each of the grid
 	int m_own_offset[3][3];    // offsets for each of the grid

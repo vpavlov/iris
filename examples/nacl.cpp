@@ -408,7 +408,7 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
-	x->set_mesh_size(128, 128, 128);
+	x->set_mesh_size(512, 512, 512);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
     x->set_order(3);
 	//x->set_mesh_size(108, 108, 108);

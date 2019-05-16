@@ -28,6 +28,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <string.h>
 #include <stdexcept>
 #include "iris.h"
 #include "remap.h"
@@ -48,8 +49,9 @@ remap::remap(class iris *obj,
 	     int in_permute,
 	     char *in_name)
     : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
-      m_nrecv(0), m_name(in_name)
+      m_nrecv(0)
 {
+    m_name = strdup(in_name);
     m_from.xlo = in_from_offset[0];
     m_from.ylo = in_from_offset[1];
     m_from.zlo = in_from_offset[2];
@@ -288,6 +290,7 @@ void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
 {
     MPI_Request *req = new MPI_Request[m_nrecv];
 
+    m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
     for(int i = 0; i < m_nrecv; i++) {
 	remap_item *xi = &m_recv_plans[i];
 	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,

@@ -74,7 +74,6 @@ void grid::set_pref(int x, int y, int z)
     m_pref[1] = y;
     m_pref[2] = z;
     m_dirty = true;
-    m_logger->trace("%s grid preference set to %d x %d x %d", m_name, x, y, z);
 }
 
 void grid::commit()

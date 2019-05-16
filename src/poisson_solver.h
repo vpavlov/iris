@@ -76,8 +76,13 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_kx;
 	iris_real *m_ky;
 	iris_real *m_kz;
-	class fft3d *m_fft;
 
+	int m_fft_size[3];
+	int m_fft_offset[3];
+	class grid  *m_fft_grid;
+	class remap *m_remap;
+	class fft3d *m_fft1, *m_fft2;
+      
 	// FFT workspaces
 	iris_real *m_work1;
 	iris_real *m_work2;

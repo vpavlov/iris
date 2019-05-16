@@ -38,6 +38,8 @@
 #include "fft3D.h"
 #include "openmp.h"
 #include "timer.h"
+#include "remap.h"
+#include "grid.h"
 
 #define  _PI   3.141592653589793238462643383279
 #define _2PI   6.283185307179586476925286766559
@@ -47,7 +49,10 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver::poisson_solver(class iris *obj)
-    : state_accessor(obj), m_dirty(true), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL), m_fft(NULL), m_work1(NULL), m_work2(NULL), m_work3(NULL)
+    : state_accessor(obj), m_dirty(true), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL),
+      m_fft1(NULL), m_fft2(NULL),
+      m_work1(NULL), m_work2(NULL), m_work3(NULL),
+      m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
 
@@ -60,9 +65,10 @@ poisson_solver::~poisson_solver()
     memory::destroy_1d(m_work1);
     memory::destroy_1d(m_work2);
     memory::destroy_1d(m_work3);
-	if(m_fft) {
-		delete m_fft;
-	}
+    if(m_fft1) { delete m_fft1; }
+    if(m_fft2) { delete m_fft2; }
+    if(m_fft_grid) { delete m_fft_grid; }
+    if(m_remap) { delete m_remap; }
 }
 
 void poisson_solver::commit()
@@ -71,25 +77,58 @@ void poisson_solver::commit()
 	return;
     }
 
+    if(m_fft_grid) { delete m_fft_grid; }
+
+    m_fft_grid = new grid(m_iris, "P3M FFT GRID");
+    m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
+    m_fft_grid->commit();
+
+    m_fft_size[0] = m_mesh->m_size[0] / m_fft_grid->m_size[0];
+    m_fft_size[1] = m_mesh->m_size[1] / m_fft_grid->m_size[1];
+    m_fft_size[2] = m_mesh->m_size[2] / m_fft_grid->m_size[2];
+
+    int *c = m_fft_grid->m_coords;
+    m_fft_offset[0] = c[0] * m_fft_size[0];
+    m_fft_offset[1] = c[1] * m_fft_size[1];
+    m_fft_offset[2] = c[2] * m_fft_size[2];
+
+    if(m_remap) { delete m_remap; }
+
+    m_remap = new remap(m_iris,
+			m_mesh->m_own_offset,
+			m_mesh->m_own_size,
+			m_fft_offset,
+			m_fft_size,
+			1,
+			0, "initial_remap");
+
     memory::destroy_3d(m_greenfn);
-    memory::create_3d(m_greenfn, m_mesh->m_own_size[0], m_mesh->m_own_size[1], m_mesh->m_own_size[2]);
+    memory::create_3d(m_greenfn, m_fft_size[0], m_fft_size[1], m_fft_size[2]);
 
     memory::destroy_1d(m_kx);
-    memory::create_1d(m_kx, m_mesh->m_own_size[0]);
+    memory::create_1d(m_kx, m_fft_size[0]);
 
     memory::destroy_1d(m_ky);
-    memory::create_1d(m_ky, m_mesh->m_own_size[1]);
+    memory::create_1d(m_ky, m_fft_size[1]);
 
     memory::destroy_1d(m_kz);
-    memory::create_1d(m_kz, m_mesh->m_own_size[2]);
+    memory::create_1d(m_kz, m_fft_size[2]);
 
     calculate_green_function();
     calculate_k();
 
-    if(m_fft != NULL) { delete m_fft; }
-    m_fft = new fft3d(m_iris);
+    if(m_fft1 != NULL) { delete m_fft1; }
+    m_fft1 = new fft3d(m_iris,
+		       m_fft_offset, m_fft_size,
+		       m_fft_offset, m_fft_size, "fft1");
+		       
+
+    if(m_fft2 != NULL) { delete m_fft2; }
+    m_fft2 = new fft3d(m_iris,
+		       m_fft_offset, m_fft_size,
+		       m_mesh->m_own_offset, m_mesh->m_own_size, "fft2");
     
-    int n = 2 * m_fft->m_count;
+    int n = 2 * m_fft1->m_count;
     
     memory::destroy_1d(m_work1);
     memory::create_1d(m_work1, n);
@@ -107,9 +146,9 @@ void poisson_solver::kspace_phi(iris_real *io_rho_phi)
 {
     iris_real scaleinv = 1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]);
 
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
     
     int idx = 0;
     for(int i=0;i<nx;i++) {
@@ -126,9 +165,9 @@ void poisson_solver::kspace_eng(iris_real *in_rho_phi)
 {
     iris_real s2 = square(1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]));
 
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
     
     int idx = 0;
     for(int i=0;i<nx;i++) {
@@ -145,9 +184,9 @@ void poisson_solver::kspace_eng(iris_real *in_rho_phi)
 
 void poisson_solver::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
 {
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
 
     int idx = 0;
     for(int i=0;i<nx;i++) {
@@ -163,9 +202,9 @@ void poisson_solver::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
 
 void poisson_solver::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
 {
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
 
     int idx = 0;
     for(int i=0;i<nx;i++) {
@@ -181,9 +220,9 @@ void poisson_solver::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
 
 void poisson_solver::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 {
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
 
     int idx = 0;
     for(int i=0;i<nx;i++) {
@@ -229,13 +268,13 @@ void poisson_solver::calculate_green_function()
 #endif
 
     {
-	int nx = m_mesh->m_own_size[0];
-	int ny = m_mesh->m_own_size[1];
-	int nz = m_mesh->m_own_size[2];
+	int nx = m_fft_size[0];
+	int ny = m_fft_size[1];
+	int nz = m_fft_size[2];
 	
-	int sx = m_mesh->m_own_offset[0];
-	int sy = m_mesh->m_own_offset[1];
-	int sz = m_mesh->m_own_offset[2];
+	int sx = m_fft_offset[0];
+	int sy = m_fft_offset[1];
+	int sz = m_fft_offset[2];
 	
 	int ex = sx + nx;
 	int ey = sy + ny;
@@ -320,13 +359,13 @@ void poisson_solver::calculate_k()
     const int yM = m_mesh->m_size[1];
     const int zM = m_mesh->m_size[2];
 
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
     
-    int sx = m_mesh->m_own_offset[0];
-    int sy = m_mesh->m_own_offset[1];
-    int sz = m_mesh->m_own_offset[2];
+    int sx = m_fft_offset[0];
+    int sy = m_fft_offset[1];
+    int sz = m_fft_offset[2];
     
     int ex = sx + nx;
     int ey = sy + ny;
@@ -354,13 +393,10 @@ void poisson_solver::calculate_k()
 
 void poisson_solver::solve()
 {
-    int nx = m_mesh->m_own_size[0];
-    int ny = m_mesh->m_own_size[1];
-    int nz = m_mesh->m_own_size[2];
-
     m_logger->trace("Solving Poisson's Equation now");
 
-    m_fft->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
+    m_remap->perform(&(m_mesh->m_rho[0][0][0]), m_work2, m_work1);
+    m_fft1->compute_fw(m_work2, m_work1);
 
     if(m_iris->m_compute_global_energy) {
 	kspace_eng(m_work1);
@@ -369,13 +405,13 @@ void poisson_solver::solve()
     kspace_phi(m_work1);
 
     kspace_Ex(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
+    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
     
     kspace_Ey(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
+    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
     
     kspace_Ez(m_work1, m_work2);
-    m_fft->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
+    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
 
 //    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }

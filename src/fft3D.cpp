@@ -39,22 +39,41 @@
 
 using namespace ORG_NCSA_IRIS;
 
-fft3d::fft3d(class iris *obj)
+fft3d::fft3d(class iris *obj,
+	     int *in_in_offset, int *in_in_size,
+	     int *in_out_offset, int *in_out_size,
+	     char *in_name)
     : state_accessor(obj), m_grids { NULL, NULL, NULL },
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_own_offset { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_remaps { NULL, NULL, NULL, NULL },
     m_fw_plans { NULL, NULL, NULL },
     m_bk_plans { NULL, NULL, NULL },
-    m_scratch(NULL)
-{
-
+    m_scratch(NULL),
+    m_name(in_name)
+{    
 #if defined _OPENMP
 #if defined FFT_FFTW
     FFTW_(init_threads);
     FFTW_(plan_with_nthreads(m_iris->m_nthreads));
 #endif
 #endif
+
+    m_in_offset[0] = in_in_offset[0];
+    m_in_offset[1] = in_in_offset[1];
+    m_in_offset[2] = in_in_offset[2];
+
+    m_in_size[0] = in_in_size[0];
+    m_in_size[1] = in_in_size[1];
+    m_in_size[2] = in_in_size[2];
+
+    m_out_offset[0] = in_out_offset[0];
+    m_out_offset[1] = in_out_offset[1];
+    m_out_offset[2] = in_out_offset[2];
+
+    m_out_size[0] = in_out_size[0];
+    m_out_size[1] = in_out_size[1];
+    m_out_size[2] = in_out_size[2];
 
     for(int i=0;i<3;i++) {
 	setup_grid(i);
@@ -133,23 +152,23 @@ void fft3d::setup_grid(int in_which)
     const char *grid_name;
     switch(in_which) {
     case 0:
-	grid_name = "1D-FFT-Z";
+	grid_name = "FFT-Z";
 	last = 1;
 	zp1 = 1; yp1 = 1; xp1 = 0;
 	zp2 = 1; yp2 = 0; xp2 = 0;
 	break;
 	
     case 1:
-	grid_name = "1D-FFT-Y";
+	grid_name = "FFT-Y";
 	last = 0;
-	yp1 = 1; zp1 = 1; xp1 = 0;
+	yp1 = 1; zp1 = 0; xp1 = 0;
 	yp2 = 1; zp2 = 0; xp2 = 0;
 	break;
 
     case 2:
-	grid_name = "1D-FFT-X";
+	grid_name = "FFT-X";
 	last = 2;
-	xp1 = 1; yp1 = 1; zp1 = 0;
+	xp1 = 1; yp1 = 0; zp1 = 0;
 	xp2 = 1; yp2 = 0; zp2 = 0;
 	break;
     }
@@ -191,41 +210,38 @@ void fft3d::setup_grid(int in_which)
 //  = 4 for remap from m_grids[3] to m_mesh
 void fft3d::setup_remap(int in_which)
 {
-
+    char remap_name[256];
     switch(in_which) {
     case 0:  // XYZ -> XYZ
+	sprintf(remap_name, "%s_remap0", m_name);
 	m_remaps[in_which] = new remap(m_iris,
-				       m_mesh->m_own_offset,  // from m_mesh
-				       m_mesh->m_own_size,
+				       m_in_offset,  // from m_mesh
+				       m_in_size,
 				       m_own_offset[0],       // to m_grids[0]
 				       m_own_size[0],
 				       2,                     // complex
-				       0, "remap0");          // no permutation
+				       0, remap_name);      // no permutation
 	break;
 
     case 1:  // XYZ -> ZXY
+	sprintf(remap_name, "%s_remap1", m_name);
 	m_remaps[in_which] = new remap(m_iris,
 				       m_own_offset[0],       // from m_grids[0]
 				       m_own_size[0],
 				       m_own_offset[1],       // to m_grids[1]
 				       m_own_size[1],
 				       2,                     // complex
-				       1, "remap1");          // x<-y<-z<-x
+				       1, remap_name);      // x<-y<-z<-x
 	break;
 
     case 2:  // ZXY -> YZX
 	{
+	    sprintf(remap_name, "%s_remap2", m_name);
 	    int t_own_offset1[3];
 	    int t_own_size1[3];
 	    int t_own_offset2[3];
 	    int t_own_size2[3];
 
-	    t_own_offset1[0] = m_own_offset[1][2];
-	    t_own_offset1[1] = m_own_offset[1][0];
-	    t_own_offset1[2] = m_own_offset[1][1];
-	    t_own_size1[0] = m_own_size[1][2];
-	    t_own_size1[1] = m_own_size[1][0];
-	    t_own_size1[2] = m_own_size[1][1];
 	    t_own_offset1[0] = m_own_offset[1][2];
 	    t_own_offset1[1] = m_own_offset[1][0];
 	    t_own_offset1[2] = m_own_offset[1][1];
@@ -246,12 +262,13 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1, "remap2");
+					   1, remap_name);
 	}
 	break;
 
     case 3:  // ZXY -> XYZ
 	{
+	    sprintf(remap_name, "%s_remap3", m_name);
 	    int t_own_offset1[3];
 	    int t_own_size1[3];
 	    int t_own_offset2[3];
@@ -263,19 +280,13 @@ void fft3d::setup_remap(int in_which)
 	    t_own_size1[0] = m_own_size[2][1];
 	    t_own_size1[1] = m_own_size[2][2];
 	    t_own_size1[2] = m_own_size[2][0];
-	    t_own_offset1[0] = m_own_offset[2][1];
-	    t_own_offset1[1] = m_own_offset[2][2];
-	    t_own_offset1[2] = m_own_offset[2][0];
-	    t_own_size1[0] = m_own_size[2][1];
-	    t_own_size1[1] = m_own_size[2][2];
-	    t_own_size1[2] = m_own_size[2][0];
 
-	    t_own_offset2[0] = m_mesh->m_own_offset[1];
-	    t_own_offset2[1] = m_mesh->m_own_offset[2];
-	    t_own_offset2[2] = m_mesh->m_own_offset[0];
-	    t_own_size2[0] = m_mesh->m_own_size[1];
-	    t_own_size2[1] = m_mesh->m_own_size[2];
-	    t_own_size2[2] = m_mesh->m_own_size[0];
+	    t_own_offset2[0] = m_out_offset[1];
+	    t_own_offset2[1] = m_out_offset[2];
+	    t_own_offset2[2] = m_out_offset[0];
+	    t_own_size2[0] = m_out_size[1];
+	    t_own_size2[1] = m_out_size[2];
+	    t_own_size2[2] = m_out_size[0];
 
 	    m_remaps[in_which] = new remap(m_iris,
 					   t_own_offset1,
@@ -283,7 +294,7 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1, "remap3");
+					   1, remap_name);
 	}
 	break;
     }
@@ -316,11 +327,11 @@ void fft3d::setup_plans(int in_which)
 	FFTW_(plan_many_dft)(1,       // 1D
 			     &n,      // M elements
 			     howmany, // NxP times
-			     NULL,    // input, why is NULL ???
+			     NULL,    // input
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous input
 			     n,       // distance to the next transform's data
-			     NULL,    // output, why is NULL ???
+			     NULL,    // output
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous output
 			     n,       // distance to the next transform's data
@@ -330,11 +341,11 @@ void fft3d::setup_plans(int in_which)
 	FFTW_(plan_many_dft)(1,       // 1D
 			     &n,      // M elements
 			     howmany, // NxP times
-			     NULL,    // input, why is NULL ???
+			     NULL,    // input
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous input
 			     n,       // distance to the next transform's data
-			     NULL,    // output, why is NULL ???
+			     NULL,    // output
 			     NULL,    // same physical as logical dimension
 			     1,       // contiguous output
 			     n,       // distance to the next transform's data
