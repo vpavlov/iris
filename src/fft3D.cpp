@@ -78,6 +78,12 @@ fft3d::fft3d(class iris *obj)
 
 fft3d::~fft3d()
 {
+    m_iris->m_logger->trace("Remap0 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[0].read_wall(), tm1[0].read_cpu(), (tm1[0].read_cpu() * 100.0) /tm1[0].read_wall());
+    m_iris->m_logger->trace("Remap1 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[1].read_wall(), tm1[1].read_cpu(), (tm1[1].read_cpu() * 100.0) /tm1[1].read_wall());
+    m_iris->m_logger->trace("Remap2 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[2].read_wall(), tm1[2].read_cpu(), (tm1[2].read_cpu() * 100.0) /tm1[2].read_wall());
+    m_iris->m_logger->trace("Remap3 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[3].read_wall(), tm1[3].read_cpu(), (tm1[3].read_cpu() * 100.0) /tm1[3].read_wall());
+    m_iris->m_logger->trace("FFT wall/cpu time %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+
     memory::destroy_1d(m_scratch);
 
     for(int i=0;i<3;i++) {
@@ -129,8 +135,8 @@ void fft3d::setup_grid(int in_which)
     case 0:
 	grid_name = "1D-FFT-Z";
 	last = 1;
-	zp1 = 1; xp1 = 1; yp1 = 0;
-	zp2 = 1; xp2 = 0; yp2 = 0;
+	zp1 = 1; yp1 = 1; xp1 = 0;
+	zp2 = 1; yp2 = 0; xp2 = 0;
 	break;
 	
     case 1:
@@ -194,7 +200,7 @@ void fft3d::setup_remap(int in_which)
 				       m_own_offset[0],       // to m_grids[0]
 				       m_own_size[0],
 				       2,                     // complex
-				       0);                    // no permutation
+				       0, "remap0");          // no permutation
 	break;
 
     case 1:  // XYZ -> ZXY
@@ -204,7 +210,7 @@ void fft3d::setup_remap(int in_which)
 				       m_own_offset[1],       // to m_grids[1]
 				       m_own_size[1],
 				       2,                     // complex
-				       1);                    // x<-y<-z<-x
+				       1, "remap1");          // x<-y<-z<-x
 	break;
 
     case 2:  // ZXY -> YZX
@@ -240,7 +246,7 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1);
+					   1, "remap2");
 	}
 	break;
 
@@ -277,7 +283,7 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1);
+					   1, "remap3");
 	}
 	break;
     }
@@ -348,7 +354,9 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
     }
 
     for(int i=0;i<3;i++) {
+      tm1[i].start();
 	m_remaps[i]->perform(dest, dest, m_scratch);
+	tm1[i].stop();
 
 	// m_logger->trace("AFTER REMAP %d", i);
 	// for(int j=0;j<m_count;j++) {
@@ -356,13 +364,13 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 	// 		    j, dest[j*2+0], dest[j*2+1]);
 	// }
 
-
+	tm2.start();
 #ifdef FFT_FFTW
 	FFTW_(execute_dft)(m_fw_plans[i],
 			   (complex_t *)dest,
 			   (complex_t *)dest);
 #endif
-
+	tm2.stop();
 	// m_logger->trace("AFTER FFT %d", i);
 	// for(int j=0;j<m_count;j++) {
 	//     m_logger->trace("FFT[%d] = %.15g + j*%.15g",
@@ -371,7 +379,9 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 
     }
 
+    tm1[3].start();
     m_remaps[3]->perform(dest, dest, m_scratch);
+    tm1[3].stop();
 
     // m_logger->trace("AFTER FINAL REMAP");
     // for(int j=0;j<m_count;j++) {
@@ -386,17 +396,22 @@ iris_real *fft3d::compute_fw(iris_real *src, iris_real *dest)
 void fft3d::compute_bk(iris_real *src, iris_real *dest)
 {
     for(int i=0;i<3;i++) {
+      tm1[i].start();
 	m_remaps[i]->perform(src, src, m_scratch);
+	tm1[i].stop();
 
+	tm2.start();
 #ifdef FFT_FFTW
 	FFTW_(execute_dft)(m_bk_plans[i],
 			   (complex_t *)src,
 			   (complex_t *)src);
 #endif
-
+	tm2.stop();
     }
 
+        tm1[3].start();
     m_remaps[3]->perform(src, src, m_scratch);
+    	tm1[3].stop();
 
     // send data to the mesh
     int j = 0;

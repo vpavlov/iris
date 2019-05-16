@@ -87,6 +87,8 @@ void mesh::set_size(int nx, int ny, int nz)
     m_dirty = true;
     m_logger->trace("Discretization mesh is %d x %d x %d",
 		    m_size[0], m_size[1], m_size[2]);
+	m_logger->info("Number of mesh nodes: %d",
+		m_size[0] * m_size[1] * m_size[2]);
 }
 
 void mesh::commit()

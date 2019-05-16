@@ -32,6 +32,7 @@
 #define __IRIS_FFT3D_H__
 
 #include "state_accessor.h"
+#include "timer.h"
 
 #ifdef FFT_FFTW
 
@@ -83,6 +84,8 @@ namespace ORG_NCSA_IRIS {
 	int m_own_offset[3][3];    // offsets for each of the grid
 	class remap *m_remaps[4];  // remaps between mesh->1d ffts->mesh
 	iris_real *m_scratch;      // scratch space for remapping
+
+	timer tm1[4], tm2;
 
 #ifdef FFT_FFTW
 	FFTW_(plan) m_fw_plans[3];

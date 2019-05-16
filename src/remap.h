@@ -43,12 +43,13 @@ namespace ORG_NCSA_IRIS {
 	      int *in_from_offset, int *in_from_size, 
 	      int *in_to_offset, int *in_to_size, 
 	      int in_unit_size,
-	      int in_permute);
+	      int in_permute, char *in_name);
 	~remap();
 
 	void perform(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
 
     private:
+      char *m_name;
 	box_t<int> m_from;
 	box_t<int> m_to;
 	int m_nsend;  // number of items to send

@@ -15,10 +15,6 @@ iris_real g_boxx, g_boxy, g_boxz;
 
 #define CUTOFF 10  // 10 angstroms
 
-#define M 128
-#define N 128
-#define P 128
-
 using namespace ORG_NCSA_IRIS;
 
 int natoms;
@@ -412,7 +408,7 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
-	//x->set_mesh_size(128, 64, 64);
+	x->set_mesh_size(128, 128, 128);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
     x->set_order(3);
 	//x->set_mesh_size(108, 108, 108);

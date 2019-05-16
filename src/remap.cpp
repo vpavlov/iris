@@ -45,9 +45,10 @@ remap::remap(class iris *obj,
 	     int *in_from_offset, int *in_from_size, 
 	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
-	     int in_permute)
+	     int in_permute,
+	     char *in_name)
     : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
-      m_nrecv(0)
+      m_nrecv(0), m_name(in_name)
 {
     m_from.xlo = in_from_offset[0];
     m_from.ylo = in_from_offset[1];
@@ -90,12 +91,28 @@ remap::remap(class iris *obj,
     // Find out how many we need to send by counting the overlapping boxes
     int nsend = 0;
     for(int i=0;i<m_local_comm->m_size;i++) {
+
 	box_t<int> overlap = m_from && to[i];  // find intersection
+
+	m_logger->trace("%s m_from [%d:%d][%d:%d][%d:%d] to[%d] [%d:%d][%d:%d][%d:%d] overlap [%d:%d][%d:%d][%d:%d]",
+			m_name,
+			m_from.xlo, m_from.xhi,
+			m_from.ylo, m_from.yhi,
+			m_from.zlo, m_from.zhi,
+			i,
+			to[i].xlo, to[i].xhi,
+			to[i].ylo, to[i].yhi,
+			to[i].zlo, to[i].zhi,
+			overlap.xlo, overlap.xhi,
+			overlap.ylo, overlap.yhi,
+			overlap.zlo, overlap.zhi);
+
 	if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
 	    nsend++;
 	}
     }
 
+    m_logger->trace("%s nsend = %d", m_name, nsend);
     // For each overlapping box, create a plan to send and store it in the
     // array of plans
     if(nsend) {

@@ -204,6 +204,9 @@ iris::~iris()
 	delete m_domain;
     }
 
+	if(m_solver != NULL) {
+		delete m_solver;
+	}
     m_logger->trace("Shutting down node");  // before m_uber_comm
     delete m_logger;
 
@@ -896,9 +899,9 @@ int iris::h_estimate(int dim, iris_real alpha, iris_real eps)
 // Return true if N has at least K integer factors.
 bool iris::good_factor_quality(int n)
 {
-	if(n % m_server_size != 0) {
-		return false;
-	}
+//	if(n % m_server_size != 0) {
+//		return false;
+//	}
 
     int *factors;
     int *powers;

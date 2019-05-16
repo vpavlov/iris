@@ -60,6 +60,9 @@ poisson_solver::~poisson_solver()
     memory::destroy_1d(m_work1);
     memory::destroy_1d(m_work2);
     memory::destroy_1d(m_work3);
+	if(m_fft) {
+		delete m_fft;
+	}
 }
 
 void poisson_solver::commit()
@@ -374,5 +377,5 @@ void poisson_solver::solve()
     kspace_Ez(m_work1, m_work2);
     m_fft->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
 
-    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
+//    m_fft->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
 }
