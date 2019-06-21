@@ -97,11 +97,11 @@ fft3d::fft3d(class iris *obj,
 
 fft3d::~fft3d()
 {
-    m_iris->m_logger->trace("Remap0 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[0].read_wall(), tm1[0].read_cpu(), (tm1[0].read_cpu() * 100.0) /tm1[0].read_wall());
-    m_iris->m_logger->trace("Remap1 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[1].read_wall(), tm1[1].read_cpu(), (tm1[1].read_cpu() * 100.0) /tm1[1].read_wall());
-    m_iris->m_logger->trace("Remap2 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[2].read_wall(), tm1[2].read_cpu(), (tm1[2].read_cpu() * 100.0) /tm1[2].read_wall());
-    m_iris->m_logger->trace("Remap3 wall/cpu time %lf/%lf (%.2lf%% util)", tm1[3].read_wall(), tm1[3].read_cpu(), (tm1[3].read_cpu() * 100.0) /tm1[3].read_wall());
-    m_iris->m_logger->trace("FFT wall/cpu time %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+    m_iris->m_logger->info("%s Remap0 wall/cpu time %lf/%lf (%.2lf%% util)", m_name, tm1[0].read_wall(), tm1[0].read_cpu(), (tm1[0].read_cpu() * 100.0) /tm1[0].read_wall());
+    m_iris->m_logger->info("%s Remap1 wall/cpu time %lf/%lf (%.2lf%% util)", m_name, tm1[1].read_wall(), tm1[1].read_cpu(), (tm1[1].read_cpu() * 100.0) /tm1[1].read_wall());
+    m_iris->m_logger->info("%s Remap2 wall/cpu time %lf/%lf (%.2lf%% util)", m_name, tm1[2].read_wall(), tm1[2].read_cpu(), (tm1[2].read_cpu() * 100.0) /tm1[2].read_wall());
+    m_iris->m_logger->info("%s Remap3 wall/cpu time %lf/%lf (%.2lf%% util)", m_name, tm1[3].read_wall(), tm1[3].read_cpu(), (tm1[3].read_cpu() * 100.0) /tm1[3].read_wall());
+    m_iris->m_logger->info("%s FFT wall/cpu time %lf/%lf (%.2lf%% util)", m_name, tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
 
     memory::destroy_1d(m_scratch);
 
