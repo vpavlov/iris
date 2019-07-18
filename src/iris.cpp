@@ -53,6 +53,7 @@ using namespace ORG_NCSA_IRIS;
 #define _SQRT_PI  1.772453850905516027298167483341
 #define _SQRT_2PI 2.506628274631000502415765284811
 #define _2PI      6.283185307179586476925286766559
+#define _PI2      1.570796326794896619231321691639
 
 #define FACTOR_QUALITY_THRESHOLD 3
 
@@ -622,10 +623,14 @@ void iris::solve()
 
 	MPI_Allreduce(&m_global_energy, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
 	m_global_energy = etot;
+	m_logger->info("etot1 = %f", m_global_energy);
 	m_global_energy *= 0.5 * volume;
+	m_logger->info("etot2 = %f", m_global_energy);
 	m_global_energy -= m_alpha * m_mesh->m_q2tot / _SQRT_PI + 
-	    _2PI * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
+	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
+	m_logger->info("etot3 = %f", m_global_energy);
 	m_global_energy *= m_units->ecf;
+	m_logger->info("etot4 = %f", m_global_energy);
     }
 }
 
@@ -786,7 +791,7 @@ void iris::atp_scenario1()
     int nz = h_estimate(2, alpha, eps);
     m_mesh->set_size(nx, ny, nz);
     m_alpha = root_of(opt_acc_fn, alpha, this);
-    m_logger->trace("  Final   α = %f; ε = %g", m_alpha, m_accuracy);
+    m_logger->info("  Final   α = %f; ε = %g", m_alpha, m_accuracy);
 }
 
 // Based on [1], equation (23) for the real-space contribution to the error

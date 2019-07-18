@@ -390,12 +390,12 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 	    m_chass->compute_weights(dx, dy, dz);
 	    
 	    iris_real t0 = m_mesh->m_h3inv * in_charges[n*5 + 3];  // q/V
-	    for(int i = 0; i < m_chass->m_order; i++) {
-		iris_real t1 = t0 * m_chass->m_weights[tid][0][i];
-		for(int j = 0; j < m_chass->m_order; j++) {
-		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j];
-		    for(int k = 0; k < m_chass->m_order; k++) {
-			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
+	    for(int i = m_chass->m_ics_from; i <= m_chass->m_ics_to; i++) {
+		iris_real t1 = t0 * m_chass->m_weights[tid][0][i-m_chass->m_ics_from];
+		for(int j = m_chass->m_ics_from; j <= m_chass->m_ics_to; j++) {
+		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j-m_chass->m_ics_from];
+		    for(int k = m_chass->m_ics_from; k <= m_chass->m_ics_to; k++) {
+			iris_real t3 = t2 * m_chass->m_weights[tid][2][k-m_chass->m_ics_from];
 
 			// If it moves out of the thread's area, no need
 			// to bother with the rest of the cycle (since
@@ -938,19 +938,41 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    iris_real dx = ix - tx + m_chass->m_ics_center;
 	    iris_real dy = iy - ty + m_chass->m_ics_center;
 	    iris_real dz = iz - tz + m_chass->m_ics_center;
-	    
+
+	    printf("%f %f %f: %f %f %f, %d %d %d, %f %f %f\n",
+		   in_charges[n*5+0],
+		   in_charges[n*5+1],
+		   in_charges[n*5+2],
+		   tx, ty, tz,
+		   ix, iy, iz,
+		   dx, dy, dz);
+
 	    m_chass->compute_weights(dx, dy, dz);
 	    
+	    printf("%f %f %f; %f %f %f; %f %f %f\n",
+		   m_chass->m_weights[tid][0][0],
+		   m_chass->m_weights[tid][0][1],
+		   m_chass->m_weights[tid][0][2],
+
+		   m_chass->m_weights[tid][1][0],
+		   m_chass->m_weights[tid][1][1],
+		   m_chass->m_weights[tid][1][2],
+
+		   m_chass->m_weights[tid][2][0],
+		   m_chass->m_weights[tid][2][1],
+		   m_chass->m_weights[tid][2][2]);
+
+
 	    iris_real ekx = 0.0;
 	    iris_real eky = 0.0;
 	    iris_real ekz = 0.0;
 	    
-	    for(int i = 0; i < m_chass->m_order; i++) {
-		iris_real t1 = m_chass->m_weights[tid][0][i];
-		for(int j = 0; j < m_chass->m_order; j++) {
-		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j];
-		    for(int k = 0; k < m_chass->m_order; k++) {
-			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
+	    for(int i = m_chass->m_ics_from; i <= m_chass->m_ics_to; i++) {
+		iris_real t1 = m_chass->m_weights[tid][0][i-m_chass->m_ics_from];
+		for(int j = m_chass->m_ics_from; j <= m_chass->m_ics_to; j++) {
+		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j-m_chass->m_ics_from];
+		    for(int k = m_chass->m_ics_from; k <= m_chass->m_ics_to; k++) {
+			iris_real t3 = t2 * m_chass->m_weights[tid][2][k-m_chass->m_ics_from];
 			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
 			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
 			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];

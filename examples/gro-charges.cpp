@@ -13,16 +13,16 @@
 //#define M 72
 //#define N 72
 //#define P 48
-#define M 54
-#define N 54
-#define P 54
+#define M 128
+#define N 128
+#define P 128
 
 //#define BOXX 7.9074997901916504
 //#define BOXY 7.9074997901916504
 //#define BOXZ 5.5914998054504395
-#define BOXX 10.0
-#define BOXY 10.0
-#define BOXZ 10.0
+#define BOXX 100.0
+#define BOXY 100.0
+#define BOXZ 100.0
 
 //#define ATOMS 34573
 #define ATOMS 2
@@ -381,10 +381,11 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(0.0, 0.0, 0.0, BOXX, BOXY, BOXZ);
     x->set_mesh_size(M, N, P);
-    x->set_order(3);
+    x->set_order(2);
     // 1/ε = -138.93545768032754292204224841008
     //x->set_rho_multiplier(1745.9144526866105);
-    x->set_alpha(2.3053423352800846);
+    x->config_auto_tune(ATOMS, 8.0, 10.0);
+    x->set_accuracy(1e-4, true);
     x->commit();
 
 
