@@ -27,28 +27,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <cmath>
-#include "poisson_solver.h"
-#include "domain.h"
-#include "mesh.h"
-#include "charge_assigner.h"
-#include "memory.h"
-#include "math_util.h"
-#include "logger.h"
-#include "fft3D.h"
-#include "openmp.h"
-#include "timer.h"
-#include "remap.h"
-#include "grid.h"
+#ifndef __IRIS_HALOEX_H__
+#define __IRIS_HALOEX_H__
 
-using namespace ORG_NCSA_IRIS;
+#include <mpi.h>
+#include "real.h"
 
-poisson_solver::poisson_solver(class iris *obj)
-    : state_accessor(obj), m_dirty(true)
-{
-};
+namespace ORG_NCSA_IRIS {
 
-poisson_solver::~poisson_solver()
-{
+    class haloex {
+
+    public:
+	haloex(MPI_Comm in_comm, int *in_hood,
+	       int in_mode,
+	       iris_real ***in_data,
+	       int *in_data_size,
+	       int in_left_size,
+	       int in_right_size,
+	       int in_tag);
+
+	~haloex();
+
+	void exch_x() { exch(0); };
+	void exch_y() { exch(1); };
+	void exch_z() { exch(2); };
+	void exch_full() { exch_x(); exch_y(); exch_z(); };
+
+    private:
+
+	void send(int in_dim, int in_dir);
+	void recv(int in_dim, int in_dir);
+	void exch(int in_dim);
+	MPI_Comm m_comm;
+	int *m_hood;
+	int m_mode;
+	iris_real ***m_data;
+	int *m_data_size;
+	int m_left_size;
+	int m_right_size;
+	int m_tag;
+
+	iris_real *m_sendbufs[6];
+	iris_real *m_recvbufs[6];
+
+	MPI_Request m_req[6];
+    };
+
 }
 
+#endif

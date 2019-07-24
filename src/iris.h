@@ -45,6 +45,9 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_ROLE_CLIENT 0b01
 #define IRIS_ROLE_SERVER 0b10
 
+#define IRIS_SOLVER_P3M  0x01
+#define IRIS_SOLVER_CG   0x02
+
     static const iris_real _4PI = 12.566370614359172;
 
     // type of function called to set pieces of the right-hand side
@@ -97,6 +100,8 @@ namespace ORG_NCSA_IRIS {
 
 	// Sets or resets the interpolation/stencil order
 	void set_order(int order);
+	void set_gaussian_width(int nsigmas);
+	void set_solver(int in_solver);
 
 	// Sets or resets the simulation box extents. Has no effect if called
 	// from a purely client node.
@@ -188,8 +193,10 @@ namespace ORG_NCSA_IRIS {
 	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
 	int  h_estimate(int dim, iris_real alpha, iris_real eps);
 	bool good_factor_quality(int n);
+	class poisson_solver *get_solver();
 
     public:
+	int m_which_solver;            // P3M, CG, ...
 	int m_client_size;             // # of client nodes
 	int m_server_size;             // # of server nodes
 	int m_role;                    // is this node client or server or both

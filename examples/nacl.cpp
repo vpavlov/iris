@@ -408,11 +408,13 @@ main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
-	x->set_mesh_size(512, 512, 512);
+    //x->set_mesh_size(512, 512, 512);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
+    x->set_gaussian_width(6);
     x->set_order(3);
-	//x->set_mesh_size(108, 108, 108);
+    //x->set_mesh_size(108, 108, 108);
     x->set_accuracy(1e-4, true);
+    x->set_solver(IRIS_SOLVER_CG);
     x->commit();
 
 
@@ -484,6 +486,7 @@ main(int argc, char **argv)
     x->m_logger->info("Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 
     if(x->is_server()) {
+	x->m_mesh->dump_ascii("phi-cg", x->m_mesh->m_phi);
 	//x->m_mesh->dump_bov("RHO", x->m_mesh->m_rho);
 	//x->m_mesh->check_fxyz();
 	//x->m_mesh->dump_exyz("field");

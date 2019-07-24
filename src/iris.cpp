@@ -43,6 +43,8 @@
 #include "memory.h"
 #include "tags.h"
 #include "poisson_solver.h"
+#include "poisson_solver_p3m.h"
+#include "poisson_solver_cg.h"
 #include "timer.h"
 #include "utils.h"
 #include "factorizer.h"
@@ -119,6 +121,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_hx_free = true;
     m_hy_free = true;
     m_hz_free = true;
+    m_which_solver = IRIS_SOLVER_P3M;
     m_dirty = true;
 
     m_compute_global_energy = true;
@@ -172,7 +175,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_proc_grid = new proc_grid(this);
 	m_mesh = new mesh(this);
 	m_chass = new charge_assigner(this);
-	m_solver = new poisson_solver(this);
     }
 
     m_quit = false;
@@ -205,9 +207,10 @@ iris::~iris()
 	delete m_domain;
     }
 
-	if(m_solver != NULL) {
-		delete m_solver;
-	}
+    if(m_solver != NULL) {
+	delete m_solver;
+    }
+
     m_logger->trace("Shutting down node");  // before m_uber_comm
     delete m_logger;
 
@@ -261,6 +264,14 @@ void iris::set_order(int in_order)
     }
 }
 
+void iris::set_gaussian_width(int in_nsigmas)
+{
+    if(is_server()) {
+	m_mesh->set_gaussian_width(in_nsigmas);
+    }
+}
+
+
 void iris::set_mesh_size(int nx, int ny, int nz)
 {
     if(is_server()) {
@@ -308,11 +319,22 @@ void iris::set_grid_pref(int x, int y, int z)
     }
 }
 
+void iris::set_solver(int in_which_solver)
+{
+    m_which_solver = in_which_solver;
+    m_dirty = true;
+}
+
 void iris::commit()
 {
     if(is_server()) {
 	if(m_dirty) {
 	    auto_tune_parameters();
+
+	    if(m_solver != NULL) {
+		delete m_solver;
+	    }
+	    m_solver = get_solver();
 	    m_dirty = false;
 	}
 
@@ -321,7 +343,7 @@ void iris::commit()
 	m_chass->commit();      // does not depend on anything
 	m_proc_grid->commit();  // does not depend on anything
 	m_domain->commit();     // depends on m_proc_grid
-	m_mesh->commit();       // depends on m_proc_grid and m_chass
+	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
 	m_solver->commit();     // depends on m_mesh
     }
 }
@@ -924,3 +946,13 @@ bool iris::good_factor_quality(int n)
     }
 }
 
+poisson_solver *iris::get_solver()
+{
+    switch(m_which_solver) {
+    case IRIS_SOLVER_P3M:
+	return new poisson_solver_p3m(this);
+
+    case IRIS_SOLVER_CG:
+	return new poisson_solver_cg(this);
+    }
+}

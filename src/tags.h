@@ -34,19 +34,16 @@
 #define IRIS_TAG_CHARGES_ACK         4
 #define IRIS_TAG_COMMIT_CHARGES      5
 #define IRIS_TAG_QUIT                6
-#define IRIS_TAG_RHO_HALO            7   // ..._RHO_HALOx must be consequitive
-#define IRIS_TAG_RHO_HALO2           8   
-#define IRIS_TAG_RHO_HALO3           9
-#define IRIS_TAG_RHO_HALO4          10
-#define IRIS_TAG_RHO_HALO5          11
-#define IRIS_TAG_RHO_HALO6          12
+#define IRIS_TAG_RHO_HALO            7   // leave room for 6 halo msgs
 #define IRIS_TAG_REMAP              13
-#define IRIS_TAG_FIELD_HALO         14   // ..._FIELD_HALOx must be consequitive
-#define IRIS_TAG_FIELD_HALO2        15   
-#define IRIS_TAG_FIELD_HALO3        16
-#define IRIS_TAG_FIELD_HALO4        17
-#define IRIS_TAG_FIELD_HALO5        18
-#define IRIS_TAG_FIELD_HALO6        19
-#define IRIS_TAG_FORCES             20
-#define IRIS_TAG_GET_GLOBAL_ENERGY  21
-#define IRIS_TAG_GLOBAL_ENERGY      22
+#define IRIS_TAG_EX_HALO            14   // leave room for 6 halo msgs
+#define IRIS_TAG_EY_HALO            20   // leave room for 6 halo msgs
+#define IRIS_TAG_EZ_HALO            26   // leave room for 6 halo msgs
+#define IRIS_TAG_FORCES             32
+#define IRIS_TAG_GET_GLOBAL_ENERGY  33
+#define IRIS_TAG_GLOBAL_ENERGY      34
+#define IRIS_TAG_GX_HALO            35   // leave room for 6 halo msgs
+#define IRIS_TAG_GY_HALO            41   // leave room for 6 halo msgs
+#define IRIS_TAG_GZ_HALO            47   // leave room for 6 halo msgs
+#define IRIS_TAG_PHI_HALO           53   // leave room for 6 halo msgs
+#define IRIS_TAG_P_HALO             59   // leave room for 6 halo msgs
