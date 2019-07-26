@@ -11,7 +11,7 @@ main()
     d_dx.commit();
     d_dx.trace("d/dx");
 
-    laplacian3D_pade del2(0, 4, false, 1.0, 1.0, 1.0);
+    laplacian3D_pade del2(0, 0, false, 0.1, 0.2, 0.3);
     del2.commit();
-    del2.trace2("D[0,4]");
+    del2.trace2("D[2,0]");
 }

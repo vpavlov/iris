@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -35,8 +35,6 @@
 
 namespace ORG_NCSA_IRIS {
 
-    class haloex;
-
     class mesh : protected state_accessor {
 
     public:
@@ -44,7 +42,6 @@ namespace ORG_NCSA_IRIS {
 	~mesh();
 
 	void set_size(int nx, int ny, int nz);
-	void set_gaussian_width(int nsigmas);
 
 	// commit configuration. Perform all preliminary calculations based on
 	// configuration and prepare all that is needed in order to
@@ -65,17 +62,8 @@ namespace ORG_NCSA_IRIS {
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
 
-	void convolve_with_gaussian();
-
     private:
 
-	void prepare_for_gx();
-	void prepare_for_gy();
-	void prepare_for_gz();
-	void add_gx();
-	void add_gy();
-	void add_gz();
-	void extract_rho_from_gauss1();
 
 	void assign_charges1(int in_ncharges, iris_real *in_charges);
 	void assign_forces1(int in_ncharges, iris_real *in_charges,
@@ -105,15 +93,11 @@ namespace ORG_NCSA_IRIS {
 	int       m_own_size[3];    // local mesh size: my portion only
 	int       m_own_offset[3];  // where does my mesh start from 
 	int       m_ext_size[3];    // local mesh + ass/interpol halo items
-	int       m_ext2_size[3];   // local + gaussian halo items
 
-	haloex    *m_rho_haloex;
-	haloex    *m_Ex_haloex;
-	haloex    *m_Ey_haloex;
-	haloex    *m_Ez_haloex;
-	haloex    *m_Gx_haloex;
-	haloex    *m_Gy_haloex;
-	haloex    *m_Gz_haloex;
+	class haloex *m_rho_haloex;
+	class haloex *m_Ex_haloex;
+	class haloex *m_Ey_haloex;
+	class haloex *m_Ez_haloex;
 
 	iris_real m_qtot;  // total charge (must be 0)
 	iris_real m_q2tot; // total charge squared (must be != 0)
@@ -122,14 +106,8 @@ namespace ORG_NCSA_IRIS {
 	std::map<int, iris_real *> m_charges;    // per sending rank
 	std::map<int, iris_real *> m_forces;     // per recv rank
 
-	iris_real m_gauss_nsigmas;
-	int m_gauss_width[3];
-
 	iris_real ***m_rho;  // own charge density (ρ), part of RHS
 	iris_real ***m_rho_plus;  // ρ, own + halo items
-
-	iris_real ***m_rho_gauss1;  // ρ, own + halo items + gaussian halo
-	iris_real ***m_rho_gauss2;  // ρ, own + halo items + gaussian halo
 
 	iris_real ***m_phi;  // potential φ (unknown in the LHS)
 	iris_real ***m_Ex;   // Electical field x component

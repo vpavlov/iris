@@ -37,6 +37,7 @@
 #include "box.h"
 #include "event.h"
 #include "units.h"
+#include "solver_param.h"
 
 namespace ORG_NCSA_IRIS {
 
@@ -98,9 +99,20 @@ namespace ORG_NCSA_IRIS {
 	// force between two elementary charges 1 angstrom apart.
 	void set_accuracy(iris_real in_accuracy, bool is_relative);
 
-	// Sets or resets the interpolation/stencil order
+	// Sets charge assignment/force interpolation order
 	void set_order(int order);
-	void set_gaussian_width(int nsigmas);
+
+	void set_solver_param(int in_idx, solver_param_t in_value);
+	solver_param_t get_solver_param(int in_idx)
+	{
+	    if (in_idx < IRIS_SOLVER_PARAM_CNT) {
+		return m_solver_params[in_idx];
+	    }else {
+		throw std::invalid_argument("Invalid solver param!");
+	    }
+	};
+
+
 	void set_solver(int in_solver);
 
 	// Sets or resets the simulation box extents. Has no effect if called
@@ -226,6 +238,8 @@ namespace ORG_NCSA_IRIS {
 	int       m_ny_user;
 	int       m_nz_user;
 	bool      m_dirty;
+
+	solver_param_t m_solver_params[IRIS_SOLVER_PARAM_CNT];
 
 	class comm_rec        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec        *m_local_comm;  // ...within group (client/server)

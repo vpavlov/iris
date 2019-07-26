@@ -10,22 +10,15 @@
 
 #define NSTEPS 1
 
-//#define M 72
-//#define N 72
-//#define P 48
 #define M 128
 #define N 128
 #define P 128
 
-//#define BOXX 7.9074997901916504
-//#define BOXY 7.9074997901916504
-//#define BOXZ 5.5914998054504395
 #define BOXX 100.0
 #define BOXY 100.0
 #define BOXZ 100.0
 
-//#define ATOMS 34573
-#define ATOMS 4
+#define ATOMS 2
 
 using namespace ORG_NCSA_IRIS;
 
@@ -318,7 +311,7 @@ main(int argc, char **argv)
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(MPI_COMM_WORLD);
-	x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
+	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
     }else if(mode == 1) {
 	// split the world communicator in two groups:
 	// - client group: the one that "uses" IRIS. It provides charge coords
@@ -383,11 +376,17 @@ main(int argc, char **argv)
     //x->set_mesh_size(M, N, P);
     // 1/ε = -138.93545768032754292204224841008
     //x->set_rho_multiplier(1745.9144526866105);
-    x->config_auto_tune(ATOMS, 30.0, 10.0);
-    x->set_gaussian_width(6);
-    x->set_order(3);
-    x->set_accuracy(1e-4, true);
+    x->config_auto_tune(ATOMS, 8.0, 10.0);
+
     x->set_solver(IRIS_SOLVER_CG);
+
+    solver_param_t nsigmas;
+    nsigmas.r = 4.0;
+    x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
+
+    x->set_order(2);
+    x->set_mesh_size(128, 128, 128);
+    x->set_accuracy(1e-5, true);
     x->commit();
 
 

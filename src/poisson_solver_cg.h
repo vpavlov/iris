@@ -43,27 +43,49 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 
-	// TODO: write these
 	void set_stencil_width(int in_width);
 	void set_max_iters(int in_max_iters);
 	void set_epsilon(iris_real in_epsilon);
 
     private:
+	// convolution-related helpers
+	void init_convolution();
+	void convolve_with_gaussian();
+	void prepare_for_gx();
+	void prepare_for_gy();
+	void prepare_for_gz();
+	void add_gx();
+	void add_gy();
+	void add_gz();
+	void extract_rho();
+
 	void init_stencil();
-	void init_stencil3();
+	void init_stencil_00();
+
 	void adot(iris_real ***in, iris_real ***out, class haloex *hex);
 	iris_real dot(iris_real ***v1, iris_real ***v2, bool v1_has_halo, bool v2_has_halo);
 	void axpby(iris_real a, iris_real ***x, iris_real b, iris_real ***y, iris_real ***out,
 		   bool x_has_halo, bool y_has_halo, bool out_has_halo);
 
 	// config
-	int m_stencil_width;
+	iris_real m_nsigmas;  // total width of Gaussian in # of σ's
+
+	class laplacian3D_pade *m_stencil;
+
 	int m_max_iters;
 	iris_real m_epsilon;
 
-	iris_real ***m_stencil;
 
-	int m_ext_size[3];    // size of own mesh + halo
+	// convolution-related fields
+	int           m_gauss_width[3];  // half-width of Gaussian in # of cells
+	int           m_ext2_size[3];    // size of mesh + Gaussian halo
+	iris_real  ***m_conv1;           // workspace for own ρ + gaussian halo
+	iris_real  ***m_conv2;           // workspace for own ρ + gaussian halo
+	class haloex *m_Gx_haloex;       // Gaussian halo exchanger, X dir
+	class haloex *m_Gy_haloex;       // Gaussian halo exchanger, Y dir
+	class haloex *m_Gz_haloex;       // Gaussian halo exchanger, Z dir
+
+	int m_ext_size[3];     // size of own mesh + halo
 
 	iris_real ***m_phi;   // φ - the result; needs halo
 	iris_real ***m_Ap;    // no need for halo

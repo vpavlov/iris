@@ -62,6 +62,7 @@ void units::init_real()
     this->ecf = 332.0637129954289;
     this->ang = 1.0;
     this->energy_unit = "Kcal/mol";
+    this->length_unit = "ang";
 }
 
 
@@ -74,5 +75,6 @@ void units::init_md()
     this->ecf = 138.93545751728743;
     this->ang = 0.1;
     this->energy_unit = "KJ/mol";
+    this->length_unit = "nm";
 }
 

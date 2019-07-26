@@ -27,6 +27,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#ifndef __IRIS_TAGS_H__
+#define __IRIS_TAGS_H__
 
 #define IRIS_TAG_INTERCOMM_CREATE    1
 #define IRIS_TAG_LOCAL_BOXES         2
@@ -47,3 +49,5 @@
 #define IRIS_TAG_GZ_HALO            47   // leave room for 6 halo msgs
 #define IRIS_TAG_PHI_HALO           53   // leave room for 6 halo msgs
 #define IRIS_TAG_P_HALO             59   // leave room for 6 halo msgs
+
+#endif

@@ -410,7 +410,11 @@ main(int argc, char **argv)
 		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
     //x->set_mesh_size(512, 512, 512);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
-    x->set_gaussian_width(6);
+
+    solver_param_t nsigmas;
+    nsigmas.r = 4.0;
+    x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
+
     x->set_order(3);
     //x->set_mesh_size(108, 108, 108);
     x->set_accuracy(1e-4, true);

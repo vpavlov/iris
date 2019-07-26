@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -47,13 +47,11 @@
 
 using namespace ORG_NCSA_IRIS;
 
-#define _SQRT_2 1.4142135623730951
-
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
     m_dirty(true), m_initialized(false), m_phi(NULL),
     m_Ex(NULL), m_Ey(NULL), m_Ez(NULL), m_Ex_plus(NULL), m_Ey_plus(NULL),
-    m_Ez_plus(NULL), m_gauss_nsigmas(0), m_gauss_width{0, 0, 0}, m_rho_gauss1(NULL), m_rho_gauss2(NULL), m_rho_haloex(NULL), m_Ex_haloex(NULL), m_Ey_haloex(NULL), m_Ez_haloex(NULL), m_Gx_haloex(NULL), m_Gy_haloex(NULL), m_Gz_haloex(NULL)
+    m_Ez_plus(NULL), m_rho_haloex(NULL), m_Ex_haloex(NULL), m_Ey_haloex(NULL), m_Ez_haloex(NULL)
 {
 }
 
@@ -61,8 +59,6 @@ mesh::~mesh()
 {
     memory::destroy_3d(m_rho);
     memory::destroy_3d(m_rho_plus);
-    memory::destroy_3d(m_rho_gauss1);
-    memory::destroy_3d(m_rho_gauss2);
     memory::destroy_3d(m_phi);
     memory::destroy_3d(m_Ex);
     memory::destroy_3d(m_Ex_plus);
@@ -94,18 +90,6 @@ mesh::~mesh()
     if(m_Ez_haloex != NULL) {
 	delete m_Ez_haloex;
     }
-
-    if(m_Gx_haloex != NULL) {
-	delete m_Gx_haloex;
-    }
-
-    if(m_Gy_haloex != NULL) {
-	delete m_Gy_haloex;
-    }
-
-    if(m_Gz_haloex != NULL) {
-	delete m_Gz_haloex;
-    }
 }
 
 void mesh::set_size(int nx, int ny, int nz)
@@ -124,12 +108,6 @@ void mesh::set_size(int nx, int ny, int nz)
 		    m_size[0], m_size[1], m_size[2]);
 	m_logger->info("Number of mesh nodes: %d",
 		m_size[0] * m_size[1] * m_size[2]);
-}
-
-void mesh::set_gaussian_width(int nsigmas)
-{
-    m_gauss_nsigmas = nsigmas;
-    m_dirty = true;
 }
 
 void mesh::commit()
@@ -215,26 +193,6 @@ void mesh::commit()
 			  m_ext_size[2],
 			  true);
 
-	iris_real sigma = 1.0/(m_iris->m_alpha * _SQRT_2);  // σ
-
-	m_gauss_width[0] = ceil(0.5 * m_gauss_nsigmas * sigma * m_hinv[0]);
-	m_gauss_width[1] = ceil(0.5 * m_gauss_nsigmas * sigma * m_hinv[1]);
-	m_gauss_width[2] = ceil(0.5 * m_gauss_nsigmas * sigma * m_hinv[2]);
-
-	m_ext2_size[0] = m_own_size[0] + m_gauss_width[0]*2;
-	m_ext2_size[1] = m_own_size[1] + m_gauss_width[1]*2;
-	m_ext2_size[2] = m_own_size[2] + m_gauss_width[2]*2;
-
-	memory::destroy_3d(m_rho_gauss1);
-	memory::create_3d(m_rho_gauss1, m_ext2_size[0], m_ext2_size[1],
-			  m_ext2_size[2],
-			  true);  // make sure ρ is cleared -- it's accumulating
-
-	memory::destroy_3d(m_rho_gauss2);
-	memory::create_3d(m_rho_gauss2, m_ext2_size[0], m_ext2_size[1],
-			  m_ext2_size[2],
-			  true);  // make sure ρ is cleared -- it's accumulating
-
 
 	if(m_rho_haloex != NULL) {
 	    delete m_rho_haloex;
@@ -250,18 +208,6 @@ void mesh::commit()
 	
 	if(m_Ez_haloex != NULL) {
 	    delete m_Ez_haloex;
-	}
-
-	if(m_Gx_haloex != NULL) {
-	    delete m_Gx_haloex;
-	}
-	
-	if(m_Gy_haloex != NULL) {
-	    delete m_Gy_haloex;
-	}
-	
-	if(m_Gz_haloex != NULL) {
-	    delete m_Gz_haloex;
 	}
 
 	int left = -m_chass->m_ics_from;
@@ -306,33 +252,6 @@ void mesh::commit()
 				 right,
 				 IRIS_TAG_EZ_HALO);
 	
-	m_Gx_haloex = new haloex(m_local_comm->m_comm,
-				 &(m_proc_grid->m_hood[0][0]),
-				 1,
-				 m_rho_gauss1,
-				 m_ext2_size,
-				 m_gauss_width[0],
-				 m_gauss_width[0],
-				 IRIS_TAG_GX_HALO);
-
-	m_Gy_haloex = new haloex(m_local_comm->m_comm,
-				 &(m_proc_grid->m_hood[0][0]),
-				 1,
-				 m_rho_gauss2,
-				 m_ext2_size,
-				 m_gauss_width[1],
-				 m_gauss_width[1],
-				 IRIS_TAG_GY_HALO);
-
-	m_Gz_haloex = new haloex(m_local_comm->m_comm,
-				 &(m_proc_grid->m_hood[0][0]),
-				 1,
-				 m_rho_gauss1,
-				 m_ext2_size,
-				 m_gauss_width[2],
-				 m_gauss_width[2],
-				 IRIS_TAG_GZ_HALO);
-
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	    memory::wfree(it->second);
 	}
@@ -499,315 +418,6 @@ void mesh::assign_charges()
     m_q2tot = recvbuf[1];
 }
 
-void mesh::prepare_for_gx()
-{
-    int x1 = m_gauss_width[0];
-    int y1 = m_gauss_width[1];
-    int z1 = m_gauss_width[2];
-
-    int x2 = x1 + m_own_size[0];
-    int y2 = y1 + m_own_size[1];
-    int z2 = z1 + m_own_size[2];
-
-    // NOTE: This is made in 3 distinct loops so there is are no ifs in them
-    //       which would otherwise break auto-vectorization
-
-    // first m_gauss_width X planes are all 0
-    for(int i=0;i<x1;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss1[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // m_own_size[0] X planes are copied from ρ
-    for(int i=x1;i<x2;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss1[i][j][k] = m_rho[i-x1][j-y1][k-z1];
-	    }
-	}
-    }
-
-    // last m_gauss_width X planes are all 0
-    for(int i=x2;i<m_ext2_size[0];i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss1[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // Now exchange the halo in X direction
-    m_Gx_haloex->exch_x();
-}
-
-void mesh::add_gx()
-{
-    iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
-
-    iris_real h = m_h[0];
-
-    int sx = m_gauss_width[0];
-    int ex = sx + m_own_size[0];
-
-    int sy = m_gauss_width[1];
-    int ey = sy + m_own_size[1];
-
-    int sz = m_gauss_width[2];
-    int ez = sz + m_own_size[2];
-
-    iris_real t1 = (a*a) / M_PI;
-    iris_real t2 = sqrt(t1*t1*t1);
-    iris_real t3 = -4*M_PI*t2;
-
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		for(int m=-sx;m<=sx;m++) {
-		    iris_real q = m_rho_gauss1[i+m][j][k];
-		    if(q == 0.0) {
-			continue;
-		    }
-
-		    // ERFs
-		    // iris_real xa_x0 = -(m*h + h/2.0);
-		    // iris_real xb_x0 = xa_x0 + h;
-		    // iris_real v =
-		    // 	erf(a * xb_x0) -
-		    // 	erf(a * xa_x0);
-
-		    // Sampled gaussian
-		    iris_real v = t3*exp(-1.0*a*a*m*m*h*h);
-
-		    m_rho_gauss1[i][j][k] += q * v;
-		}
-	    }
-	}
-    }
-}
-
-void mesh::prepare_for_gy()
-{
-    int x1 = m_gauss_width[0];
-    int y1 = m_gauss_width[1];
-    int z1 = m_gauss_width[2];
-
-    int x2 = x1 + m_own_size[0];
-    int y2 = y1 + m_own_size[1];
-    int z2 = z1 + m_own_size[2];
-
-    // NOTE: This is made in 3 distinct loops so there is are no ifs in them
-    //       which would otherwise break auto-vectorization
-
-    // first m_gauss_width Y planes are all 0
-    for(int i=x1;i<x2;i++) {
-	for(int j=0;j<y1;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss2[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // m_own_size[1] Y planes are copied from gauss1
-    for(int i=x1;i<x2;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss2[i][j][k] = m_rho_gauss1[i-x1][j-y1][k-z1];
-	    }
-	}
-    }
-
-    // last m_gauss_width Y planes are all 0
-    for(int i=x1;i<x2;i++) {
-	for(int j=y2;j<m_ext2_size[1];j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss2[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // Now exchange the halo in Y direction
-    m_Gy_haloex->exch_y();
-}
-
-
-void mesh::add_gy()
-{
-    iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
-
-    iris_real h = m_h[1];
-
-    int sx = m_gauss_width[0];
-    int ex = sx + m_own_size[0];
-
-    int sy = m_gauss_width[1];
-    int ey = sy + m_own_size[1];
-
-    int sz = m_gauss_width[2];
-    int ez = sz + m_own_size[2];
-
-    iris_real t1 = (a*a) / M_PI;
-    iris_real t2 = sqrt(t1*t1*t1);
-    iris_real t3 = -4*M_PI*t2;
-
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		for(int m=-sy;m<=sy;m++) {
-		    iris_real q = m_rho_gauss2[i][j+m][k];
-		    if(q == 0.0) {
-			continue;
-		    }
-
-		    // ERFs
-		    // iris_real xa_x0 = -(m*h + h/2.0);
-		    // iris_real xb_x0 = xa_x0 + h;
-		    // iris_real v =
-		    // 	erf(a * xb_x0) -
-		    // 	erf(a * xa_x0);
-
-		    // Sampled gaussian
-		    iris_real v = t3*exp(-1.0*a*a*m*m*h*h);
-
-		    m_rho_gauss2[i][j][k] += q * v;
-		}
-	    }
-	}
-    }
-}
-
-void mesh::prepare_for_gz()
-{
-    int x1 = m_gauss_width[0];
-    int y1 = m_gauss_width[1];
-    int z1 = m_gauss_width[2];
-
-    int x2 = x1 + m_own_size[0];
-    int y2 = y1 + m_own_size[1];
-    int z2 = z1 + m_own_size[2];
-
-    // NOTE: This is made in 3 distinct loops so there is are no ifs in them
-    //       which would otherwise break auto-vectorization
-
-    // first m_gauss_width Z planes are all 0
-    for(int i=x1;i<x2;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=0;k<z1;k++) {
-		m_rho_gauss1[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // m_own_size[2] Z planes are copied from gauss2
-    for(int i=x1;i<x2;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z1;k<z2;k++) {
-		m_rho_gauss1[i][j][k] = m_rho_gauss2[i-x1][j-y1][k-z1];
-	    }
-	}
-    }
-
-    // last m_gauss_width Y planes are all 0
-    for(int i=x1;i<x2;i++) {
-	for(int j=y1;j<y2;j++) {
-	    for(int k=z2;k<m_ext2_size[2];k++) {
-		m_rho_gauss1[i][j][k] = (iris_real)0.0;
-	    }
-	}
-    }
-
-    // Now exchange the halo in Z direction
-    m_Gz_haloex->exch_z();
-}
-
-
-void mesh::add_gz()
-{
-    iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
-
-    iris_real h = m_h[1];
-
-    int sx = m_gauss_width[0];
-    int ex = sx + m_own_size[0];
-
-    int sy = m_gauss_width[1];
-    int ey = sy + m_own_size[1];
-
-    int sz = m_gauss_width[2];
-    int ez = sz + m_own_size[2];
-
-    iris_real t1 = (a*a) / M_PI;
-    iris_real t2 = sqrt(t1*t1*t1);
-    iris_real t3 = -4*M_PI*t2;
-
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		for(int m=-sz;m<=sz;m++) {
-		    iris_real q = m_rho_gauss1[i][j][k+m];
-		    if(q == 0.0) {
-			continue;
-		    }
-
-		    // ERFs
-		    // iris_real xa_x0 = -(m*h + h/2.0);
-		    // iris_real xb_x0 = xa_x0 + h;
-		    // iris_real v =
-		    // 	erf(a * xb_x0) -
-		    // 	erf(a * xa_x0);
-
-		    // Sampled gaussian
-		    iris_real v = t3*exp(-1.0*a*a*m*m*h*h);
-
-		    m_rho_gauss1[i][j][k] += q * v;
-		}
-	    }
-	}
-    }
-}
-
-void mesh::extract_rho_from_gauss1()
-{
-    iris_real sum = 0.0;
-    int sx = m_gauss_width[0];
-    int ex = sx + m_own_size[0];
-
-    int sy = m_gauss_width[1];
-    int ey = sy + m_own_size[1];
-
-    int sz = m_gauss_width[2];
-    int ez = sz + m_own_size[2];
-
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		sum += m_rho_gauss1[i][j][k];
-		m_rho[i-sx][j-sy][k-sz] = m_rho_gauss1[i][j][k];
-	    }
-	}
-    }
-    m_logger->info("RHO SUM = %f", sum);
-}
-
-void mesh::convolve_with_gaussian()
-{
-    prepare_for_gx();  // ρ -> m_rho_gauss1
-    add_gx();
-
-    prepare_for_gy();  // m_rho_gauss1 -> m_rho_gauss2
-    add_gy();
-
-    prepare_for_gz();  // m_rho_gauss2 -> m_rho_gauss1
-    add_gz();
-
-    extract_rho_from_gauss1();  // m_rho_gauss1 -> ρ
-}
-
 void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
@@ -857,7 +467,7 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 	    
 	    m_chass->compute_weights(dx, dy, dz);
 	    
-	    iris_real t0 = m_mesh->m_h3inv * in_charges[n*5 + 3];  // q/V
+	    iris_real t0 = m_h3inv * in_charges[n*5 + 3];  // q/V
 	    for(int i = 0; i < m_chass->m_order; i++) {
 		iris_real t1 = t0 * m_chass->m_weights[tid][0][i];
 		for(int j = 0; j < m_chass->m_order; j++) {

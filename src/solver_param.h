@@ -27,35 +27,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UNITS_H__
-#define __IRIS_UNITS_H__
+#ifndef __IRIS_SOLVER_PARAM_H__
+#define __IRIS_SOLVER_PARAM_H__
 
-#include "real.h"
-
-namespace ORG_NCSA_IRIS {
-
-    enum EUnits {
-	real, md
-    };
-
-    class units {
-
-    public:
-	
-	units(EUnits style);
-	~units();
-
-	iris_real e;    // Electron charge (abs value)
-	iris_real ang;  // 1 Anstrom
-	iris_real ecf;  // Electronic conversion factor, aka Coulomb's constant (1/4pieps0)
-	const char *energy_unit;
-	const char *length_unit;
-
-    private:
-	void init_real();
-	void init_md();
-    };
-
+union solver_param_t
+{
+    int i;
+    iris_real r;
 };
+
+//---------------------
+// CG Solver parameters
+//---------------------
+#define IRIS_SOLVER_CG_NSIGMAS         0  // total width of Gaussian
+#define IRIS_SOLVER_CG_STENCIL_PADE_M  1  // nom order of Pade approximant
+#define IRIS_SOLVER_CG_STENCIL_PADE_N  2  // denom order of Pade approximant
+
+#define IRIS_SOLVER_PARAM_CNT 3   // number of different parameters
 
 #endif

@@ -111,6 +111,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_nthreads = 1;
 #endif
 
+    // clear solver parameters
+    memset(&(m_solver_params[0]), 0,
+	   IRIS_SOLVER_PARAM_CNT * sizeof(solver_param_t));
+
     // initially, all calculation parameters are un-set (thus - free)
     m_qtot2 = 0.0;
     m_cutoff = 0.0;
@@ -264,13 +268,19 @@ void iris::set_order(int in_order)
     }
 }
 
-void iris::set_gaussian_width(int in_nsigmas)
+void iris::set_solver_param(int in_idx, solver_param_t in_value)
 {
     if(is_server()) {
-	m_mesh->set_gaussian_width(in_nsigmas);
+	if(in_idx < IRIS_SOLVER_PARAM_CNT) {
+	    m_solver_params[in_idx] = in_value;
+	    if(m_solver != NULL) {
+		m_solver->set_dirty(true);
+	    }
+	}else {
+	    throw std::invalid_argument("Invalid solver parameter!");
+	}
     }
 }
-
 
 void iris::set_mesh_size(int nx, int ny, int nz)
 {
