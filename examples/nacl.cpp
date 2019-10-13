@@ -10,6 +10,8 @@
 #include <iris/comm_rec.h>
 #include <iris/utils.h>
 #include <iris/timer.h>
+#include <iris/factorizer.h>
+#include <iris/laplacian27.h>
 
 iris_real g_boxx, g_boxy, g_boxz;
 
@@ -119,8 +121,8 @@ iris_real read_charges(iris *in_iris, char *fname, int rank, int pp_size,
 
 	// the global box; for simplicity, hardcoded in this example
 	box_t<iris_real> gb {
-	    -g_boxx/2, -g_boxy/2, -g_boxz/2,
-		g_boxx/2, g_boxy/2, g_boxz/2,
+			     0.0, 0.0, 0.0,
+		g_boxx, g_boxy, g_boxz,
 		g_boxx, g_boxy, g_boxz};
 
 	// "domain decomposition" in the client. In this example, we use a
@@ -290,7 +292,7 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
 }
 
 main(int argc, char **argv)
-{
+{    
     if(argc < 4) {
 	printf("Usage: %s <path-to-NaCl.data> <natoms> <mode>\n", argv[0]);
 	printf("  mode = 0 is all nodes are client/server\n");
@@ -406,21 +408,29 @@ main(int argc, char **argv)
     // At the end of the configuration, call commit in order to apply all
     // the configuration and make the IRIS server nodes perform any preliminary
     // calculations in order to prepare for the calculation proper.
-    x->set_global_box(-g_boxx/2.0, -g_boxy/2.0, -g_boxz/2.0,
-		      g_boxx/2.0,  g_boxy/2.0,  g_boxz/2.0);
+    x->set_global_box(0.0, 0.0, 0.0,
+		      g_boxx,  g_boxy,  g_boxz);
     //x->set_mesh_size(512, 512, 512);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
 
     solver_param_t nsigmas;
-    nsigmas.r = 4.0;
+    nsigmas.r = 6.0;
     x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
 
-    x->set_order(3);
-    //x->set_mesh_size(108, 108, 108);
-    x->set_accuracy(1e-4, true);
-    x->set_solver(IRIS_SOLVER_CG);
-    x->commit();
+    // solver_param_t padem;
+    // padem.i = 0;
+    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_M, padem);
 
+    // solver_param_t paden;
+    // paden.i = 2;
+    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, paden);
+    
+    x->set_order(3);
+    //x->set_mesh_size(128, 128, 128);
+    //x->set_mesh_size(80, 80, 80);
+    x->set_accuracy(1e-6, true);
+    x->set_solver(IRIS_SOLVER_P3M);
+    x->commit();
 
     // The client needs to know the domain decomposition of the server
     // nodes so it can know which client node send which charges to which
@@ -490,8 +500,8 @@ main(int argc, char **argv)
     x->m_logger->info("Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 
     if(x->is_server()) {
-	x->m_mesh->dump_ascii("phi-cg", x->m_mesh->m_phi);
-	//x->m_mesh->dump_bov("RHO", x->m_mesh->m_rho);
+	x->m_mesh->dump_ascii("phi", x->m_mesh->m_phi);
+	x->m_mesh->dump_ascii("rho", x->m_mesh->m_rho);
 	//x->m_mesh->check_fxyz();
 	//x->m_mesh->dump_exyz("field");
     }

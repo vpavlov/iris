@@ -49,12 +49,12 @@ using namespace ORG_NCSA_IRIS;
 
 poisson_solver_cg::poisson_solver_cg(class iris *obj)
     : poisson_solver(obj), m_nsigmas(0), m_gauss_width{0, 0, 0},
-    m_ext2_size{0, 0, 0}, m_conv1(NULL), m_conv2(NULL),
-    m_Gx_haloex(NULL), m_Gy_haloex(NULL), m_Gz_haloex(NULL),
-    m_stencil(NULL), 
-    m_max_iters(1000), m_epsilon(1.0e-5),
-    m_phi(NULL), m_Ap(NULL), m_p(NULL), m_r(NULL),
-    m_phi_haloex(NULL), m_p_haloex(NULL)
+      m_ext2_size{0, 0, 0}, m_conv1(NULL), m_conv2(NULL),
+      m_Gx_haloex(NULL), m_Gy_haloex(NULL), m_Gz_haloex(NULL),
+      m_stencil(NULL), 
+      m_max_iters(10000), m_epsilon(1.0e-5),
+      m_phi(NULL), m_rho(NULL), m_blurred_rho(NULL), m_Ap(NULL), m_p(NULL), m_r(NULL),
+      m_phi_haloex(NULL), m_p_haloex(NULL), m_rho_haloex(NULL)
 {
 };
 
@@ -69,11 +69,14 @@ poisson_solver_cg::~poisson_solver_cg()
     if(m_stencil != NULL) { delete m_stencil; }
 
     memory::destroy_3d(m_phi);
+    memory::destroy_3d(m_rho);
+    memory::destroy_3d(m_blurred_rho);
     memory::destroy_3d(m_Ap);
     memory::destroy_3d(m_p);
     memory::destroy_3d(m_r);
 
     if(m_phi_haloex != NULL) { delete m_phi_haloex; }
+    if(m_rho_haloex != NULL) { delete m_rho_haloex; }
     if(m_p_haloex != NULL) { delete m_p_haloex; }
 }
 
@@ -85,7 +88,7 @@ void poisson_solver_cg::init_convolution()
 	m_nsigmas = _DEFAULT_NSIGMAS;
     }
     
-    iris_real s = 1.0/(m_iris->m_alpha * _SQRT_2);  // σ = 1/α*sqrt(2)
+    iris_real s = 1.0/(sqrt(2) * m_iris->m_alpha);  // σ = 1/α*sqrt(2)
     
     m_gauss_width[0] = ceil(0.5 * m_nsigmas * s * m_mesh->m_hinv[0]);
     m_gauss_width[1] = ceil(0.5 * m_nsigmas * s * m_mesh->m_hinv[1]);
@@ -151,11 +154,20 @@ void poisson_solver_cg::commit()
     m_ext_size[1] = m_mesh->m_own_size[1] + sw*2;
     m_ext_size[2] = m_mesh->m_own_size[2] + sw*2;
 
+    int swg = m_stencil->get_gamma_extent();
+    m_rext_size[0] = m_mesh->m_own_size[0] + swg*2;
+    m_rext_size[1] = m_mesh->m_own_size[1] + swg*2;
+    m_rext_size[2] = m_mesh->m_own_size[2] + swg*2;
+    
     memory::destroy_3d(m_phi);
     memory::create_3d(m_phi, m_ext_size[0], m_ext_size[1], m_ext_size[2], false);
 
-    axpby(0.0, m_mesh->m_rho, -1.0, m_mesh->m_rho, m_phi, false, false, true);
+    memory::destroy_3d(m_rho);
+    memory::create_3d(m_rho, m_rext_size[0], m_rext_size[1], m_rext_size[2], true);
 
+    memory::destroy_3d(m_blurred_rho);
+    memory::create_3d(m_blurred_rho, m_mesh->m_own_size[0], m_mesh->m_own_size[1], m_mesh->m_own_size[2], true);
+    
     memory::destroy_3d(m_p);
     memory::create_3d(m_p, m_ext_size[0], m_ext_size[1], m_ext_size[2]);
 
@@ -178,6 +190,19 @@ void poisson_solver_cg::commit()
 			      sw,
 			      IRIS_TAG_PHI_HALO);
 
+    if(m_rho_haloex != NULL) {
+	delete m_rho_haloex;
+    }
+
+    m_rho_haloex = new haloex(m_local_comm->m_comm,
+			      &(m_proc_grid->m_hood[0][0]),
+			      1,
+			      m_rho,
+			      m_rext_size,
+			      swg,
+			      swg,
+			      IRIS_TAG_RHO_HALO);
+    
     if(m_p_haloex != NULL) {
 	delete m_p_haloex;
     }
@@ -205,6 +230,7 @@ void poisson_solver_cg::init_stencil()
     m_stencil = new laplacian3D_pade(m, n, false, m_mesh->m_h[0],
 				     m_mesh->m_h[1], m_mesh->m_h[2]);
     m_stencil->commit();
+    m_stencil->trace2("XX");
 }
 
 void poisson_solver_cg::prepare_for_gx()
@@ -255,10 +281,29 @@ void poisson_solver_cg::prepare_for_gx()
 	   sizeof(iris_real));
 }
 
+void poisson_solver_cg::prepare_for_gx_test()
+{
+    for(int i=0;i<m_ext2_size[0];i++) {
+	for(int j=0;j<m_ext2_size[1];j++) {
+	    for(int k=0;k<m_ext2_size[2];k++) {
+		m_conv1[i][j][k] = (iris_real)0.0;
+	    }
+	}
+    }
+
+    m_conv1[28][28][28] = (iris_real)1.0 / (m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2]);
+
+    // Now exchange the halo in X direction
+    m_Gx_haloex->exch_x();
+
+    memset(&(m_conv2[0][0][0]), 0,
+	   m_ext2_size[0] * m_ext2_size[1] * m_ext2_size[2] *
+	   sizeof(iris_real));
+}
+
 void poisson_solver_cg::add_gx()
 {
     iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
 
     iris_real h = m_mesh->m_h[0];
 
@@ -271,6 +316,8 @@ void poisson_solver_cg::add_gx()
     int sz = m_gauss_width[2];
     int ez = sz + m_mesh->m_own_size[2];
 
+    iris_real t2 = a / sqrt(M_PI);
+    
     for(int i=sx;i<ex;i++) {
 	for(int j=sy;j<ey;j++) {
 	    for(int k=sz;k<ez;k++) {
@@ -282,15 +329,18 @@ void poisson_solver_cg::add_gx()
 
 		    iris_real xa_x0 = -(m*h + h/2.0);
 		    iris_real xb_x0 = xa_x0 + h;
+		    iris_real x_x0 = m*h;
 
-		    // if(m == -sx) {
-		    // 	xb_x0 = 1000*h;
-		    // }
-		    // if(m == sx) {
-		    // 	xa_x0 = -1000*h;
-		    // }
+		    if(m == -sx) {
+		    	xb_x0 = 1000*h;
+		    }
+		    if(m == sx) {
+		    	xa_x0 = -1000*h;
+		    }
 
-		    iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
+		    //iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
+
+		    iris_real v = 2 * h * t2 * exp(-1.0*a*a*(x_x0)*(x_x0));
 
 		    // q is in fact q/h^3 - see mesh::assign_charges1
 		    m_conv2[i][j][k] += q * v;
@@ -313,7 +363,6 @@ void poisson_solver_cg::prepare_for_gy()
 void poisson_solver_cg::add_gy()
 {
     iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
 
     iris_real h = m_mesh->m_h[1];
 
@@ -326,6 +375,8 @@ void poisson_solver_cg::add_gy()
     int sz = m_gauss_width[2];
     int ez = sz + m_mesh->m_own_size[2];
 
+    iris_real t2 = a / sqrt(M_PI);
+
     for(int i=sx;i<ex;i++) {
 	for(int j=sy;j<ey;j++) {
 	    for(int k=sz;k<ez;k++) {
@@ -337,16 +388,19 @@ void poisson_solver_cg::add_gy()
 
 		    iris_real xa_x0 = -(m*h + h/2.0);
 		    iris_real xb_x0 = xa_x0 + h;
+		    iris_real x_x0 = m*h;
 
-		    // if(m == -sx) {
-		    // 	xb_x0 = 1000*h;
-		    // }
-		    // if(m == sx) {
-		    // 	xa_x0 = -1000*h;
-		    // }
+		    if(m == -sx) {
+		    	xb_x0 = 1000*h;
+		    }
+		    if(m == sx) {
+		    	xa_x0 = -1000*h;
+		    }
 
-		    iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
+		    //iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
 
+		    iris_real v = 2 * h * t2 * exp(-1.0*a*a*(x_x0)*(x_x0));
+		    
 		    m_conv1[i][j][k] += q * v;
 		}
 	    }
@@ -367,7 +421,6 @@ void poisson_solver_cg::prepare_for_gz()
 void poisson_solver_cg::add_gz()
 {
     iris_real a = m_iris->m_alpha;
-    iris_real s = 1.0/(a * _SQRT_2);  // σ
 
     iris_real h = m_mesh->m_h[2];
 
@@ -380,6 +433,8 @@ void poisson_solver_cg::add_gz()
     int sz = m_gauss_width[2];
     int ez = sz + m_mesh->m_own_size[2];
 
+    iris_real t2 = a / sqrt(M_PI);
+    
     for(int i=sx;i<ex;i++) {
 	for(int j=sy;j<ey;j++) {
 	    for(int k=sz;k<ez;k++) {
@@ -391,16 +446,19 @@ void poisson_solver_cg::add_gz()
 
 		    iris_real xa_x0 = -(m*h + h/2.0);
 		    iris_real xb_x0 = xa_x0 + h;
+		    iris_real x_x0 = m*h;
 
-		    // if(m == -sx) {
-		    // 	xb_x0 = 1000*h;
-		    // }
-		    // if(m == sx) {
-		    // 	xa_x0 = -1000*h;
-		    // }
+		    if(m == -sx) {
+		    	xb_x0 = 1000*h;
+		    }
+		    if(m == sx) {
+		    	xa_x0 = -1000*h;
+		    }
 
-		    iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
+		    //iris_real v = erf(a * xb_x0) - erf(a * xa_x0);
 
+		    iris_real v = 2 * h * t2 * exp(-1.0*a*a*(x_x0)*(x_x0));
+		    
 		    m_conv2[i][j][k] += q * v;
 		}
 	    }
@@ -411,6 +469,9 @@ void poisson_solver_cg::add_gz()
 void poisson_solver_cg::extract_rho()
 {
     iris_real sum = 0.0;
+
+    int off = m_stencil->get_gamma_extent();
+
     int sx = m_gauss_width[0];
     int ex = sx + m_mesh->m_own_size[0];
 
@@ -424,7 +485,8 @@ void poisson_solver_cg::extract_rho()
 	for(int j=sy;j<ey;j++) {
 	    for(int k=sz;k<ez;k++) {
 		sum += m_conv2[i][j][k];
-		m_mesh->m_rho[i-sx][j-sy][k-sz] = -_PI2 * m_conv2[i][j][k];
+		m_rho[off+i-sx][off+j-sy][off+k-sz] = -_PI2 * m_conv2[i][j][k];
+		//printf("%g\n", i-sx, j-sy, k-sz, m_rho[off+i-sx][off+j-sy][off+k-sz]);
 	    }
 	}
     }
@@ -460,6 +522,27 @@ void poisson_solver_cg::adot(iris_real ***in, iris_real ***out, haloex *hex)
 		    for(int jj=-sw;jj<=sw;jj++) {
 			for(int kk=-sw;kk<=sw;kk++) {
 			    out[i][j][k] += in[i+ii+sw][j+jj+sw][k+kk+sw] * m_stencil->get_delta(ii+sw, jj+sw, kk+sw);
+			}
+		    }
+		}
+	    }
+	}
+    }
+}
+
+void poisson_solver_cg::blur_rhs()
+{
+    int sw = m_stencil->get_gamma_extent();
+
+    m_rho_haloex->exch_full();
+
+    for(int i=0;i<m_mesh->m_own_size[0];i++) {
+	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+		for(int ii=-sw;ii<=sw;ii++) {
+		    for(int jj=-sw;jj<=sw;jj++) {
+			for(int kk=-sw;kk<=sw;kk++) {
+			    m_blurred_rho[i][j][k] += m_rho[i+ii+sw][j+jj+sw][k+kk+sw] * m_stencil->get_gamma(ii+sw, jj+sw, kk+sw);
 			}
 		    }
 		}
@@ -543,12 +626,13 @@ void poisson_solver_cg::axpby(iris_real a, iris_real ***x, iris_real b, iris_rea
 void poisson_solver_cg::solve()
 {
     convolve_with_gaussian();
-
+    blur_rhs();
+    
     // r = rho - Adot(phi,xsize,ysize,zsize)
     adot(m_phi, m_Ap, m_phi_haloex);
-    axpby(1.0, m_mesh->m_rho, -1.0, m_Ap, m_r, false, false, false);
+    axpby(1.0, m_blurred_rho, -1.0, m_Ap, m_r, false, false, false);
 
-    // p = r  // TODO: write a real function for this instead of butchering the machine
+    // p = r  
     axpby(0.0, m_r, 1.0, m_r, m_p, false, false, true);
 
     // for (kk in 1:maxits) {
@@ -572,7 +656,8 @@ void poisson_solver_cg::solve()
 	iris_real err = sqrt(rr)/sqrt(phiphi);
 
 	//   # print(paste("it",kk,"|r|", sqrt(normr2)))
-	m_logger->trace("cg it %d: |r|/|phi| = %f", i, err);
+	m_logger->trace("cg it %d: |r| = %g", i, sqrt(rr));
+	m_logger->trace("cg it %d: |r|/|phi| = %g", i, err);
 
 	//   if (normr2 <= epsilon ** 2) {
 	//     print(paste("|r|", sqrt(normr2)))

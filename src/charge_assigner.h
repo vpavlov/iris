@@ -45,6 +45,7 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 
 	void compute_weights(iris_real dx, iris_real dy, iris_real dz);
+	void compute_dweights(iris_real dx, iris_real dy, iris_real dz);
 
     private:
 
@@ -101,9 +102,11 @@ namespace ORG_NCSA_IRIS {
 	iris_real m_ics_bump;    // even orders: 0.0; odd orders: 0.5
 
 	iris_real ***m_weights;  // interpolation weights, depend on charge pos
+	iris_real ***m_dweights;  // interpolation weights, depend on charge pos
 
     private:
 	iris_real *m_coeff;      // interpolation coefficients, depend on order
+	iris_real *m_dcoeff;     // derivative of interpolation coefficients
 
     };
 }

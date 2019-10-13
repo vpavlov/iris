@@ -316,7 +316,7 @@ the type of systems we're solving here"
 	(b (%pade-B c m n)))
     (solve-linsys a b)))
 
-(defun pade-stencil (m n)
+(defun pade-stencil (m n &optional cut)
   (let* ((order (1+ (/ (+ m n) 2)))
 	 (c (make-array (+ m n 1) :initial-element 0))
 	 (tt (d2/dx2-taylor-coeff order)))
@@ -327,28 +327,27 @@ the type of systems we're solving here"
 	   (denom (remove-if #'zerop
 			     (cons 1 (coerce (subseq pc (1+ m)) 'list)))))
       (multiple-value-bind (rhs-mult rhs-stencil)
-	  (rhs-stencil (+ m n 2) denom)
-	(format t "~a ~a~%" rhs-mult rhs-stencil)
+	  (rhs-stencil (+ m n 2) denom cut)
+	(format t "1/~a ~a~%" rhs-mult rhs-stencil)
 	(multiple-value-bind (lhs-mult lhs-stencil)
-	    (lhs-stencil (+ m n 2) nom denom)
+	    (lhs-stencil (+ m n 2) nom denom cut)
 	  (values lhs-stencil (/ lhs-mult rhs-mult) rhs-stencil))))))
 
-(defun rhs-stencil (m poly)
+(defun rhs-stencil (m poly cut)
   (let* ((n (length poly))
 	 (res (cdo m 0 0 0 0)))  ;; empty stencil
     (loop for i from 0 below n do
 	 (loop for j from 0 below n do
 	      (loop for k from 0 below n do
-		   ;;(when (<= (+ (* i 2) (* j 2) (* k 2)) (+ m 0))
+		 (when (or (not cut) (<= (+ (* i 2) (* j 2) (* k 2)) (+ m 0)))
 		     (setf res (cdo+ res 
 				     (cdo m (* (nth i poly) (nth j poly)
 					       (nth k poly))
-					  (* i 2) (* j 2) (* k 2)))))))
-    (format t "~a~%" res)
+					  (* i 2) (* j 2) (* k 2))))))))
     ;; extract common denominator
     (extract-denom-lcm-3d res)))
 
-(defun lhs-stencil (m nom denom)
+(defun lhs-stencil (m nom denom cut)
   (let* ((n1 (length nom))
 	 (n2 (length denom))
 	 (res (cdo m 0 0 0 0))) ;; empty stencil
@@ -357,7 +356,7 @@ the type of systems we're solving here"
     (loop for i from 0 below n1 do
 	 (loop for j from 0 below n2 do
 	      (loop for k from 0 below n2 do
-		   (when (<= (+ (* (1+ i) 2) (* j 2) (* k 2)) (+ m 0))
+		 (when (or (not cut) (<= (+ (* (1+ i) 2) (* j 2) (* k 2)) (+ m 0)))
 		     (setf res (cdo+ res
 				     (cdo m (* (nth i nom)
 					       (nth j denom)
@@ -368,7 +367,7 @@ the type of systems we're solving here"
     (loop for i from 0 below n2 do
 	 (loop for j from 0 below n1 do
 	      (loop for k from 0 below n2 do
-		   (when (<= (+ (* i 2) (* (1+ j) 2) (* k 2)) (+ m 0))
+		 (when (or (not cut) (<= (+ (* i 2) (* (1+ j) 2) (* k 2)) (+ m 0)))
 		     (setf res (cdo+ res
 				     (cdo m (* (nth i denom)
 					       (nth j nom)
@@ -379,7 +378,7 @@ the type of systems we're solving here"
     (loop for i from 0 below n2 do
 	 (loop for j from 0 below n2 do
 	      (loop for k from 0 below n1 do
-		   (when (<= (+ (* i 2) (* j 2) (* (1+ k) 2)) (+ m 0))
+		 (when (or (not cut) (<= (+ (* i 2) (* j 2) (* (1+ k) 2)) (+ m 0)))
 		     (setf res (cdo+ res
 				     (cdo m (* (nth i denom)
 					       (nth j denom)

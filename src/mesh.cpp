@@ -49,9 +49,10 @@ using namespace ORG_NCSA_IRIS;
 
 mesh::mesh(iris *obj)
     :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
-    m_dirty(true), m_initialized(false), m_phi(NULL),
-    m_Ex(NULL), m_Ey(NULL), m_Ez(NULL), m_Ex_plus(NULL), m_Ey_plus(NULL),
-    m_Ez_plus(NULL), m_rho_haloex(NULL), m_Ex_haloex(NULL), m_Ey_haloex(NULL), m_Ez_haloex(NULL)
+     m_dirty(true), m_initialized(false), m_phi(NULL), m_phi_plus(NULL),
+     m_Ex(NULL), m_Ey(NULL), m_Ez(NULL), m_Ex_plus(NULL), m_Ey_plus(NULL),
+     m_Ez_plus(NULL), m_rho_haloex(NULL), m_Ex_haloex(NULL), m_Ey_haloex(NULL), m_Ez_haloex(NULL),
+     m_phi_haloex(NULL)
 {
 }
 
@@ -60,6 +61,7 @@ mesh::~mesh()
     memory::destroy_3d(m_rho);
     memory::destroy_3d(m_rho_plus);
     memory::destroy_3d(m_phi);
+    memory::destroy_3d(m_phi_plus);
     memory::destroy_3d(m_Ex);
     memory::destroy_3d(m_Ex_plus);
     memory::destroy_3d(m_Ey);
@@ -89,6 +91,10 @@ mesh::~mesh()
 
     if(m_Ez_haloex != NULL) {
 	delete m_Ez_haloex;
+    }
+
+    if(m_phi_haloex != NULL) {
+	delete m_phi_haloex;
     }
 }
 
@@ -178,6 +184,9 @@ void mesh::commit()
 			  m_ext_size[2],
 			  true);  // make sure ρ is cleared -- it's accumulating
 
+	memory::destroy_3d(m_phi_plus);
+	memory::create_3d(m_phi_plus, m_ext_size[0], m_ext_size[1], m_ext_size[2], true);
+	
 	memory::destroy_3d(m_Ex_plus);
 	memory::create_3d(m_Ex_plus, m_ext_size[0], m_ext_size[1],
 			  m_ext_size[2],
@@ -210,6 +219,10 @@ void mesh::commit()
 	    delete m_Ez_haloex;
 	}
 
+	if(m_phi_haloex != NULL) {
+	    delete m_phi_haloex;
+	}
+	
 	int left = -m_chass->m_ics_from;
 	int right = m_chass->m_ics_to;
 	if(m_chass->m_order % 2) {
@@ -251,6 +264,15 @@ void mesh::commit()
 				 left,
 				 right,
 				 IRIS_TAG_EZ_HALO);
+
+	m_phi_haloex = new haloex(m_local_comm->m_comm,
+				 &(m_proc_grid->m_hood[0][0]),
+				 1,
+				 m_phi_plus,
+				 m_ext_size,
+				 left,
+				 right,
+				 IRIS_TAG_PHI_HALO);
 	
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 	    memory::wfree(it->second);
@@ -371,9 +393,8 @@ void mesh::dump_ascii(const char *fname, iris_real ***data)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		if(data[k][j][i] != 0.0) {
-		    fprintf(fp, "X[%d][%d][%d] = %f\n", k, j, i, data[k][j][i]);
-		}
+		fprintf(fp, "%g\n", data[k][j][i]);
+		//fprintf(fp, "%s[%d][%d][%d] %g\n", fname, k, j, i, data[k][j][i]);
 	    }
 	}
     }
@@ -400,6 +421,8 @@ void mesh::assign_charges()
     iris_real recvbuf[2];
     sendbuf[0] = 0.0;
     sendbuf[1] = 0.0;
+
+    memset(&(m_rho_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int ncharges = it->second;
 	iris_real *charges = m_charges[it->first];
@@ -760,6 +783,28 @@ void mesh::imtract_field()
     }
 }
 
+// Copy Ex, Ey and Ez to inner regions of Ex_plus, etc., thus preparing
+// to exchange halo for E
+void mesh::imtract_phi()
+{
+    int sx, nx, ex;
+    int sy, ny, ey;
+    int sz, nz, ez;
+
+    sx = sy = sz = -m_chass->m_ics_from;
+    ex = sx + m_own_size[0];
+    ey = sy + m_own_size[1];
+    ez = sz + m_own_size[2];
+    
+    for(int i=sx;i<ex;i++) {
+	for(int j=sy;j<ey;j++) {
+	    for(int k=sz;k<ez;k++) {
+		m_phi_plus[i][j][k] = m_phi[i-sx][j-sy][k-sz];
+	    }
+	}
+    }
+}
+
 //
 // This is how a line (let's say in X direction) of m_Ex_plus looks like:
 //
@@ -953,6 +998,12 @@ void mesh::exchange_field_halo()
     m_Ez_haloex->exch_full();
 }
 
+void mesh::exchange_phi_halo()
+{
+    imtract_phi();
+    m_phi_haloex->exch_full();
+}
+
 // void mesh::exchange_field_halo()
 // {
 //     iris_real *sendbufs[6];
@@ -983,7 +1034,7 @@ void mesh::exchange_field_halo()
 //     }
 // }
 
-void mesh::assign_forces()
+void mesh::assign_forces(bool ad)
 {
     MPI_Comm comm = m_iris->is_client() ?
 	m_iris->m_local_comm->m_comm    :
@@ -995,7 +1046,11 @@ void mesh::assign_forces()
 	int size = 4 * sizeof(iris_real) * ncharges;
 	iris_real *forces = (iris_real *)memory::wmalloc(size);
 	m_forces[peer] = forces;
-	assign_forces1(ncharges, m_charges[it->first], forces);
+	if(ad) {
+	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
+	}else {
+	    assign_forces1(ncharges, m_charges[it->first], forces);
+	}
 
 	MPI_Request req;
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
@@ -1050,6 +1105,76 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 		    }
 		}
 	    }
+	    
+	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
+	    out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[n*4 + 1] = factor * ekx;
+	    out_forces[n*4 + 2] = factor * eky;
+	    out_forces[n*4 + 3] = factor * ekz;
+	}
+    }
+}
+
+void mesh::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
+			  iris_real *out_forces)
+{
+    box_t<iris_real> *gbox = &(m_domain->m_global_box);
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(in_ncharges, m_iris->m_nthreads, &from, &to);
+
+	for(int n=from;n<to;n++) {
+	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
+	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	    
+	    // the index of the cell that is to the "left" of the atom
+	    int ix = (int) (tx + m_chass->m_ics_bump);
+	    int iy = (int) (ty + m_chass->m_ics_bump);
+	    int iz = (int) (tz + m_chass->m_ics_bump);
+	    
+	    // distance (increasing to the left!) from the center of the
+	    // interpolation grid
+	    iris_real dx = ix - tx + m_chass->m_ics_center;
+	    iris_real dy = iy - ty + m_chass->m_ics_center;
+	    iris_real dz = iz - tz + m_chass->m_ics_center;
+
+	    m_chass->compute_weights(dx, dy, dz);
+	    m_chass->compute_dweights(dx, dy, dz);
+
+	    iris_real ekx = 0.0;
+	    iris_real eky = 0.0;
+	    iris_real ekz = 0.0;
+	    
+	    for(int i = 0; i < m_chass->m_order; i++) {
+		for(int j = 0; j < m_chass->m_order; j++) {
+		    for(int k = 0; k < m_chass->m_order; k++) {
+			ekx +=
+			    m_chass->m_dweights[tid][0][i] *
+			    m_chass->m_weights[tid][1][j] *
+			    m_chass->m_weights[tid][2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+			eky +=
+			    m_chass->m_weights[tid][0][i] *
+			    m_chass->m_dweights[tid][1][j] *
+			    m_chass->m_weights[tid][2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+			ekz +=
+			    m_chass->m_weights[tid][0][i] *
+			    m_chass->m_weights[tid][1][j] *
+			    m_chass->m_dweights[tid][2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+		    }
+		}
+	    }
+	    ekx *= m_hinv[0];
+	    eky *= m_hinv[1];
+	    ekz *= m_hinv[2];
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
 	    out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id

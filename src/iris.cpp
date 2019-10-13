@@ -355,6 +355,7 @@ void iris::commit()
 	m_domain->commit();     // depends on m_proc_grid
 	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
 	m_solver->commit();     // depends on m_mesh
+	m_quit = false;
     }
 }
 
@@ -614,8 +615,16 @@ bool iris::handle_commit_charges()
     m_mesh->assign_charges();
     m_mesh->exchange_rho_halo();
     solve();
-    m_mesh->exchange_field_halo();
-    m_mesh->assign_forces();
+    bool ad = false;
+    if(m_which_solver == IRIS_SOLVER_P3M) {
+	m_mesh->exchange_field_halo();
+    }else if(m_which_solver == IRIS_SOLVER_CG) {
+	m_mesh->exchange_phi_halo();
+	ad = true;
+    }else {
+	throw std::logic_error("Don't know how to handle forces for this solver!");
+    }
+    m_mesh->assign_forces(ad);
     
     return false;  // no need to hodl
 }
@@ -646,6 +655,38 @@ void iris::solve()
 
     m_solver->solve();
 
+    iris_real ener = 0.0;
+    iris_real h3 = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
+
+    // iris_real phi_sum = 0.0;
+    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
+    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+    // 		phi_sum += m_mesh->m_phi[i][j][k];
+    // 	    }
+    // 	}
+    // }
+
+    // phi_sum /= h3;
+
+    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
+    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+    // 		m_mesh->m_phi[i][j][k] -= phi_sum;
+    // 	    }
+    // 	}
+    // }
+    
+    for(int i=0;i<m_mesh->m_own_size[0];i++) {
+	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+		ener += m_mesh->m_rho[i][j][k] * h3 * m_mesh->m_phi[i][j][k];
+	    }
+	}
+    }
+	
+    m_logger->info("ener = %g | %g [%s]", ener*0.5, ener*0.5*m_units->ecf, m_units->energy_unit);
+    
     if(m_compute_global_energy) {
 	iris_real etot;
 	iris_real volume =
@@ -655,14 +696,17 @@ void iris::solve()
 
 	MPI_Allreduce(&m_global_energy, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
 	m_global_energy = etot;
-	m_logger->info("etot1 = %f", m_global_energy);
+	m_logger->info("etot1 = %g", m_global_energy);
 	m_global_energy *= 0.5 * volume;
-	m_logger->info("etot2 = %f", m_global_energy);
-	m_global_energy -= m_alpha * m_mesh->m_q2tot / _SQRT_PI + 
+
+	m_logger->info("E(k) = %g | %g", m_global_energy, m_global_energy * m_units->ecf);
+	iris_real Es = -m_alpha * m_mesh->m_q2tot / _SQRT_PI;
+	m_logger->info("E(s) = %g", Es);
+	m_global_energy += Es + 
 	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
-	m_logger->info("etot3 = %f", m_global_energy);
+	m_logger->info("etot3 = %g", m_global_energy);
 	m_global_energy *= m_units->ecf;
-	m_logger->info("etot4 = %f", m_global_energy);
+	m_logger->info("E(total) = %f", m_global_energy);
     }
 }
 
@@ -772,6 +816,8 @@ void iris::auto_tune_parameters()
 		       (m_hx_free || m_hy_free || m_hz_free) */)
     {
 	atp_scenario1();
+    }else if(!m_alpha_free && !m_hx_free && !m_hy_free && !m_hz_free) {
+	m_mesh->set_size(m_nx_user, m_ny_user, m_nz_user);
     }
 }
 

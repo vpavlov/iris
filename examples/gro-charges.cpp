@@ -378,15 +378,15 @@ main(int argc, char **argv)
     //x->set_rho_multiplier(1745.9144526866105);
     x->config_auto_tune(ATOMS, 8.0, 10.0);
 
-    x->set_solver(IRIS_SOLVER_CG);
+    x->set_solver(IRIS_SOLVER_P3M);
 
     solver_param_t nsigmas;
     nsigmas.r = 4.0;
     x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
 
-    x->set_order(2);
-    x->set_mesh_size(128, 128, 128);
-    x->set_accuracy(1e-5, true);
+    x->set_order(3);
+    //x->set_mesh_size(128, 128, 128);
+    x->set_accuracy(1e-4, false);
     x->commit();
 
 

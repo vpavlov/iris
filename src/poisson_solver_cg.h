@@ -52,6 +52,7 @@ namespace ORG_NCSA_IRIS {
 	void init_convolution();
 	void convolve_with_gaussian();
 	void prepare_for_gx();
+	void prepare_for_gx_test();
 	void prepare_for_gy();
 	void prepare_for_gz();
 	void add_gx();
@@ -60,7 +61,8 @@ namespace ORG_NCSA_IRIS {
 	void extract_rho();
 
 	void init_stencil();
-	void init_stencil_00();
+
+	void blur_rhs();
 
 	void adot(iris_real ***in, iris_real ***out, class haloex *hex);
 	iris_real dot(iris_real ***v1, iris_real ***v2, bool v1_has_halo, bool v2_has_halo);
@@ -70,7 +72,7 @@ namespace ORG_NCSA_IRIS {
 	// config
 	iris_real m_nsigmas;  // total width of Gaussian in # of σ's
 
-	class laplacian3D_pade *m_stencil;
+	class laplacian3D *m_stencil;
 
 	int m_max_iters;
 	iris_real m_epsilon;
@@ -85,8 +87,11 @@ namespace ORG_NCSA_IRIS {
 	class haloex *m_Gy_haloex;       // Gaussian halo exchanger, Y dir
 	class haloex *m_Gz_haloex;       // Gaussian halo exchanger, Z dir
 
-	int m_ext_size[3];     // size of own mesh + halo
-
+	int m_ext_size[3];     // size of own mesh (phi) + halo
+	int m_rext_size[3];    // size of own mesh (rho) + halo
+	
+	iris_real ***m_rho;   // ρ - the right hand side; needs halo ?
+	iris_real ***m_blurred_rho;   // ρ - the right hand side; needs halo ?
 	iris_real ***m_phi;   // φ - the result; needs halo
 	iris_real ***m_Ap;    // no need for halo
 	iris_real ***m_p;     // needs halo
@@ -94,6 +99,7 @@ namespace ORG_NCSA_IRIS {
 
 	class haloex *m_phi_haloex;
 	class haloex *m_p_haloex;
+	class haloex *m_rho_haloex;
     };
 }
 

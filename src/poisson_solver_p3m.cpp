@@ -163,6 +163,7 @@ void poisson_solver_p3m::kspace_phi(iris_real *io_rho_phi)
 
 void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
 {
+    // FFT is not normalized, so we need to do that now
     iris_real s2 = square(1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]));
 
     int nx = m_fft_size[0];
@@ -334,7 +335,7 @@ void poisson_solver_p3m::calculate_green_function()
 			    }
 			}
 			iris_real part3 = denominator(sinx2, siny2, sinz2);
-			
+
 			m_greenfn[x-sx][y-sy][z-sz] = part1 * part2 / part3;
 		    }else {
 			m_greenfn[x-sx][y-sy][z-sz] = 0.0;

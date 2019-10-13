@@ -50,8 +50,9 @@ namespace ORG_NCSA_IRIS {
 
 	void assign_charges();
 	void exchange_rho_halo();
+	void exchange_phi_halo();
 	void exchange_field_halo();
-	void assign_forces();
+	void assign_forces(bool ad);
 
 	void dump_bov(const char *in_fname, iris_real ***data);
 	void dump_ascii(const char *in_fname, iris_real ***data);
@@ -68,6 +69,8 @@ namespace ORG_NCSA_IRIS {
 	void assign_charges1(int in_ncharges, iris_real *in_charges);
 	void assign_forces1(int in_ncharges, iris_real *in_charges,
 			    iris_real *out_forces);
+	void assign_forces1_ad(int in_ncharges, iris_real *in_charges,
+			       iris_real *out_forces);
 
 	void send_rho_halo(int in_dim, int in_dir,
 			   iris_real **out_sendbuf, MPI_Request *out_req);
@@ -78,6 +81,7 @@ namespace ORG_NCSA_IRIS {
 			   iris_real **out_sendbuf, MPI_Request *out_req);
 	void recv_field_halo(int in_dim, int in_dir);
 	void imtract_field();
+	void imtract_phi();
 
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit
@@ -98,7 +102,8 @@ namespace ORG_NCSA_IRIS {
 	class haloex *m_Ex_haloex;
 	class haloex *m_Ey_haloex;
 	class haloex *m_Ez_haloex;
-
+	class haloex *m_phi_haloex;
+	
 	iris_real m_qtot;  // total charge (must be 0)
 	iris_real m_q2tot; // total charge squared (must be != 0)
 
@@ -110,6 +115,7 @@ namespace ORG_NCSA_IRIS {
 	iris_real ***m_rho_plus;  // ρ, own + halo items
 
 	iris_real ***m_phi;  // potential φ (unknown in the LHS)
+	iris_real ***m_phi_plus;  // potential φ (unknown in the LHS)
 	iris_real ***m_Ex;   // Electical field x component
 	iris_real ***m_Ex_plus;  // Ex, own + halo items
 	iris_real ***m_Ey;   // Electical field y component

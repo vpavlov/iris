@@ -43,8 +43,6 @@
 
 using namespace ORG_NCSA_IRIS;
 
-static iris_real coeff1[1][1] = {{ 1.0 }};
-
 static iris_real coeff2[2][2] =
     {{ 1/2.0,  1.0 },
      { 1/2.0, -1.0 }};
@@ -84,6 +82,47 @@ static iris_real coeff7[7][7] =
      {   722/46080.0,  -236/3840.0,   74/768.0, -20/288.0,   2/192.0,  4/240.0,  -6/720.0 },
      {     1/46080.0,    -1/3840.0,    1/768.0,  -1/288.0,   1/192.0, -1/240.0,   1/720.0 }};
 
+
+
+static iris_real dcoeff2[2][1] =
+    {{  1.0 },
+     { -1.0 }};
+
+static iris_real dcoeff3[3][2] =
+    {{  1/2.0,  1.0 },
+     {      0, -2.0 },
+     { -1/2.0,  1.0 }};
+
+static iris_real dcoeff4[4][3] = 
+    {{  1/8.0,  1/2.0,  1/2.0 },
+     {  5/8.0, -1/2.0, -3/2.0 },
+     { -5/8.0, -1/2.0,  3/2.0 },
+     { -1/8.0,  1/2.0, -1/2.0 }};
+
+static iris_real dcoeff5[5][4] =
+    {{   1/48.0,   1/8.0,  1/4.0,  1/6.0 },
+     {  22/48.0,   4/8.0, -2/4.0, -4/6.0 },
+     {        0, -10/8.0,       0,  6/6.0 },
+     { -22/48.0,   4/8.0,  2/4.0, -4/6.0 },
+     {  -1/48.0,   1/8.0, -1/4.0,  1/6.0 }};
+
+static iris_real dcoeff6[6][5] =
+    {{    1/384.0,   1/48.0,   1/16.0,  1/12.0,   1/24.0 },
+     {   75/384.0,  21/48.0,   3/16.0, -3/12.0,  -5/24.0 },
+     {  154/384.0, -22/48.0, -14/16.0,  2/12.0,  10/24.0 },
+     { -154/384.0, -22/48.0,  14/16.0,  2/12.0, -10/24.0 },
+     {  -75/384.0,  21/48.0,  -3/16.0, -3/12.0,   5/24.0 },
+     {   -1/384.0,   1/48.0,  -1/16.0,  1/12.0,  -1/24.0 }};
+
+static iris_real dcoeff7[7][6] =
+    {{     1/3840.0,    1/384.0,   1/96.0,   1/48.0,  1/48.0,   1/120.0 },
+     {   236/3840.0,   74/384.0,  20/96.0,   2/48.0, -4/48.0,  -6/120.0 },
+     {  1445/3840.0,   79/384.0, -43/96.0, -17/48.0,  5/48.0,  15/120.0 },
+     {            0, -308/384.0,        0,  28/48.0,       0, -20/120.0 },
+     { -1445/3840.0,   79/384.0,  43/96.0, -17/48.0, -5/48.0,  15/120.0 },
+     {  -236/3840.0,   74/384.0, -20/96.0,   2/48.0,  4/48.0,  -6/120.0 },
+     {    -1/3840.0,    1/384.0,  -1/96.0,   1/48.0, -1/48.0,   1/120.0 }};
+
 // Hockney and Eastwood modified Green function
 //
 // See for example Appendix A of
@@ -102,18 +141,19 @@ static iris_real gfd_coeff6[] = { 1.0, -2.0, 19.0/15, -256.0/945, 62.0/4725, -4.
 static iris_real gfd_coeff7[] = { 1.0, -7.0/3, 28.0/15, -16.0/27, 26.0/405, -2.0/1485, 4.0/6081075 };
 
 charge_assigner::charge_assigner(iris *obj)
-    :state_accessor(obj), m_order(0), m_dirty(true), m_weights(NULL)
+    :state_accessor(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL)
 {
 }
 
 charge_assigner::~charge_assigner()
 {
     memory::destroy_3d(m_weights);
+    memory::destroy_3d(m_dweights);
 }
 
 void charge_assigner::set_order(int in_order)
 {
-    if(in_order < 1 || in_order > 7) {
+    if(in_order < 2 || in_order > 7) {
 	throw std::invalid_argument("Orders below 1 and above 7 are not supported!");
     }
 
@@ -141,31 +181,38 @@ void charge_assigner::commit()
 	    m_ics_center = 0.5;
 	}
 	
-	if(m_order == 1) {
-	    m_coeff = (iris_real *) coeff1;
-	    m_gfd_coeff = (iris_real *) gfd_coeff1;
-	}else if(m_order == 2) {
+	if(m_order == 2) {
 	    m_coeff = (iris_real *) coeff2;
+	    m_dcoeff = (iris_real *) dcoeff2;
 	    m_gfd_coeff = (iris_real *) gfd_coeff2;
 	}else if(m_order == 3) {
 	    m_coeff = (iris_real *) coeff3;
+	    m_dcoeff = (iris_real *) dcoeff3;
 	    m_gfd_coeff = (iris_real *) gfd_coeff3;
 	}else if(m_order == 4) {
 	    m_coeff = (iris_real *) coeff4;
+	    m_dcoeff = (iris_real *) dcoeff4;
 	    m_gfd_coeff = (iris_real *) gfd_coeff4;
 	}else if(m_order == 5) {
 	    m_coeff = (iris_real *) coeff5;
+	    m_dcoeff = (iris_real *) dcoeff5;
 	    m_gfd_coeff = (iris_real *) gfd_coeff5;
 	}else if(m_order == 6) {
 	    m_coeff = (iris_real *) coeff6;
+	    m_dcoeff = (iris_real *) dcoeff6;
 	    m_gfd_coeff = (iris_real *) gfd_coeff6;
 	}else if(m_order == 7) {
 	    m_coeff = (iris_real *) coeff7;
+	    m_dcoeff = (iris_real *) dcoeff7;
 	    m_gfd_coeff = (iris_real *) gfd_coeff7;
 	}
 
 	memory::destroy_3d(m_weights);
 	memory::create_3d(m_weights, m_iris->m_nthreads, 3, m_order);
+
+	memory::destroy_3d(m_dweights);
+	memory::create_3d(m_dweights, m_iris->m_nthreads, 3, m_order);
+	
 	if(m_mesh != NULL) {
 	    m_mesh->m_dirty = true;
 	}
@@ -190,5 +237,24 @@ void charge_assigner::compute_weights(iris_real dx, iris_real dy, iris_real dz)
 	m_weights[tid][0][i] = r1;
 	m_weights[tid][1][i] = r2;
 	m_weights[tid][2][i] = r3;
+    }
+}
+
+void charge_assigner::compute_dweights(iris_real dx, iris_real dy, iris_real dz)
+{
+    iris_real r1, r2, r3;
+    int tid = THREAD_ID;
+    for(int i = 0; i < m_order; i++) {
+	r1 = r2 = r3 = (iris_real)0.0;
+	
+	for(int j = m_order - 2; j >= 0; j--) {
+	    r1 = m_dcoeff[i*(m_order-1) + j] + r1 * dx;
+	    r2 = m_dcoeff[i*(m_order-1) + j] + r2 * dy;
+	    r3 = m_dcoeff[i*(m_order-1) + j] + r3 * dz;
+	}
+	
+	m_dweights[tid][0][i] = r1;
+	m_dweights[tid][1][i] = r2;
+	m_dweights[tid][2][i] = r3;
     }
 }
