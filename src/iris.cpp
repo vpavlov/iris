@@ -826,7 +826,7 @@ void iris::initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps)
 
     do {
 	alpha = sqrt_fn(-log_fn(0.5 * eps * sqrt_fn(N*rc*L3) / Q2)) / rc;
-	if(!isnan(alpha) && alpha > 0.0) {
+	if(!std::isnan(alpha) && alpha > 0.0) {
 	    break;
 	}
 	eps /= 10.0;
