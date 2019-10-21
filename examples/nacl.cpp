@@ -11,7 +11,7 @@
 #include <iris/utils.h>
 #include <iris/timer.h>
 #include <iris/factorizer.h>
-#include <iris/laplacian27.h>
+
 
 iris_real g_boxx, g_boxy, g_boxz;
 
