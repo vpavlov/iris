@@ -291,7 +291,7 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     fclose(fp);
 }
 
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {    
     if(argc < 4) {
 	printf("Usage: %s <path-to-NaCl.data> <natoms> <mode>\n", argv[0]);
@@ -401,6 +401,15 @@ main(int argc, char **argv)
     MPI_Bcast(&g_boxz, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
     MPI_Bcast(&qtot2, 1, IRIS_REAL, 0, MPI_COMM_WORLD);
 
+    box_t<iris_real> gbox;
+    gbox.xlo = gbox.ylo = gbox.zlo = 0.0;
+    gbox.xhi = g_boxx;
+    gbox.yhi = g_boxy;
+    gbox.zhi = g_boxz;
+    x->set_global_box(&gbox);
+    MPI_Finalize();
+    return 0;
+    
     // Setup IRIS. Although called by both client and server nodes, only
     // nodes for which this information is meaningful will do something with it
     // others will just noop.
@@ -408,8 +417,6 @@ main(int argc, char **argv)
     // At the end of the configuration, call commit in order to apply all
     // the configuration and make the IRIS server nodes perform any preliminary
     // calculations in order to prepare for the calculation proper.
-    x->set_global_box(0.0, 0.0, 0.0,
-		      g_boxx,  g_boxy,  g_boxz);
     //x->set_mesh_size(512, 512, 512);
     x->config_auto_tune(natoms, qtot2, CUTOFF);
 

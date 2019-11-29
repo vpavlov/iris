@@ -372,7 +372,7 @@ main(int argc, char **argv)
     // At the end of the configuration, call commit in order to apply all
     // the configuration and make the IRIS server nodes perform any preliminary
     // calculations in order to prepare for the calculation proper.
-    x->set_global_box(0.0, 0.0, 0.0, BOXX, BOXY, BOXZ);
+    //x->set_global_box(0.0, 0.0, 0.0, BOXX, BOXY, BOXZ);
     //x->set_mesh_size(M, N, P);
     // 1/ε = -138.93545768032754292204224841008
     //x->set_rho_multiplier(1745.9144526866105);

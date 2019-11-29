@@ -35,19 +35,36 @@
 #define IRIS_TAG_CHARGES             3
 #define IRIS_TAG_CHARGES_ACK         4
 #define IRIS_TAG_COMMIT_CHARGES      5
-#define IRIS_TAG_QUIT                6
-#define IRIS_TAG_RHO_HALO            7   // leave room for 6 halo msgs
-#define IRIS_TAG_REMAP              13
-#define IRIS_TAG_EX_HALO            14   // leave room for 6 halo msgs
-#define IRIS_TAG_EY_HALO            20   // leave room for 6 halo msgs
-#define IRIS_TAG_EZ_HALO            26   // leave room for 6 halo msgs
-#define IRIS_TAG_FORCES             32
-#define IRIS_TAG_GET_GLOBAL_ENERGY  33
-#define IRIS_TAG_GLOBAL_ENERGY      34
-#define IRIS_TAG_GX_HALO            35   // leave room for 6 halo msgs
-#define IRIS_TAG_GY_HALO            41   // leave room for 6 halo msgs
-#define IRIS_TAG_GZ_HALO            47   // leave room for 6 halo msgs
-#define IRIS_TAG_PHI_HALO           53   // leave room for 6 halo msgs
-#define IRIS_TAG_P_HALO             59   // leave room for 6 halo msgs
+#define IRIS_TAG_RHO_HALO            6   // leave room for 6 halo msgs
+#define IRIS_TAG_REMAP              12
+#define IRIS_TAG_EX_HALO            13   // leave room for 6 halo msgs
+#define IRIS_TAG_EY_HALO            19   // leave room for 6 halo msgs
+#define IRIS_TAG_EZ_HALO            25   // leave room for 6 halo msgs
+#define IRIS_TAG_FORCES             31
+#define IRIS_TAG_GET_GLOBAL_ENERGY  32
+#define IRIS_TAG_GLOBAL_ENERGY      33
+#define IRIS_TAG_GX_HALO            34   // leave room for 6 halo msgs
+#define IRIS_TAG_GY_HALO            40   // leave room for 6 halo msgs
+#define IRIS_TAG_GZ_HALO            46   // leave room for 6 halo msgs
+#define IRIS_TAG_PHI_HALO           52   // leave room for 6 halo msgs
+#define IRIS_TAG_P_HALO             58   // leave room for 6 halo msgs
+
+#define IRIS_TAG_LEADER_EXCHANGE    64
+
+#define IRIS_TAG_SET_GBOX_FANOUT    65
+#define IRIS_TAG_SET_GBOX           66
+#define IRIS_TAG_SET_GBOX_DONE      67
+
+#define IRIS_TAG_GET_LBOXES_FANOUT  68
+#define IRIS_TAG_GET_LBOXES         69
+#define IRIS_TAG_GET_LBOXES_DONE    70
+
+#define IRIS_TAG_COMMIT_FANOUT      71
+#define IRIS_TAG_COMMIT             72
+#define IRIS_TAG_COMMIT_DONE        73
+
+#define IRIS_TAG_QUIT_FANOUT        74
+#define IRIS_TAG_QUIT               75
+#define IRIS_TAG_QUIT_DONE          76
 
 #endif

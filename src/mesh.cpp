@@ -1036,9 +1036,7 @@ void mesh::exchange_phi_halo()
 
 void mesh::assign_forces(bool ad)
 {
-    MPI_Comm comm = m_iris->is_client() ?
-	m_iris->m_local_comm->m_comm    :
-	m_iris->m_inter_comm->m_comm;
+    MPI_Comm comm = m_iris->client_comm();
 
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int peer = it->first;

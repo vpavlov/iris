@@ -67,6 +67,14 @@ using namespace ORG_NCSA_IRIS;
 			       " may only be called from client nodes!"); \
     }
 
+// OAOO: helper macro to assert that server-only routines are only called
+// from server nodes
+#define ASSERT_SERVER(routine)						  \
+    if(!is_server()) {							  \
+	throw std::logic_error(routine					  \
+			       " may only be called from server nodes!"); \
+    }
+
 iris::iris(MPI_Comm in_uber_comm)
     : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
       m_remote_leader(0)
@@ -149,6 +157,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 			     &inter_comm);
 	m_inter_comm = new comm_rec(this, inter_comm);
 	MPI_Comm_free(&inter_comm);
+
     }else {
 	m_client_size = m_server_size = m_local_comm->m_size;
     }
@@ -187,6 +196,16 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
 		   is_leader()?"(leader)":"");
+
+    if(is_leader()) {
+	MPI_Request req;
+	MPI_Irecv(&m_other_leader, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
+		  m_uber_comm->m_comm, &req);
+	MPI_Send(&m_local_comm->m_rank, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
+		 m_uber_comm->m_comm);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	m_logger->trace("This node is a leader; other leader's local rank = %d", m_other_leader);
+    }
 }
 
 iris::~iris()
@@ -314,13 +333,31 @@ void iris::set_units(EUnits in_units)
     m_units = new units(in_units);
 }
 
-void iris::set_global_box(iris_real x0, iris_real y0, iris_real z0,
-			  iris_real x1, iris_real y1, iris_real z1)
+// this must be called by the client leader.
+// there is no harm if other clients call it as well
+// (but no servers, please!)
+void iris::set_global_box(box_t<iris_real> *in_box)
 {
-    if(is_server()) {
-	m_domain->set_global_box(x0, y0, z0, x1, y1, z1);
+    ASSERT_CLIENT("set_global_box");
+
+    if(is_both()) {
+	m_domain->set_global_box(in_box->xlo, in_box->ylo, in_box->zlo,
+				 in_box->xhi, in_box->yhi, in_box->zhi);
+	return;
     }
+
+    if(is_leader()) {
+	// the client leader sends to the server leader the global box
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_SET_GBOX_FANOUT, sizeof(box_t<iris_real>), in_box, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Barrier(m_local_comm->m_comm);
 }
+
 
 void iris::set_grid_pref(int x, int y, int z)
 {
@@ -335,7 +372,7 @@ void iris::set_solver(int in_which_solver)
     m_dirty = true;
 }
 
-void iris::commit()
+void iris::perform_commit()
 {
     if(is_server()) {
 	if(m_dirty) {
@@ -359,54 +396,72 @@ void iris::commit()
     }
 }
 
-
+// this one is called by all clients
 box_t<iris_real> *iris::get_local_boxes()
 {
-    box_t<iris_real> *local_boxes = NULL;
+    ASSERT_CLIENT("get_local_boxes");
+
     int size = sizeof(box_t<iris_real>) * m_server_size;
-
-
-    // TODO: figure out the exact states in which it is permissable to call
-    // get_local_boxes and place a verification here
-
-
-    // Output need to be allocated by everybody except pure-server non-leaders,
-    // which doesn't need it.
-    if(!is_server() || is_client() || is_leader()) {
-	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-    }
-
-    if(is_server()) {
-	MPI_Gather(&(m_domain->m_local_box),
-		   sizeof(box_t<iris_real>)/sizeof(iris_real), IRIS_REAL,
-		   local_boxes,
-		   sizeof(box_t<iris_real>)/sizeof(iris_real), IRIS_REAL,
-		   m_local_leader,
-		   m_local_comm->m_comm);
-
-	if(!is_client()) {
-	    if(is_leader()) {
-		MPI_Send(local_boxes, size, MPI_BYTE, m_remote_leader,
-			 IRIS_TAG_LOCAL_BOXES, m_uber_comm->m_comm);
-		memory::wfree(local_boxes);
-	    }
-
-	    return NULL;
-	}
-    }
-
-    // intentional fall-through (no else if) to handle mixed mode cases
-
-    if(is_client()) {
-	if(!is_server() && is_leader()) {
-	    MPI_Recv(local_boxes, size, MPI_BYTE, m_remote_leader,
-		     IRIS_TAG_LOCAL_BOXES, m_uber_comm->m_comm,
-		     MPI_STATUS_IGNORE);
-	}
-	MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader,
-		  m_local_comm->m_comm);
+    box_t<iris_real> *local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
+    
+    if(is_both()) {
+	// clients are also servers; an allgather will do
+	MPI_Allgather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
+		      local_boxes, sizeof(box_t<iris_real>), MPI_BYTE, m_local_comm->m_comm);
 	return local_boxes;
     }
+
+    if(is_leader()) {
+	// the client leader sends to the server leader request to get the local boxes
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
+    return local_boxes;
+}
+
+void iris::commit()
+{
+    ASSERT_CLIENT("commit");
+
+    if(is_both()) {
+	perform_commit();
+	return;
+    }
+
+    if(is_leader()) {
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Barrier(m_local_comm->m_comm);
+}
+
+void iris::quit()
+{
+    ASSERT_CLIENT("quit");
+
+    if(is_both()) {
+	m_quit = true;
+	return;
+    }
+
+    if(is_leader()) {
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_QUIT_FANOUT, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Barrier(m_local_comm->m_comm);
 }
 
 
@@ -432,11 +487,14 @@ void iris::process_event(event_t *event)
     //m_logger->trace_event(event);
     bool hodl = false;
     switch(event->tag) {
-    case IRIS_TAG_QUIT:
-	m_logger->trace("Quit event received");
-	m_quit = true;
-	break;
 
+    case IRIS_TAG_SET_GBOX_FANOUT:
+    case IRIS_TAG_GET_LBOXES_FANOUT:
+    case IRIS_TAG_COMMIT_FANOUT:
+    case IRIS_TAG_QUIT_FANOUT:
+	hodl = fanout_event(event);
+	break;
+	
     case IRIS_TAG_CHARGES:
 	hodl = handle_charges(event);
 	break;
@@ -453,6 +511,25 @@ void iris::process_event(event_t *event)
 	hodl = handle_get_global_energy(event);
 	break;
 
+    case IRIS_TAG_SET_GBOX:
+	hodl = handle_set_gbox(event);
+	break;
+
+    case IRIS_TAG_GET_LBOXES:
+	hodl = handle_get_lboxes(event);
+	break;
+
+    case IRIS_TAG_COMMIT:
+	hodl= handle_commit(event);
+	break;
+
+    case IRIS_TAG_QUIT:
+	hodl = handle_quit(event);
+	break;
+
+    default:
+	m_logger->warn("Unhandled event %d", event->tag);
+	break;
     }
 
     if(!hodl) {
@@ -464,6 +541,12 @@ MPI_Comm iris::server_comm()
 {
     // in shared mode we only have m_local_comm; in SOC mode we use intercomm
     return is_server()?m_local_comm->m_comm:m_inter_comm->m_comm;
+}
+
+MPI_Comm iris::client_comm()
+{
+    // in shared mode we only have m_local_comm; in SOC mode we use intercomm
+    return is_client()?m_local_comm->m_comm:m_inter_comm->m_comm;
 }
 
 int *iris::stos_fence_pending(MPI_Win *out_win)
@@ -490,7 +573,6 @@ void iris::stos_process_pending(int *in_pending, MPI_Win in_pending_win)
 	return;
     }
     
-    //MPI_Barrier(m_local_comm->m_comm);  // is this needed? I think not.
     MPI_Win_fence(MPI_MODE_NOSUCCEED | MPI_MODE_NOSTORE, in_pending_win);
     for(int i=0;i<m_server_size;i++) {
 	if(in_pending[i] == 1) {
@@ -556,27 +638,6 @@ void iris::commit_charges()
 	for(int i=0;i<m_server_size;i++) {
 	    MPI_Request req;
 	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
-	    if(req != MPI_REQUEST_NULL) {
-		MPI_Request_free(&req);
-	    }
-	}
-    }
-
-    stos_process_pending(pending, win);
-}
-
-void iris::quit()
-{
-    ASSERT_CLIENT("quit");
-
-    MPI_Comm comm = server_comm();
-    MPI_Win win;
-    int *pending = stos_fence_pending(&win);
-
-    if(is_leader()) {
-	for(int i=0;i<m_server_size;i++) {
-	    MPI_Request req;
-	    send_event(comm, i, IRIS_TAG_QUIT, 0, NULL, &req, win);
 	    if(req != MPI_REQUEST_NULL) {
 		MPI_Request_free(&req);
 	    }
@@ -1010,5 +1071,70 @@ poisson_solver *iris::get_solver()
 
     case IRIS_SOLVER_CG:
 	return new poisson_solver_cg(this);
+    }
+}
+
+// an event is received only by the server leader
+// we need to distribute it to the rest of the server nodes
+bool iris::fanout_event(struct event_t *event)
+{
+    MPI_Comm comm = server_comm();
+    MPI_Request *req = new MPI_Request[m_server_size];
+    for(int i=0;i<m_server_size;i++) {
+	req[i] = MPI_REQUEST_NULL;
+    }
+
+    for(int i=0;i<m_server_size;i++) {
+	send_event(comm, i, event->tag + 1, event->size, event->data, req + i, NULL);
+    }
+    
+    MPI_Waitall(m_server_size, req, MPI_STATUS_IGNORE);
+    delete req;
+    return false;
+}
+
+bool iris::handle_set_gbox(struct event_t *event)
+{
+    box_t<iris_real> *box = (box_t<iris_real> *)event->data;
+    m_domain->set_global_box(box->xlo, box->ylo, box->zlo,
+			     box->xhi, box->yhi, box->zhi);
+    if(is_leader()) {
+	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, client_comm());
+    }
+    return false;
+}
+
+bool iris::handle_get_lboxes(event_t *in_event)
+{
+    box_t<iris_real> *local_boxes = NULL;
+    int size = sizeof(box_t<iris_real>) * m_server_size;
+    
+    if(is_leader()) {
+	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
+    }
+
+    MPI_Gather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
+	       local_boxes,              sizeof(box_t<iris_real>), MPI_BYTE,
+	       m_local_leader,
+	       m_local_comm->m_comm);
+
+    if(is_leader()) {
+	MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
+    }
+}
+
+bool iris::handle_commit(event_t *in_event)
+{
+    perform_commit();
+    if(is_leader()) {
+	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, client_comm());
+    }
+}
+
+bool iris::handle_quit(event_t *in_event)
+{
+    m_quit = true;
+    if(is_leader()) {
+	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, client_comm());
     }
 }

@@ -115,11 +115,9 @@ namespace ORG_NCSA_IRIS {
 
 	void set_solver(int in_solver);
 
-	// Sets or resets the simulation box extents. Has no effect if called
-	// from a purely client node.
-	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
-			    iris_real x1, iris_real y1, iris_real z1);
-
+	// client-only call
+	void set_global_box(box_t<iris_real> *in_box);
+	
 	// Sets or resets the mesh size (how many points in each direction
 	// the discretization grid will have). Has no effect if called from a
 	// purely client node.
@@ -152,7 +150,7 @@ namespace ORG_NCSA_IRIS {
 	//   - verify the configuration for any missing mandatory items;
 	//   - perform any preliminary calculations necessary for the solving;
 	void commit();
-
+	
 	// Call this to run the event loop
 	void run();
 
@@ -176,6 +174,7 @@ namespace ORG_NCSA_IRIS {
 
 	// Helpers used in internode communication
 	MPI_Comm server_comm();
+	MPI_Comm client_comm();
 	int *stos_fence_pending(MPI_Win *out_win);
 	void stos_process_pending(int *in_pending, MPI_Win in_win);
 	void send_event(MPI_Comm in_comm, int in_peer, int in_tag,
@@ -190,11 +189,18 @@ namespace ORG_NCSA_IRIS {
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
 
+	void perform_commit();
+	
 	bool handle_charges(struct event_t *in_event);
 	bool handle_commit_charges();
 	bool handle_rho_halo(struct event_t *in_event);
 	bool handle_get_global_energy(struct event_t *in_event);
-
+	bool fanout_event(struct event_t *in_event);
+	bool handle_set_gbox(struct event_t *in_event);
+	bool handle_get_lboxes(struct event_t *in_event);
+	bool handle_commit(struct event_t *in_event);
+	bool handle_quit(struct event_t *in_event);
+	
 	// initialize m_waiting_forces_from to sensible initial state
 	void clear_wff();
 
@@ -214,6 +220,7 @@ namespace ORG_NCSA_IRIS {
 	int m_role;                    // is this node client or server or both
 	int m_local_leader;            // rank in local_comm of local leader
 	int m_remote_leader;           // rank in uber_comm of remote leader
+	int m_other_leader;            // the leader of the other group
 	int m_nthreads;                // # of threads to use
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;

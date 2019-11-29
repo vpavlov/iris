@@ -14,7 +14,7 @@
 #include <iris/timer.h>
 #include <iris/factorizer.h>
 
-#define NSTEPS 1
+#define NSTEPS 2
 #define CUTOFF 1.2  // 12 angstroms
 
 using namespace ORG_NCSA_IRIS;
@@ -147,7 +147,7 @@ bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_inp
     iris_real qtot = 0.0;
     iris_real qtot2 = 0.0;
 
-    int i = 0;
+    int i = 0, j = 0;
     while(getline(&line, &sz, fp) != -1) {
 	SUBSTR(tmp, line, 1, 6);
 	if(!strcmp(tmp, "CRYST1")) {
@@ -197,10 +197,10 @@ bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_inp
 		}
 		atom.xyzqi[2] = x;
 		
-		atom.xyzqi[3] = out_input->atoms[i].xyzqi[3];
-		atom.xyzqi[4] = out_input->atoms[i].xyzqi[4];
+		atom.xyzqi[3] = out_input->atoms[j].xyzqi[3];
+		atom.xyzqi[4] = out_input->atoms[j].xyzqi[4];
 
-		out_input->atoms[i] = atom;
+		out_input->atoms[j++] = atom;
 	    }
 	    i++;
 	}else if(!strcmp(tmp, "END   ")) {
@@ -500,13 +500,19 @@ main(int argc, char **argv)
     x->set_mesh_size(128, 128, 128);
     x->set_alpha(2.6028443952840625);
     x->set_accuracy(1e-4, true);
-    x->set_solver(IRIS_SOLVER_CG);
+    x->set_solver(IRIS_SOLVER_P3M);
 
     for(int i=1;i<=NSTEPS;i++) {
-	x->set_global_box(0.0, 0.0, 0.0, input.box[0], input.box[1], input.box[2]);
-	x->commit();
-	box_t<iris_real> *local_boxes = x->get_local_boxes();
 	if (x->is_client()) {
+	    box_t<iris_real> gbox;
+	    gbox.xlo = gbox.ylo = gbox.zlo = 0.0;
+	    gbox.xhi = input.box[0];
+	    gbox.yhi = input.box[1];
+	    gbox.zhi = input.box[2];
+	    x->set_global_box(&gbox);
+	    x->commit();
+	    box_t<iris_real> *local_boxes = x->get_local_boxes();
+	    
 	    int *nforces;
 	    send_charges(x, &input, local_boxes);
 	    x->commit_charges();
@@ -516,9 +522,10 @@ main(int argc, char **argv)
 	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
 	    delete [] nforces;
 	    memory::wfree(forces);
-	    x->quit();
-	    x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);
-	    x->m_mesh->dump_ascii("bob-phi", x->m_mesh->m_phi);
+
+	    // the clients don't have a mesh; this needs to be moved to the server
+	    // x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);
+	    // x->m_mesh->dump_ascii("bob-phi", x->m_mesh->m_phi);
 	    
 	    read_frameN(i, dirname, x->m_local_comm, &input);
 	}else {
@@ -526,6 +533,10 @@ main(int argc, char **argv)
 	}
     }
 
+    if(x->is_client()) {
+	x->quit();
+    }
+    
     MPI_Finalize();
     exit(0);
     
