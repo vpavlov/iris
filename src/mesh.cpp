@@ -1036,13 +1036,22 @@ void mesh::exchange_phi_halo()
 
 void mesh::assign_forces(bool ad)
 {
+    bool include_energy = true;  // send the energy to only one of the clients; to the others send 0
     MPI_Comm comm = m_iris->client_comm();
 
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int peer = it->first;
 	int ncharges = it->second;
-	int size = 4 * sizeof(iris_real) * ncharges;
+	int size = sizeof(iris_real) +             // 1 real for the E(k) energy
+	    ncharges * 4 * sizeof(iris_real);      // 4 reals for each charge: id, Fx, Fy, Fz
 	iris_real *forces = (iris_real *)memory::wmalloc(size);
+
+	if(include_energy) {
+	    forces[0] = m_iris->m_Ek;
+	}else {
+	    forces[0] = 0.0;
+	}
+	
 	m_forces[peer] = forces;
 	if(ad) {
 	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
@@ -1053,6 +1062,7 @@ void mesh::assign_forces(bool ad)
 	MPI_Request req;
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
 	MPI_Request_free(&req);
+	include_energy = false;
     }
 }
 
@@ -1105,16 +1115,16 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    }
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
-	    out_forces[n*4 + 1] = factor * ekx;
-	    out_forces[n*4 + 2] = factor * eky;
-	    out_forces[n*4 + 3] = factor * ekz;
+	    out_forces[1 + n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[1 + n*4 + 1] = factor * ekx;
+	    out_forces[1 + n*4 + 2] = factor * eky;
+	    out_forces[1 + n*4 + 3] = factor * ekz;
 	}
     }
 }
 
 void mesh::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
-			  iris_real *out_forces)
+			     iris_real *out_forces)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
 
@@ -1175,10 +1185,10 @@ void mesh::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 	    ekz *= m_hinv[2];
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[n*4 + 0] = in_charges[n*5 + 4];  // id
-	    out_forces[n*4 + 1] = factor * ekx;
-	    out_forces[n*4 + 2] = factor * eky;
-	    out_forces[n*4 + 3] = factor * ekz;
+	    out_forces[1 + n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[1 + n*4 + 1] = factor * ekx;
+	    out_forces[1 + n*4 + 2] = factor * eky;
+	    out_forces[1 + n*4 + 3] = factor * ekz;
 	}
     }
 }

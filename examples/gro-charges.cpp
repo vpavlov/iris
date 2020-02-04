@@ -421,11 +421,12 @@ main(int argc, char **argv)
 
 	    // Receive back the forces from the server
 	    int *nforces;
-	    iris_real *forces = x->receive_forces(&nforces);
+	    iris_real Ek;
+	    iris_real *forces = x->receive_forces(&nforces, &Ek);
 
 	    handle_forces(x, nforces, forces);
 
-	    iris_real etot = x->global_energy();
+	    iris_real etot = x->get_global_energy();
 	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
 
 	    delete [] nforces;

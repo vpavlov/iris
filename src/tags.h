@@ -41,30 +41,33 @@
 #define IRIS_TAG_EY_HALO            19   // leave room for 6 halo msgs
 #define IRIS_TAG_EZ_HALO            25   // leave room for 6 halo msgs
 #define IRIS_TAG_FORCES             31
-#define IRIS_TAG_GET_GLOBAL_ENERGY  32
-#define IRIS_TAG_GLOBAL_ENERGY      33
-#define IRIS_TAG_GX_HALO            34   // leave room for 6 halo msgs
-#define IRIS_TAG_GY_HALO            40   // leave room for 6 halo msgs
-#define IRIS_TAG_GZ_HALO            46   // leave room for 6 halo msgs
-#define IRIS_TAG_PHI_HALO           52   // leave room for 6 halo msgs
-#define IRIS_TAG_P_HALO             58   // leave room for 6 halo msgs
+#define IRIS_TAG_GX_HALO            32   // leave room for 6 halo msgs
+#define IRIS_TAG_GY_HALO            38   // leave room for 6 halo msgs
+#define IRIS_TAG_GZ_HALO            44   // leave room for 6 halo msgs
+#define IRIS_TAG_PHI_HALO           50   // leave room for 6 halo msgs
+#define IRIS_TAG_P_HALO             56   // leave room for 6 halo msgs
 
-#define IRIS_TAG_LEADER_EXCHANGE    64
+#define IRIS_TAG_LEADER_EXCHANGE    62
 
-#define IRIS_TAG_SET_GBOX_FANOUT    65
-#define IRIS_TAG_SET_GBOX           66
-#define IRIS_TAG_SET_GBOX_DONE      67
+#define IRIS_TAG_SET_GBOX_FANOUT    63
+#define IRIS_TAG_SET_GBOX           64
+#define IRIS_TAG_SET_GBOX_DONE      65
 
-#define IRIS_TAG_GET_LBOXES_FANOUT  68
-#define IRIS_TAG_GET_LBOXES         69
-#define IRIS_TAG_GET_LBOXES_DONE    70
+#define IRIS_TAG_GET_LBOXES_FANOUT  66
+#define IRIS_TAG_GET_LBOXES         67
+#define IRIS_TAG_GET_LBOXES_DONE    68
 
-#define IRIS_TAG_COMMIT_FANOUT      71
-#define IRIS_TAG_COMMIT             72
-#define IRIS_TAG_COMMIT_DONE        73
+#define IRIS_TAG_COMMIT_FANOUT      69
+#define IRIS_TAG_COMMIT             70
+#define IRIS_TAG_COMMIT_DONE        71
 
-#define IRIS_TAG_QUIT_FANOUT        74
-#define IRIS_TAG_QUIT               75
-#define IRIS_TAG_QUIT_DONE          76
+#define IRIS_TAG_QUIT_FANOUT        72
+#define IRIS_TAG_QUIT               73
+#define IRIS_TAG_QUIT_DONE          74
+
+#define IRIS_TAG_GGE_FANOUT         75
+#define IRIS_TAG_GGE                76
+#define IRIS_TAG_GGE_DONE           77
+
 
 #endif

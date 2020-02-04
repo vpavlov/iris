@@ -492,6 +492,7 @@ void iris::process_event(event_t *event)
     case IRIS_TAG_GET_LBOXES_FANOUT:
     case IRIS_TAG_COMMIT_FANOUT:
     case IRIS_TAG_QUIT_FANOUT:
+    case IRIS_TAG_GGE_FANOUT:
 	hodl = fanout_event(event);
 	break;
 	
@@ -505,10 +506,6 @@ void iris::process_event(event_t *event)
 
     case IRIS_TAG_RHO_HALO:
 	hodl = handle_rho_halo(event);
-	break;
-
-    case IRIS_TAG_GET_GLOBAL_ENERGY:
-	hodl = handle_get_global_energy(event);
 	break;
 
     case IRIS_TAG_SET_GBOX:
@@ -527,6 +524,10 @@ void iris::process_event(event_t *event)
 	hodl = handle_quit(event);
 	break;
 
+    case IRIS_TAG_GGE:
+	hodl = handle_get_global_energy(event);
+	break;
+	
     default:
 	m_logger->warn("Unhandled event %d", event->tag);
 	break;
@@ -711,13 +712,18 @@ void iris::set_rhs(rhs_fn_t fn)
 void iris::solve()
 {
     if(m_compute_global_energy) {
-	m_global_energy = 0.0;
+	m_Ek = 0.0;
     }
 
     m_solver->solve();
 
-    iris_real ener = 0.0;
-    iris_real h3 = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
+    if(m_compute_global_energy) {
+	m_Ek *= 0.5 *
+	    m_domain->m_global_box.xsize *
+    	    m_domain->m_global_box.ysize *
+    	    m_domain->m_global_box.zsize *
+	    m_units->ecf;
+    }
 
     // iris_real phi_sum = 0.0;
     // for(int i=0;i<m_mesh->m_own_size[0];i++) {
@@ -738,37 +744,38 @@ void iris::solve()
     // 	}
     // }
     
-    for(int i=0;i<m_mesh->m_own_size[0];i++) {
-	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-		ener += m_mesh->m_rho[i][j][k] * h3 * m_mesh->m_phi[i][j][k];
-	    }
-	}
-    }
+    // iris_real ener = 0.0;
+    // iris_real h3 = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
+    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
+    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
+    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
+    // 		ener += m_mesh->m_rho[i][j][k] * h3 * m_mesh->m_phi[i][j][k];
+    // 	    }
+    // 	}
+    // }
+    // m_logger->info("ener = %g | %g [%s]", ener*0.5, ener*0.5*m_units->ecf, m_units->energy_unit);
+
+    // if(m_compute_global_energy) {
+    // 	iris_real etot;
+    // 	iris_real volume =
+    // 	    m_domain->m_global_box.xsize * 
+    // 	    m_domain->m_global_box.ysize *
+    // 	    m_domain->m_global_box.zsize;
 	
-    m_logger->info("ener = %g | %g [%s]", ener*0.5, ener*0.5*m_units->ecf, m_units->energy_unit);
-    
-    if(m_compute_global_energy) {
-	iris_real etot;
-	iris_real volume =
-	    m_domain->m_global_box.xsize * 
-	    m_domain->m_global_box.ysize *
-	    m_domain->m_global_box.zsize;
+    // 	MPI_Allreduce(&m_Ek, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
+    // 	m_Ek = etot;
+    // 	m_logger->info("etot1 = %g", m_Ek);
+    // 	m_Ek *= 0.5 * volume;
 
-	MPI_Allreduce(&m_global_energy, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
-	m_global_energy = etot;
-	m_logger->info("etot1 = %g", m_global_energy);
-	m_global_energy *= 0.5 * volume;
-
-	m_logger->info("E(k) = %g | %g", m_global_energy, m_global_energy * m_units->ecf);
-	iris_real Es = -m_alpha * m_mesh->m_q2tot / _SQRT_PI;
-	m_logger->info("E(s) = %g", Es);
-	m_global_energy += Es + 
-	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
-	m_logger->info("etot3 = %g", m_global_energy);
-	m_global_energy *= m_units->ecf;
-	m_logger->info("E(total) = %f", m_global_energy);
-    }
+    // 	m_logger->info("E(k) = %g | %g", m_Ek, m_Ek * m_units->ecf);
+    // 	iris_real Es = -m_alpha * m_mesh->m_q2tot / _SQRT_PI;
+    // 	m_logger->info("E(s) = %g", Es);
+    // 	m_Ek += Es + 
+    // 	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
+    // 	m_logger->info("etot3 = %g", m_Ek);
+    // 	m_Ek *= m_units->ecf;
+    // 	m_logger->info("E(total) = %f", m_Ek);
+    // }
 }
 
 void iris::clear_wff()
@@ -782,8 +789,10 @@ void iris::clear_wff()
     }
 }
 
-iris_real *iris::receive_forces(int **out_counts)
+iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek)
 {
+    *out_Ek = 0.0;
+    
     int unit = 4 * sizeof(iris_real);
     if(!is_client()) {
 	*out_counts = NULL;
@@ -802,17 +811,19 @@ iris_real *iris::receive_forces(int **out_counts)
 	if(m_wff[i]) {
 	    event_t ev;
 	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
-
-	    if(ev.size % unit != 0) {
+	    
+	    if((ev.size - sizeof(iris_real)) % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
-	    (*out_counts)[i] = ev.size / unit;
-
-	    m_logger->trace("Received %d forces", (*out_counts)[i]);
+	    (*out_counts)[i] = (ev.size-sizeof(iris_real)) / unit;
+	    
+	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
 
 	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size);
-	    memcpy(((unsigned char *)retval) + hwm, ev.data, ev.size);
-	    hwm += ev.size;
+	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + sizeof(iris_real), ev.size-sizeof(iris_real));
+	    hwm += ev.size-sizeof(iris_real);
+	    
+	    *out_Ek += *(iris_real *)ev.data;
 
 	    memory::wfree(ev.data);
 	}
@@ -822,27 +833,41 @@ iris_real *iris::receive_forces(int **out_counts)
     return retval;
 }
 
-iris_real iris::global_energy()
+void iris::perform_get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr)
 {
-    // all servers have the global energy anyway, just return it
-    if(is_server()) {
-	return m_global_energy;
-    }
+    iris_real volume =
+	m_domain->m_global_box.xsize * 
+	m_domain->m_global_box.ysize *
+	m_domain->m_global_box.zsize;
 
-    // we are definitely a pure client; ask one of the servers for the value
-    iris_real eng;
-    MPI_Comm comm = server_comm();
-    MPI_Request req;
-    send_event(comm, 0, IRIS_TAG_GET_GLOBAL_ENERGY, 0, NULL, &req, NULL);
-    MPI_Wait(&req, MPI_STATUS_IGNORE);
-    MPI_Recv(&eng, 1, IRIS_REAL, 0, IRIS_TAG_GLOBAL_ENERGY, comm, MPI_STATUS_IGNORE);
-    return eng;
+    MPI_Allreduce(&m_Ek, out_Ek, 1, IRIS_REAL, MPI_SUM, server_comm());
+    *out_Es = -m_alpha * m_mesh->m_q2tot * m_units->ecf / _SQRT_PI;
+    *out_Ecorr = _PI2 * m_mesh->m_qtot * m_mesh->m_qtot * m_units->ecf / (m_alpha * m_alpha * volume);
 }
 
-bool iris::handle_get_global_energy(struct event_t *event)
+void iris::get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr)
 {
-    MPI_Send(&m_global_energy, 1, IRIS_REAL, event->peer, IRIS_TAG_GLOBAL_ENERGY, event->comm);
-    return false;  // no need to hodl
+    ASSERT_CLIENT("get_global_energy");
+
+    if(is_both()) {
+	// clients are also servers, can do the calculations directly
+	return perform_get_global_energy(out_Ek, out_Es, out_Ecorr);
+    }
+
+    iris_real tmp[3];
+    if(is_leader()) {  // client leader asks server leader to do whatever needs to be done
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_GGE_FANOUT, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    // client leader broadcasts to the other clients the result
+    MPI_Bcast(tmp, 3, IRIS_REAL, m_local_leader, m_local_comm->m_comm);
+    *out_Ek = tmp[0];
+    *out_Es = tmp[1];
+    *out_Ecorr = tmp[2];
 }
 
 // We have several parameters:
@@ -1121,6 +1146,7 @@ bool iris::handle_get_lboxes(event_t *in_event)
     if(is_leader()) {
 	MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
     }
+    return false;
 }
 
 bool iris::handle_commit(event_t *in_event)
@@ -1129,6 +1155,7 @@ bool iris::handle_commit(event_t *in_event)
     if(is_leader()) {
 	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, client_comm());
     }
+    return false;
 }
 
 bool iris::handle_quit(event_t *in_event)
@@ -1137,4 +1164,16 @@ bool iris::handle_quit(event_t *in_event)
     if(is_leader()) {
 	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, client_comm());
     }
+    return false;
+}
+
+bool iris::handle_get_global_energy(event_t *in_event)
+{
+    iris_real tmp[3];
+    perform_get_global_energy(tmp, tmp+1, tmp+2);
+    
+    if(is_leader()) {
+	MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
+    }
+    return false;
 }

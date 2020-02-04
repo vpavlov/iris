@@ -516,10 +516,14 @@ main(int argc, char **argv)
 	    int *nforces;
 	    send_charges(x, &input, local_boxes);
 	    x->commit_charges();
-	    iris_real *forces = x->receive_forces(&nforces);
+	    
+	    iris_real Ek, Es, Ecorr;
+	    iris_real *forces = x->receive_forces(&nforces, &Ek);
+	    x->m_logger->info("Ek(partial) = %f [%s]", Ek, x->m_units->energy_unit);
+	    x->get_global_energy(&Ek, &Es, &Ecorr);
+	    x->m_logger->info("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
+
 	    handle_forces(x, nforces, forces);
-	    iris_real etot = x->global_energy();
-	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
 	    delete [] nforces;
 	    memory::wfree(forces);
 
@@ -540,82 +544,4 @@ main(int argc, char **argv)
     MPI_Finalize();
     exit(0);
     
-    // The client needs to know the domain decomposition of the server
-    // nodes so it can know which client node send which charges to which
-    // server node. So, each client node must ask all server nodes about
-    // their local boxes. This must be done once after each commit
-    // (e.g. after global box changed)
-    //
-    // In shared mode this is not really needed, but it still works.
-    // No communication between the groups is done in that case, since
-    // client and server leader are the same proc.
-    //
-    // This must be called on both clients and servers collectively.
-    box_t<iris_real> *local_boxes = x->get_local_boxes();
-    timer tm_sc, tm_cc, tm_rf, tm;
-    // Main simulation loop in the clients
-    if(x->is_client()) {
-
-	// On each step...
-	for(int i=0;i<1;i++) {
-	    
-	    // The client must send the charges which befall into the server
-	    // procs' local boxes to the corrseponding server node.
-	    // It finds out which client sends which charges to which server
-	    // by whatever means it wants, and at the end it calls IRIS's
-	    // broadcast_charges()
-	    tm.start();
-
-	    tm_sc.start();
-	    //send_charges(x, my_charges, my_count, local_boxes);
-	    tm_sc.stop();
-
-	    // Let the servers know that there are no more charges, so it can
-	    // go on and start calculating
-	    tm_cc.start();
-	    x->commit_charges();
-	    tm_cc.stop();
-
-
-	    // Receive back the forces from the server
-	    int *nforces;
-	    tm_rf.start();
-	    iris_real *forces = x->receive_forces(&nforces);
-	    tm_rf.stop();
-
-	    tm.stop();
-
-	    handle_forces(x, nforces, forces);	    
-
-	    iris_real etot = x->global_energy();
-	    x->m_logger->info("Total long-range energy = %f [%s]", etot, x->m_units->energy_unit);
-
-	    delete [] nforces;
-	    memory::wfree(forces);
-	}
-
-	x->quit();  // this will break server loop
-
-    }else if(x->is_server()) {
-	// Meanwhile, on the servers: an endless loop that is broken by
-	// the quit() above
-	x->run();
-    }
-
-    x->m_logger->info("Send Charges wall/cpu time %lf/%lf (%.2lf%% util)", tm_sc.read_wall(), tm_sc.read_cpu(), (tm_sc.read_cpu() * 100.0) /tm_sc.read_wall());
-    x->m_logger->info("Commit Charges wall/cpu time %lf/%lf (%.2lf%% util)", tm_cc.read_wall(), tm_cc.read_cpu(), (tm_cc.read_cpu() * 100.0) /tm_cc.read_wall());
-    x->m_logger->info("Receive Forces wall/cpu time %lf/%lf (%.2lf%% util)", tm_rf.read_wall(), tm_rf.read_cpu(), (tm_rf.read_cpu() * 100.0) /tm_rf.read_wall());
-    x->m_logger->info("Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-
-    if(x->is_server()) {
-	//x->m_mesh->dump_ascii("phi-cg", x->m_mesh->m_phi);
-	//x->m_mesh->dump_bov("RHO", x->m_mesh->m_rho);
-	//x->m_mesh->check_fxyz();
-	//x->m_mesh->dump_exyz("field");
-    }
-
-    // Cleanup
-    memory::wfree(local_boxes);
-    delete x;
-    MPI_Finalize();
 }

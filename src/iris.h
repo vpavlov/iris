@@ -165,8 +165,8 @@ namespace ORG_NCSA_IRIS {
 	void commit_charges();
 
 	// Use this on a client node to receive forces from server nodes
-	iris_real *receive_forces(int **out_count);
-	iris_real global_energy();
+	iris_real *receive_forces(int **out_count, iris_real *out_Ek);
+	void get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
 
 	void solve();
 
@@ -200,6 +200,8 @@ namespace ORG_NCSA_IRIS {
 	bool handle_get_lboxes(struct event_t *in_event);
 	bool handle_commit(struct event_t *in_event);
 	bool handle_quit(struct event_t *in_event);
+
+	void perform_get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
 	
 	// initialize m_waiting_forces_from to sensible initial state
 	void clear_wff();
@@ -226,7 +228,7 @@ namespace ORG_NCSA_IRIS {
 	bool *m_wff;
 
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
-	iris_real              m_global_energy;  // global long-range energy
+	iris_real              m_Ek;  // E(k) contribution to the global energy (from this process only)
 
 	iris_real              m_qtot2;       // Q^2 (sum of all charges squared)
 	iris_real              m_cutoff;      // real-space cutoff

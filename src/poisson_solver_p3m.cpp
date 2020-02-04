@@ -174,7 +174,7 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
     for(int i=0;i<nx;i++) {
 	for(int j=0;j<ny;j++) {
 	    for(int k=0;k<nz;k++) {
-		m_iris->m_global_energy += s2 * m_greenfn[i][j][k] *
+		m_iris->m_Ek += s2 * m_greenfn[i][j][k] *
 		    (in_rho_phi[idx  ] * in_rho_phi[idx  ] +
 		     in_rho_phi[idx+1] * in_rho_phi[idx+1]);
 		idx += 2;

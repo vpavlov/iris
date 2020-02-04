@@ -128,8 +128,8 @@ if(BUILD_SHARED_LIBS)
   set_target_properties(iris PROPERTIES SOVERSION ${SOVERSION})
 endif()
 
-add_executable(nacl ${IRIS_SOURCE_DIR}/../examples/nacl.cpp)
-target_link_libraries(nacl iris)
+# add_executable(nacl ${IRIS_SOURCE_DIR}/../examples/nacl.cpp)
+# target_link_libraries(nacl iris)
 
 add_executable(bob ${IRIS_SOURCE_DIR}/../examples/bob.cpp)
 target_link_libraries(bob iris)
@@ -137,11 +137,11 @@ target_link_libraries(bob iris)
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
 
-add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
-target_link_libraries(stencils iris)
+# add_executable(stencils ${IRIS_SOURCE_DIR}/../examples/stencils.cpp)
+# target_link_libraries(stencils iris)
 
-add_executable(gro-charges ${IRIS_SOURCE_DIR}/../examples/gro-charges.cpp)
-target_link_libraries(gro-charges iris)
+# add_executable(gro-charges ${IRIS_SOURCE_DIR}/../examples/gro-charges.cpp)
+# target_link_libraries(gro-charges iris)
 
 # Handle pkgconfig
 set(PKG_CFLAGS "")
