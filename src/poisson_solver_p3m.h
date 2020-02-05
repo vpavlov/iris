@@ -53,7 +53,7 @@ namespace ORG_NCSA_IRIS {
 
 	void calculate_green_function();
 	void calculate_k();
-
+	void calculate_virial_coeff();
 	inline iris_real denominator(const iris_real &x, const iris_real &y, const iris_real &z)
 	{
 	    iris_real sx, sy, sz;
@@ -70,9 +70,10 @@ namespace ORG_NCSA_IRIS {
 
     private:
 	iris_real ***m_greenfn;  // green function table, actually a 3D array
-	iris_real *m_kx;
-	iris_real *m_ky;
-	iris_real *m_kz;
+	iris_real *m_kx;         // kx (2πi/L) tabulated
+	iris_real *m_ky;         // ky (2πj/L) tabulated
+	iris_real *m_kz;         // kz (2πk/L) tabulated
+	iris_real **m_vc;        // virial coefficients tabulated, 2D array [nx*ny*nz][6]
 
 	int m_fft_size[3];
 	int m_fft_offset[3];

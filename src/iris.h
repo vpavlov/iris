@@ -142,6 +142,7 @@ namespace ORG_NCSA_IRIS {
 	void set_rhs(rhs_fn_t fn);
 
 	void set_compute_global_energy(bool in_flag) { m_compute_global_energy = in_flag; };
+	void set_compute_global_virial(bool in_flag) { m_compute_global_virial = in_flag; };
 
 
 	// Call this when all configuration is done. When called, it will
@@ -165,7 +166,7 @@ namespace ORG_NCSA_IRIS {
 	void commit_charges();
 
 	// Use this on a client node to receive forces from server nodes
-	iris_real *receive_forces(int **out_count, iris_real *out_Ek);
+	iris_real *receive_forces(int **out_count, iris_real *out_Ek, iris_real *out_virial);
 	void get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
 
 	void solve();
@@ -228,7 +229,9 @@ namespace ORG_NCSA_IRIS {
 	bool *m_wff;
 
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
+	bool                   m_compute_global_virial;  // whether to compute global long-range virial
 	iris_real              m_Ek;  // E(k) contribution to the global energy (from this process only)
+	iris_real              m_virial[6];  // global virial, 6-element tensor
 
 	iris_real              m_qtot2;       // Q^2 (sum of all charges squared)
 	iris_real              m_cutoff;      // real-space cutoff

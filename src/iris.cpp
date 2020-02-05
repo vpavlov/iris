@@ -137,6 +137,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_dirty = true;
 
     m_compute_global_energy = true;
+    m_compute_global_virial = true;
     m_units = new units(real);
 
     m_wff = NULL;
@@ -715,14 +716,27 @@ void iris::solve()
 	m_Ek = 0.0;
     }
 
+    if(m_compute_global_virial) {
+	m_virial[0] = m_virial[1] = m_virial[2] =
+	    m_virial[3] = m_virial[4] = m_virial[5] = 0.0;
+    }
+    
     m_solver->solve();
 
+    iris_real post_corr = 0.5 *
+	m_domain->m_global_box.xsize *
+	m_domain->m_global_box.ysize *
+	m_domain->m_global_box.zsize *
+	m_units->ecf;
+    
     if(m_compute_global_energy) {
-	m_Ek *= 0.5 *
-	    m_domain->m_global_box.xsize *
-    	    m_domain->m_global_box.ysize *
-    	    m_domain->m_global_box.zsize *
-	    m_units->ecf;
+	m_Ek *= post_corr;
+    }
+    
+    if(m_compute_global_virial) {
+	for(int i=0;i<6;i++) {
+	    m_virial[i] *= post_corr;
+	}
     }
 
     // iris_real phi_sum = 0.0;
@@ -789,9 +803,15 @@ void iris::clear_wff()
     }
 }
 
-iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek)
+iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
     *out_Ek = 0.0;
+    *(out_virial + 0) = 0.0;
+    *(out_virial + 1) = 0.0;
+    *(out_virial + 2) = 0.0;
+    *(out_virial + 3) = 0.0;
+    *(out_virial + 4) = 0.0;
+    *(out_virial + 5) = 0.0;
     
     int unit = 4 * sizeof(iris_real);
     if(!is_client()) {
@@ -812,18 +832,24 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek)
 	    event_t ev;
 	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
 	    
-	    if((ev.size - sizeof(iris_real)) % unit != 0) {
+	    if((ev.size - 7*sizeof(iris_real)) % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
-	    (*out_counts)[i] = (ev.size-sizeof(iris_real)) / unit;
+	    (*out_counts)[i] = (ev.size - 7*sizeof(iris_real)) / unit;
 	    
 	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
 
 	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size);
-	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + sizeof(iris_real), ev.size-sizeof(iris_real));
-	    hwm += ev.size-sizeof(iris_real);
+	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
+	    hwm += ev.size - 7*sizeof(iris_real);
 	    
-	    *out_Ek += *(iris_real *)ev.data;
+	    *out_Ek +=         *((iris_real *)ev.data + 0);
+	    *(out_virial+0) += *((iris_real *)ev.data + 1);
+	    *(out_virial+1) += *((iris_real *)ev.data + 2);
+	    *(out_virial+2) += *((iris_real *)ev.data + 3);
+	    *(out_virial+3) += *((iris_real *)ev.data + 4);
+	    *(out_virial+4) += *((iris_real *)ev.data + 5);
+	    *(out_virial+5) += *((iris_real *)ev.data + 6);
 
 	    memory::wfree(ev.data);
 	}

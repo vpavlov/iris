@@ -49,7 +49,7 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
-    : poisson_solver(obj), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL),
+    : poisson_solver(obj), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
       m_work1(NULL), m_work2(NULL), m_work3(NULL),
       m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
@@ -62,6 +62,7 @@ poisson_solver_p3m::~poisson_solver_p3m()
     memory::destroy_1d(m_kx);
     memory::destroy_1d(m_ky);
     memory::destroy_1d(m_kz);
+    memory::destroy_2d(m_vc);
     memory::destroy_1d(m_work1);
     memory::destroy_1d(m_work2);
     memory::destroy_1d(m_work3);
@@ -114,8 +115,12 @@ void poisson_solver_p3m::commit()
     memory::destroy_1d(m_kz);
     memory::create_1d(m_kz, m_fft_size[2]);
 
+    memory::destroy_2d(m_vc);
+    memory::create_2d(m_vc, m_fft_size[0]*m_fft_size[1]*m_fft_size[2], 6);
+    
     calculate_green_function();
     calculate_k();
+    calculate_virial_coeff();
 
     if(m_fft1 != NULL) { delete m_fft1; }
     m_fft1 = new fft3d(m_iris,
@@ -169,15 +174,35 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
     int nx = m_fft_size[0];
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
-    
-    int idx = 0;
-    for(int i=0;i<nx;i++) {
-	for(int j=0;j<ny;j++) {
-	    for(int k=0;k<nz;k++) {
-		m_iris->m_Ek += s2 * m_greenfn[i][j][k] *
-		    (in_rho_phi[idx  ] * in_rho_phi[idx  ] +
-		     in_rho_phi[idx+1] * in_rho_phi[idx+1]);
-		idx += 2;
+
+    if(m_iris->m_compute_global_virial) {
+	int idx = 0;
+	for(int i=0;i<nx;i++) {
+	    for(int j=0;j<ny;j++) {
+		for(int k=0;k<nz;k++) {
+		    iris_real ener = s2 * m_greenfn[i][j][k] *
+			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
+			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
+		    for(int m = 0;m<6;m++) {
+			m_iris->m_virial[m] += ener * m_vc[idx/2][m];
+		    }
+		    if(m_iris->m_compute_global_energy) {
+			m_iris->m_Ek += ener;
+		    }
+		    idx += 2;
+		}
+	    }
+	}
+    }else {
+	int idx = 0;
+	for(int i=0;i<nx;i++) {
+	    for(int j=0;j<ny;j++) {
+		for(int k=0;k<nz;k++) {
+		    m_iris->m_Ek += s2 * m_greenfn[i][j][k] *
+			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
+			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
+		    idx += 2;
+		}
 	    }
 	}
     }
@@ -284,9 +309,9 @@ void poisson_solver_p3m::calculate_green_function()
 	int from, to;
 	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
 
-	// // k = 2pij/L
-	// // h = L/M
-	// // kh/2 = 2pij/L * L/M = 2pi*j/M
+	// k = 2pij/L
+	// h = L/M
+	// kh/2 = 2pij/L * L/M = 2pi*j/M
 	int n = 0;
 	for(int x = sx + from; x < sx + to; x++) {
 	    int xj = x - xM*(2*x/xM);
@@ -371,14 +396,12 @@ void poisson_solver_p3m::calculate_k()
     int ex = sx + nx;
     int ey = sy + ny;
     int ez = sz + nz;
-    
-    // k = 2pij/L
-    // h = L/M
-    // kh/2 = 2pij/L * L/M = 2pi*j/M
 
+    // k' = 2πn'/L, where n' = n for 0 <= n < N/2 and = n-N otherwise
+    // As descried in 9807099.pdf towards the bottom of page 6
     for(int x = sx; x < ex; x++) {
-	int xj = x - xM*(2*x/xM);
-	m_kx[x-sx] = kxm * xj;
+	 int xj = x - xM*(2*x/xM);
+	 m_kx[x-sx] = kxm * xj;
     }
 
     for(int y = sy; y < ey; y++) {
@@ -392,6 +415,48 @@ void poisson_solver_p3m::calculate_k()
     }
 }
 
+void poisson_solver_p3m::calculate_virial_coeff()
+{
+    const iris_real alpha = m_iris->m_alpha;
+
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
+    
+    int sx = m_fft_offset[0];
+    int sy = m_fft_offset[1];
+    int sz = m_fft_offset[2];
+    
+    int ex = sx + nx;
+    int ey = sy + ny;
+    int ez = sz + nz;
+
+    int n = 0;
+    for(int x = sx; x < ex; x++) {
+	for(int y = sy; y < ey; y++) {
+	    for(int z = sz; z < ez; z++) {
+		iris_real sq =
+		    m_kx[x-sx]*m_kx[x-sx] +
+		    m_ky[y-sy]*m_ky[y-sy] +
+		    m_kz[z-sz]*m_kz[z-sz];
+		if(sq == 0.0) {
+		    m_vc[n][0] = m_vc[n][1] = m_vc[n][2] =
+			m_vc[n][3] = m_vc[n][4] = m_vc[n][5] = 0.0;
+		}else {
+		    iris_real t = -2.0/sq - 0.5/(alpha * alpha);
+		    m_vc[n][0] = 1.0 + t * m_kx[x-sx] * m_kx[x-sx];
+		    m_vc[n][1] = 1.0 + t * m_ky[y-sy] * m_ky[y-sy];
+		    m_vc[n][2] = 1.0 + t * m_kz[z-sz] * m_kz[z-sz];
+		    m_vc[n][3] = t * m_kx[x-sx] * m_ky[y-sy];
+		    m_vc[n][4] = t * m_kx[x-sx] * m_kz[z-sz];
+		    m_vc[n][5] = t * m_ky[y-sy] * m_kz[z-sz];
+		}
+		n++;
+	    }
+	}
+    }
+}
+
 void poisson_solver_p3m::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
@@ -399,7 +464,7 @@ void poisson_solver_p3m::solve()
     m_remap->perform(&(m_mesh->m_rho[0][0][0]), m_work2, m_work1);
     m_fft1->compute_fw(m_work2, m_work1);
 
-    if(m_iris->m_compute_global_energy) {
+    if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {
 	kspace_eng(m_work1);
     }
 

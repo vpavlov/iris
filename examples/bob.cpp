@@ -518,8 +518,15 @@ main(int argc, char **argv)
 	    x->commit_charges();
 	    
 	    iris_real Ek, Es, Ecorr;
-	    iris_real *forces = x->receive_forces(&nforces, &Ek);
+	    iris_real virial[6];
+	    iris_real *forces = x->receive_forces(&nforces, &Ek, virial);
 	    x->m_logger->info("Ek(partial) = %f [%s]", Ek, x->m_units->energy_unit);
+	    x->m_logger->info("Virial[0] = %f", virial[0]);
+	    x->m_logger->info("Virial[1] = %f", virial[1]);
+	    x->m_logger->info("Virial[2] = %f", virial[2]);
+	    x->m_logger->info("Virial[3] = %f", virial[3]);
+	    x->m_logger->info("Virial[4] = %f", virial[4]);
+	    x->m_logger->info("Virial[5] = %f", virial[5]);
 	    x->get_global_energy(&Ek, &Es, &Ecorr);
 	    x->m_logger->info("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
 

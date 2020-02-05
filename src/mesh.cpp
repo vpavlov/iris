@@ -1036,20 +1036,32 @@ void mesh::exchange_phi_halo()
 
 void mesh::assign_forces(bool ad)
 {
-    bool include_energy = true;  // send the energy to only one of the clients; to the others send 0
+    bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
     MPI_Comm comm = m_iris->client_comm();
 
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int peer = it->first;
 	int ncharges = it->second;
-	int size = sizeof(iris_real) +             // 1 real for the E(k) energy
-	    ncharges * 4 * sizeof(iris_real);      // 4 reals for each charge: id, Fx, Fy, Fz
+	int size = 7*sizeof(iris_real) +             // 1 real for the E(k) energy + 6 reals for the virial
+	    ncharges * 4 * sizeof(iris_real);        // 4 reals for each charge: id, Fx, Fy, Fz
 	iris_real *forces = (iris_real *)memory::wmalloc(size);
 
-	if(include_energy) {
+	if(include_energy_virial) {
 	    forces[0] = m_iris->m_Ek;
+	    forces[1] = m_iris->m_virial[0];
+	    forces[2] = m_iris->m_virial[1];
+	    forces[3] = m_iris->m_virial[2];
+	    forces[4] = m_iris->m_virial[3];
+	    forces[5] = m_iris->m_virial[4];
+	    forces[6] = m_iris->m_virial[5];
 	}else {
 	    forces[0] = 0.0;
+	    forces[1] = 0.0;
+	    forces[2] = 0.0;
+	    forces[3] = 0.0;
+	    forces[4] = 0.0;
+	    forces[5] = 0.0;
+	    forces[6] = 0.0;
 	}
 	
 	m_forces[peer] = forces;
@@ -1062,7 +1074,7 @@ void mesh::assign_forces(bool ad)
 	MPI_Request req;
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
 	MPI_Request_free(&req);
-	include_energy = false;
+	include_energy_virial = false;
     }
 }
 
@@ -1115,10 +1127,10 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    }
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[1 + n*4 + 0] = in_charges[n*5 + 4];  // id
-	    out_forces[1 + n*4 + 1] = factor * ekx;
-	    out_forces[1 + n*4 + 2] = factor * eky;
-	    out_forces[1 + n*4 + 3] = factor * ekz;
+	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[7 + n*4 + 1] = factor * ekx;
+	    out_forces[7 + n*4 + 2] = factor * eky;
+	    out_forces[7 + n*4 + 3] = factor * ekz;
 	}
     }
 }
@@ -1185,10 +1197,10 @@ void mesh::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 	    ekz *= m_hinv[2];
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[1 + n*4 + 0] = in_charges[n*5 + 4];  // id
-	    out_forces[1 + n*4 + 1] = factor * ekx;
-	    out_forces[1 + n*4 + 2] = factor * eky;
-	    out_forces[1 + n*4 + 3] = factor * ekz;
+	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[7 + n*4 + 1] = factor * ekx;
+	    out_forces[7 + n*4 + 2] = factor * eky;
+	    out_forces[7 + n*4 + 3] = factor * ekz;
 	}
     }
 }
