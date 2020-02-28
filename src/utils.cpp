@@ -35,7 +35,7 @@
 
 using namespace ORG_NCSA_IRIS;
 
-#define H 1e-7
+#define H 1.42e-7
 #define SMALL 1e-15
 
 // Calculate the binomial coefficient (n|k) using the multiplicative formula
@@ -248,7 +248,7 @@ iris_real ORG_NCSA_IRIS::root_of(simple_fn fn, iris_real x0, void *obj)
     iris_real x = x0;
     for(int i=0;i<10;i++) {
 	iris_real fx = fn(x, obj);
-	if(fabs(fx) < SMALL) {
+	if(fabs_fn(fx) < SMALL) {
 	    break;
 	}
 	x -= fx*H/(fn(x+H, obj) - fx);
