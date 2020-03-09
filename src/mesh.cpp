@@ -137,6 +137,8 @@ void mesh::commit()
 	m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
 	m_hinv[2] = m_size[2] / m_domain->m_global_box.zsize;
 
+	m_logger->trace("hinv[0] %f hinv[1] %f hinv[2] %f",m_hinv[0],m_hinv[1],m_hinv[2]);
+
 	m_h3inv = m_hinv[0] * m_hinv[1] * m_hinv[2];
 
 	m_own_size[0] = m_size[0] / m_proc_grid->m_size[0];
@@ -432,11 +434,13 @@ void mesh::assign_charges()
 	    sendbuf[0] += q;
 	    sendbuf[1] += q*q;
 	}
-
+	m_logger->trace("assign_charge called assign_charges1");
 	assign_charges1(ncharges, charges);
     }
 
+    m_logger->trace("assign_charge calling MPI_Allreduce");
     MPI_Allreduce(sendbuf, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+    m_logger->trace("assign_charge called MPI_Allreduce");
     m_qtot = recvbuf[0];
     m_q2tot = recvbuf[1];
 }
@@ -510,7 +514,6 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 			if(iz+k < from) {
 			    continue;
 			}
-
 			m_rho_plus[ix+i][iy+j][iz+k] += t3;
 		    }
 		}

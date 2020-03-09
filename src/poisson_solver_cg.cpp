@@ -28,6 +28,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <cmath>
+#include <cstring>
 #include "poisson_solver_cg.h"
 #include "mesh.h"
 #include "timer.h"

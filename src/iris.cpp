@@ -249,6 +249,11 @@ iris::~iris()
 void iris::config_auto_tune(int in_natoms, iris_real in_qtot2,
 			    iris_real in_cutoff)
 {
+
+    // float buff[3] = {(float)in_natoms,in_qtot2,in_cutoff};
+
+    // MPI_Bcast(buff, 3, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
     if(is_server()) {
 	m_qtot2 = fabs_fn(in_qtot2) * m_units->ecf;
 	m_cutoff = fabs_fn(in_cutoff);
@@ -430,15 +435,20 @@ void iris::commit()
     ASSERT_CLIENT("commit");
 
     if(is_both()) {
+        m_logger->trace("colling perform commit");
 	perform_commit();
+	m_logger->trace("colled perform commit");
 	return;
     }
 
     if(is_leader()) {
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
+        m_logger->trace("sending event");
 	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, NULL);
+        m_logger->trace("commit MPI_Wait");
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
+        m_logger->trace("commit MPI_Recv");
 	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, comm, MPI_STATUS_IGNORE);
     }
 
@@ -618,10 +628,11 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
 	}
     }
-
+    m_logger->trace("send_charges stos_process_pending");
     stos_process_pending(pending, win);
-
+    m_logger->trace("send_charges MPI_Wait");
     MPI_Wait(&req, MPI_STATUS_IGNORE);
+    m_logger->trace("send_charges ended MPI_Wait");
 }
 
 void iris::commit_charges()
@@ -675,8 +686,11 @@ bool iris::handle_charges(event_t *event)
 bool iris::handle_commit_charges()
 {
     m_logger->trace("Client called 'commit_charges'. Initiating computation...");
+    m_logger->trace("Server called 'assign_charges'. Initiating computation...");
     m_mesh->assign_charges();
+    m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
     m_mesh->exchange_rho_halo();
+    m_logger->trace("Server called 'solve'. Initiating computation...");
     solve();
     bool ad = false;
     if(m_which_solver == IRIS_SOLVER_P3M) {
@@ -687,8 +701,9 @@ bool iris::handle_commit_charges()
     }else {
 	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
+    m_logger->trace("Server called 'assign_forces'. Initiating computation...");
     m_mesh->assign_forces(ad);
-    
+    m_logger->trace("Server ended 'assign_forces'. Initiating computation...");
     return false;  // no need to hodl
 }
 
@@ -805,6 +820,7 @@ void iris::clear_wff()
 
 iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
+    m_logger->trace("entering receive_forces");
     *out_Ek = 0.0;
     *(out_virial + 0) = 0.0;
     *(out_virial + 1) = 0.0;
@@ -855,7 +871,7 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	}
     }
     clear_wff();
-
+    m_logger->trace("return from receive_forces");
     return retval;
 }
 

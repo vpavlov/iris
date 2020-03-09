@@ -32,7 +32,7 @@
 #include "domain.h"
 #include "logger.h"
 #include "proc_grid.h"
-
+#include "mesh.h"
 using namespace ORG_NCSA_IRIS;
 
 domain::domain(iris *obj)
@@ -66,6 +66,8 @@ void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
 
     m_initialized = true;
     m_dirty = true;
+
+    m_mesh->m_dirty = true;
 
     m_logger->trace("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
 		    m_global_box.xsize, m_global_box.ysize,
