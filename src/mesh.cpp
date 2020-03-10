@@ -425,6 +425,10 @@ void mesh::assign_charges()
     sendbuf[1] = 0.0;
 
     memset(&(m_rho_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+	memset(&(m_Ex_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+	memset(&(m_Ey_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+	memset(&(m_Ez_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 	int ncharges = it->second;
 	iris_real *charges = m_charges[it->first];
