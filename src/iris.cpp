@@ -691,6 +691,7 @@ bool iris::handle_commit_charges()
     m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
     m_mesh->exchange_rho_halo();
     m_logger->trace("Server called 'solve'. Initiating computation...");
+    //    m_mesh->dump_ascii("rho", m_mesh->m_rho);
     solve();
     bool ad = false;
     if(m_which_solver == IRIS_SOLVER_P3M) {
@@ -701,8 +702,16 @@ bool iris::handle_commit_charges()
     }else {
 	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
+
+    // m_mesh->dump_ascii("Ex", m_mesh->m_Ex);
+    // m_mesh->dump_ascii("Ey", m_mesh->m_Ey);
+    // m_mesh->dump_ascii("Ez", m_mesh->m_Ez);
+
     m_logger->trace("Server called 'assign_forces'. Initiating computation...");
     m_mesh->assign_forces(ad);
+    // m_mesh->dump_ascii("Ex_plus", m_mesh->m_Ex_plus);
+    // m_mesh->dump_ascii("Ey_plus", m_mesh->m_Ey_plus);
+    // m_mesh->dump_ascii("Ez_plus", m_mesh->m_Ez_plus);
     m_logger->trace("Server ended 'assign_forces'. Initiating computation...");
     return false;  // no need to hodl
 }
@@ -727,6 +736,7 @@ void iris::set_rhs(rhs_fn_t fn)
 
 void iris::solve()
 {
+  static int temp_step;
     if(m_compute_global_energy) {
 	m_Ek = 0.0;
     }
@@ -735,7 +745,9 @@ void iris::solve()
 	m_virial[0] = m_virial[1] = m_virial[2] =
 	    m_virial[3] = m_virial[4] = m_virial[5] = 0.0;
     }
-    
+
+    m_logger->trace("Server solve step %d ===", temp_step++);
+
     m_solver->solve();
 
     iris_real post_corr = 0.5 *
@@ -855,10 +867,16 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	    
 	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
 
-	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size);
+	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size - 7*sizeof(iris_real));
 	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
+
+	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
+	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
+	      m_logger->info("i %d retval %f %f %f %f",i, bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
+	    }
+
 	    hwm += ev.size - 7*sizeof(iris_real);
-	    
+
 	    *out_Ek +=         *((iris_real *)ev.data + 0);
 	    *(out_virial+0) += *((iris_real *)ev.data + 1);
 	    *(out_virial+1) += *((iris_real *)ev.data + 2);
@@ -869,6 +887,21 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 
 	    memory::wfree(ev.data);
 	}
+    }
+
+    hwm=0;
+    for(int i=0;i<m_server_size;i++) {
+	if(m_wff[i]) {
+	    
+	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
+	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
+	      m_logger->info("i %d bahor %f %f %f %f",i,bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
+	    }
+
+	    hwm += (*out_counts)[i]*unit;
+
+	}
+	
     }
     clear_wff();
     m_logger->trace("return from receive_forces");

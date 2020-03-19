@@ -395,8 +395,8 @@ void mesh::dump_ascii(const char *fname, iris_real ***data)
     for(int i=0;i<m_own_size[2];i++) {
 	for(int j=0;j<m_own_size[1];j++) {
 	    for(int k=0;k<m_own_size[0];k++) {
-		fprintf(fp, "%g\n", data[k][j][i]);
-		//fprintf(fp, "%s[%d][%d][%d] %g\n", fname, k, j, i, data[k][j][i]);
+	      //fprintf(fp, "%g\n", data[k][j][i]);
+	      fprintf(fp, "%s[%d][%d][%d] %.15f 0x%x\n", fname, k, j, i, data[k][j][i], *(int*)&(data[k][j][i]));
 	    }
 	}
     }
@@ -452,6 +452,7 @@ void mesh::assign_charges()
 void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
+    box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
 #if defined _OPENMP
 #pragma omp parallel
@@ -462,7 +463,8 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 	setup_work_sharing(m_ext_size[2], m_iris->m_nthreads, &from, &to);
 
 	for(int n=0;n<in_ncharges;n++) {
-	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
+	    iris_real tz=(in_charges[n*5+2]-lbox->zlo)/m_h[2];
+	    //	    iris_real tz=(in_charges[n*5+2]-gbox->xlo)/m_h[2]-m_own_offset[2];
 	    
 	    // the index of the cell that is to the "left" of the atom
 	    int iz = (int) (tz + m_chass->m_ics_bump);
@@ -484,8 +486,10 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 		continue;
 	    }
 
-	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
+	    iris_real tx=(in_charges[n*5+0]-lbox->xlo)/m_h[0];
+	    iris_real ty=(in_charges[n*5+1]-lbox->ylo)/m_h[1];
+	    // iris_real tx=(in_charges[n*5+0]-gbox->xlo)/m_h[0]-m_own_offset[0];
+	    // iris_real ty=(in_charges[n*5+1]-gbox->ylo)/m_h[1]-m_own_offset[1];
 
 	    int ix = (int) (tx + m_chass->m_ics_bump);
 	    int iy = (int) (ty + m_chass->m_ics_bump);
@@ -518,6 +522,33 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 			if(iz+k < from) {
 			    continue;
 			}
+
+
+			if (ix+i>=m_ext_size[0]) {
+			  m_logger->trace("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
+			  		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
+			  m_logger->trace("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,333);
+			  MPI_Finalize();
+			}
+			if (iy+j>=m_ext_size[1]) {
+			  m_logger->trace("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
+					  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
+			  m_logger->trace("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,555);
+			  MPI_Finalize();
+			}
+			if (iz+k>=m_ext_size[2]) {
+			  m_logger->trace("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
+					  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
+			  m_logger->trace("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,777);
+			  MPI_Finalize();
+			}
+
 			m_rho_plus[ix+i][iy+j][iz+k] += t3;
 		    }
 		}
@@ -1089,6 +1120,7 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 			  iris_real *out_forces)
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
+    box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
 #if defined _OPENMP
 #pragma omp parallel
@@ -1099,10 +1131,10 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	setup_work_sharing(in_ncharges, m_iris->m_nthreads, &from, &to);
 
 	for(int n=from;n<to;n++) {
-	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
-	    
+	  iris_real tx=(in_charges[n*5+0]-lbox->xlo)/m_h[0];
+	  iris_real ty=(in_charges[n*5+1]-lbox->ylo)/m_h[1];
+	  iris_real tz=(in_charges[n*5+2]-lbox->zlo)/m_h[2];
+
 	    // the index of the cell that is to the "left" of the atom
 	    int ix = (int) (tx + m_chass->m_ics_bump);
 	    int iy = (int) (ty + m_chass->m_ics_bump);
@@ -1129,15 +1161,43 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
 			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
 			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+			if (ix+i>=m_ext_size[0]||ix+1<0) {
+			  m_logger->trace("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",
+					  in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
+			  		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
+			  m_logger->trace("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,3333);
+			  MPI_Finalize();
+			}
+			if (iy+j>=m_ext_size[1]||iy+j<0) {
+			  m_logger->trace("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",
+					  in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
+					  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
+			  m_logger->trace("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,5555);
+			  MPI_Finalize();
+			}
+			if (iz+k>=m_ext_size[2]||iz+k<0) {
+			  m_logger->trace("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",
+					  in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
+					  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
+			  m_logger->trace("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
+			  fflush(stdout);
+			  MPI_Abort(MPI_COMM_WORLD,7777);
+			  MPI_Finalize();
+			}
 		    }
 		}
 	    }
 	    
 	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4];  // id
+	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4]+0.333333333;  // id
 	    out_forces[7 + n*4 + 1] = factor * ekx;
 	    out_forces[7 + n*4 + 2] = factor * eky;
 	    out_forces[7 + n*4 + 3] = factor * ekz;
+	    m_logger->info("out_forces %f %f %f %f in_charges %f %f %f",out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3],in_charges[n*5+0],in_charges[n*5+1],in_charges[n*5+2]);
 	}
     }
 }

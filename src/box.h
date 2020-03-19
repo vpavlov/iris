@@ -52,6 +52,17 @@ namespace ORG_NCSA_IRIS {
 		    (z >= zlo && z < zhi));
 	}
 
+	// bool in(iris_real *charge)
+	// {
+	//     iris_real x = charge[0];
+	//     iris_real y = charge[1];
+	//     iris_real z = charge[2];
+	    
+	//     return ((!(x < xlo) && x < xhi) &&
+	// 	    (!(y < ylo) && y < yhi) &&
+	// 	    (!(z < zlo) && z < zhi));
+	// }
+
 	box_t<T> operator && (box_t<T> &other)
 	{
 	    box_t<T> retval;
