@@ -40,6 +40,7 @@
 #include "timer.h"
 #include "remap.h"
 #include "grid.h"
+#include "comm_rec.h"
 
 #define  _PI   3.141592653589793238462643383279
 #define _2PI   6.283185307179586476925286766559
@@ -49,7 +50,8 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
-    : poisson_solver(obj), m_greenfn(NULL), m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
+    : poisson_solver(obj), m_greenfn(NULL), m_denominator(NULL), 
+      m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
       m_work1(NULL), m_work2(NULL), m_work3(NULL),
       m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
@@ -59,6 +61,7 @@ poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
 poisson_solver_p3m::~poisson_solver_p3m()
 {
     memory::destroy_3d(m_greenfn);
+    memory::destroy_3d(m_denominator);
     memory::destroy_1d(m_kx);
     memory::destroy_1d(m_ky);
     memory::destroy_1d(m_kz);
@@ -81,7 +84,15 @@ void poisson_solver_p3m::commit()
     if(m_fft_grid) { delete m_fft_grid; }
 
     m_fft_grid = new grid(m_iris, "P3M FFT GRID");
-    m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
+    if (m_mesh->m_size[0] > m_local_comm->m_size)
+    {
+      m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
+    }
+    else if (m_mesh->m_size[0]*m_mesh->m_size[1] > m_local_comm->m_size)
+    {
+      m_fft_grid->set_pref(0, 0, 1);  // e.g. grid will be 64x2x1, mesh will be 2x64x128
+    }
+
     m_fft_grid->commit();
 
     m_fft_size[0] = m_mesh->m_size[0] / m_fft_grid->m_size[0];
@@ -117,7 +128,11 @@ void poisson_solver_p3m::commit()
 
     memory::destroy_2d(m_vc);
     memory::create_2d(m_vc, m_fft_size[0]*m_fft_size[1]*m_fft_size[2], 6);
-    
+
+    if (m_denominator==NULL) {
+	memory::create_3d(m_denominator, m_fft_size[0], m_fft_size[1], m_fft_size[2]);
+	calculate_denominator();
+    }
     calculate_green_function();
     calculate_k();
     calculate_virial_coeff();
@@ -262,37 +277,16 @@ void poisson_solver_p3m::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
     }
 }
 
-// Hockney/Eastwood modified Green function corresponding to the
-// charge assignment functions
-//
-// G(k) = _4PI/k^2 * [ sum_b(k.(k+b)/(k+b).(k+b)  *  Wn^2(k+b) * rho^2(k+b) ] / sum_b(Wn^2(k+b))^2
-//
-void poisson_solver_p3m::calculate_green_function()
+
+void poisson_solver_p3m::calculate_denominator()
 {
-    const iris_real alpha = m_iris->m_alpha;
-
-    const iris_real xL = m_domain->m_global_box.xsize;
-    const iris_real yL = m_domain->m_global_box.ysize;
-    const iris_real zL = m_domain->m_global_box.zsize;
-
-    const iris_real kxm = (_2PI/xL);
-    const iris_real kym = (_2PI/yL);
-    const iris_real kzm = (_2PI/zL);
-
     const int xM = m_mesh->m_size[0];
     const int yM = m_mesh->m_size[1];
     const int zM = m_mesh->m_size[2];
 
-    const int nbx = static_cast<int> ((alpha*xL/(_PI*xM)) * pow(-log(EPS),0.25));
-    const int nby = static_cast<int> ((alpha*yL/(_PI*yM)) * pow(-log(EPS),0.25));
-    const int nbz = static_cast<int> ((alpha*zL/(_PI*zM)) * pow(-log(EPS),0.25));
-
-    const int _2n = 2*m_chass->m_order;
-
 #if defined _OPENMP
 #pragma omp parallel default(none)
 #endif
-
     {
 	int nx = m_fft_size[0];
 	int ny = m_fft_size[1];
@@ -322,8 +316,76 @@ void poisson_solver_p3m::calculate_green_function()
 		iris_real siny2 = square(sin(_PI*yj/yM));
 		
 		for(int z = sz; z < ez; z++) {
+		  int zj = z - zM*(2*z/zM);  // convert from 0..P to 0..P/2, -P/2...-1
+		  iris_real sinz2 = square(sin(_PI*zj/zM));  // sin^2(k*delta/2)
+		  
+		  m_denominator[x-sx][y-sy][z-sz] = denominator(sinx2, siny2, sinz2);
+		}
+	    }
+	}
+    }
+}
+
+
+// Hockney/Eastwood modified Green function corresponding to the
+// charge assignment functions
+//
+// G(k) = _4PI/k^2 * [ sum_b(k.(k+b)/(k+b).(k+b)  *  Wn^2(k+b) * rho^2(k+b) ] / sum_b(Wn^2(k+b))^2
+//
+void poisson_solver_p3m::calculate_green_function()
+{
+    const iris_real alpha = m_iris->m_alpha;
+
+    const iris_real xL = m_domain->m_global_box.xsize;
+    const iris_real yL = m_domain->m_global_box.ysize;
+    const iris_real zL = m_domain->m_global_box.zsize;
+
+    const iris_real kxm = (_2PI/xL);
+    const iris_real kym = (_2PI/yL);
+    const iris_real kzm = (_2PI/zL);
+
+    const int xM = m_mesh->m_size[0];
+    const int yM = m_mesh->m_size[1];
+    const int zM = m_mesh->m_size[2];
+
+    const int nbx = static_cast<int> ((alpha*xL/(_PI*xM)) * pow(-log(EPS),0.25));
+    const int nby = static_cast<int> ((alpha*yL/(_PI*yM)) * pow(-log(EPS),0.25));
+    const int nbz = static_cast<int> ((alpha*zL/(_PI*zM)) * pow(-log(EPS),0.25));
+    m_logger->error("calculate_green_function nbx nby nbz %f %f %f",nbx,nby,nbz);
+    const int _2n = 2*m_chass->m_order;
+
+#if defined _OPENMP
+#pragma omp parallel default(none)
+#endif
+
+    {
+	int nx = m_fft_size[0];
+	int ny = m_fft_size[1];
+	int nz = m_fft_size[2];
+	
+	int sx = m_fft_offset[0];
+	int sy = m_fft_offset[1];
+	int sz = m_fft_offset[2];
+	
+	int ex = sx + nx;
+	int ey = sy + ny;
+	int ez = sz + nz;
+	
+	int from, to;
+	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
+
+	// k = 2pij/L
+	// h = L/M
+	// kh/2 = 2pij/L * L/M = 2pi*j/M
+	int n = 0;
+	for(int x = sx + from; x < sx + to; x++) {
+	    int xj = x - xM*(2*x/xM);
+	    
+	    for(int y = sy; y < ey; y++) {
+		int yj = y - yM*(2*y/yM);
+		
+		for(int z = sz; z < ez; z++) {
 		    int zj = z - zM*(2*z/zM);  // convert from 0..P to 0..P/2, -P/2...-1
-		    iris_real sinz2 = square(sin(_PI*zj/zM));  // sin^2(k*delta/2)
 		    
 		    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
 		    
@@ -340,7 +402,7 @@ void poisson_solver_p3m::calculate_green_function()
 				iris_real ykplusb = kym * (yj + yM*by);
 				iris_real yrho = exp(-0.25*square(ykplusb/alpha));
 				iris_real ywnsq = pow_sinx_x(ykplusb*yL/(2*yM), _2n);
-				
+				#pragma simd
 				for(int bz = -nbz; bz <= nbz; bz++) {
 				    iris_real zkplusb = kzm * (zj + zM*bz);
 				    iris_real zrho = exp(-0.25*square(zkplusb/alpha));
@@ -359,7 +421,7 @@ void poisson_solver_p3m::calculate_green_function()
 				}
 			    }
 			}
-			iris_real part3 = denominator(sinx2, siny2, sinz2);
+			iris_real part3 = m_denominator[x-sx][y-sy][z-sz];
 
 			m_greenfn[x-sx][y-sy][z-sz] = part1 * part2 / part3;
 		    }else {

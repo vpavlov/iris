@@ -510,44 +510,44 @@ void mesh::assign_charges1(int in_ncharges, iris_real *in_charges)
 		    for(int k = 0; k < m_chass->m_order; k++) {
 			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
 
-			// If it moves out of the thread's area, no need
-			// to bother with the rest of the cycle (since
-			// k increases and future values will also be
-			// out of the area.
-			if(iz+k >= to) {
-			    break;
-			}
+			// // If it moves out of the thread's area, no need
+			// // to bother with the rest of the cycle (since
+			// // k increases and future values will also be
+			// // out of the area.
+			// if(iz+k >= to) {
+			//     break;
+			// }
 
-			// Wait untill it overlaps the thread's area
-			if(iz+k < from) {
-			    continue;
-			}
+			// // Wait untill it overlaps the thread's area
+			// if(iz+k < from) {
+			//     continue;
+			// }
 
 
-			if (ix+i>=m_ext_size[0]) {
-			  m_logger->trace("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
-			  		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
-			  m_logger->trace("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,333);
-			  MPI_Finalize();
-			}
-			if (iy+j>=m_ext_size[1]) {
-			  m_logger->trace("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
-					  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
-			  m_logger->trace("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,555);
-			  MPI_Finalize();
-			}
-			if (iz+k>=m_ext_size[2]) {
-			  m_logger->trace("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
-					  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
-			  m_logger->trace("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,777);
-			  MPI_Finalize();
-			}
+			// if (ix+i>=m_ext_size[0]) {
+			//   m_logger->error("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
+			//   		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
+			//   m_logger->error("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,333);
+			//   MPI_Finalize();
+			// }
+			// if (iy+j>=m_ext_size[1]) {
+			//   m_logger->error("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
+			// 		  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
+			//   m_logger->error("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,555);
+			//   MPI_Finalize();
+			// }
+			// if (iz+k>=m_ext_size[2]) {
+			//   m_logger->error("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
+			// 		  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
+			//   m_logger->error("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,777);
+			//   MPI_Finalize();
+			// }
 
 			m_rho_plus[ix+i][iy+j][iz+k] += t3;
 		    }
@@ -1161,33 +1161,33 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
 			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
 			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
-			if (ix+i>=m_ext_size[0]||ix+1<0) {
-			  m_logger->trace("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",
-					  in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
-			  		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
-			  m_logger->trace("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,3333);
-			  MPI_Finalize();
-			}
-			if (iy+j>=m_ext_size[1]||iy+j<0) {
-			  m_logger->trace("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",
-					  in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
-					  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
-			  m_logger->trace("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,5555);
-			  MPI_Finalize();
-			}
-			if (iz+k>=m_ext_size[2]||iz+k<0) {
-			  m_logger->trace("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",
-					  in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
-					  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
-			  m_logger->trace("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
-			  fflush(stdout);
-			  MPI_Abort(MPI_COMM_WORLD,7777);
-			  MPI_Finalize();
-			}
+			// if (ix+i>=m_ext_size[0]||ix+1<0) {
+			//   m_logger->trace("in_charges[n*5+0] %f %x gbox->xhi %f lbox %f %x\n",
+			// 		  in_charges[n*5+0],*(int*)&(in_charges[n*5+0])
+			//   		  ,gbox->xhi,lbox->xhi,*(int*)&(lbox->xhi));
+			//   m_logger->trace("ix+i %d m_ext_size[0] %d\n",ix+i,m_ext_size[0]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,3333);
+			//   MPI_Finalize();
+			// }
+			// if (iy+j>=m_ext_size[1]||iy+j<0) {
+			//   m_logger->trace("in_charges[n*5+1] %f %x gbox->yhi %f lbox %f %x\n",
+			// 		  in_charges[n*5+1],*(int*)&(in_charges[n*5+1]),
+			// 		  gbox->yhi,lbox->yhi,*(int*)&(lbox->yhi));
+			//   m_logger->trace("iy+j %d m_ext_size[1] %d\n",iy+j,m_ext_size[1]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,5555);
+			//   MPI_Finalize();
+			// }
+			// if (iz+k>=m_ext_size[2]||iz+k<0) {
+			//   m_logger->trace("in_charges[n*5+2] %f %x gbox->zhi %f lbox %f %x\n",
+			// 		  in_charges[n*5+2],*(int*)&(in_charges[n*5+2]),
+			// 		  gbox->zhi,lbox->zhi,*(int*)&(lbox->zhi));
+			//   m_logger->trace("iz+k %d m_ext_size[0] %d\n",iz+k,m_ext_size[2]);
+			//   fflush(stdout);
+			//   MPI_Abort(MPI_COMM_WORLD,7777);
+			//   MPI_Finalize();
+			// }
 		    }
 		}
 	    }
@@ -1197,7 +1197,7 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    out_forces[7 + n*4 + 1] = factor * ekx;
 	    out_forces[7 + n*4 + 2] = factor * eky;
 	    out_forces[7 + n*4 + 3] = factor * ekz;
-	    m_logger->info("out_forces %f %f %f %f in_charges %f %f %f",out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3],in_charges[n*5+0],in_charges[n*5+1],in_charges[n*5+2]);
+	    m_logger->trace("out_forces %f %f %f %f in_charges %f %f %f",out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3],in_charges[n*5+0],in_charges[n*5+1],in_charges[n*5+2]);
 	}
     }
 }
