@@ -65,7 +65,8 @@ namespace ORG_NCSA_IRIS {
 	fft3d(class iris *obj,
 	      int *in_in_offset, int *in_in_size,
 	      int *in_out_offset, int *in_out_size,
-	      const char *in_name);
+	      const char *in_name,
+	      bool in_use_collective);
 
 	~fft3d();
 
@@ -76,7 +77,7 @@ namespace ORG_NCSA_IRIS {
 
     private:
 	void setup_grid(int in_which);
-	void setup_remap(int in_which);
+	void setup_remap(int in_which, bool in_use_collective);
 	void setup_plans(int in_which);
 
     public:

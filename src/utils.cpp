@@ -256,3 +256,14 @@ iris_real ORG_NCSA_IRIS::root_of(simple_fn fn, iris_real x0, void *obj)
     return x;
 }
 
+static int __cmp_int(const void *p1, const void *p2)
+{
+    int i1 = *((int *)p1);
+    int i2 = *((int *)p2);
+    return i1 - i2;
+}
+
+void ORG_NCSA_IRIS::qsort_int(int *in_data, size_t in_num)
+{
+    qsort(in_data, in_num, sizeof(int), __cmp_int);
+}

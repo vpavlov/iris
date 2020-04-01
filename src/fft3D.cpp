@@ -42,7 +42,7 @@ using namespace ORG_NCSA_IRIS;
 fft3d::fft3d(class iris *obj,
 	     int *in_in_offset, int *in_in_size,
 	     int *in_out_offset, int *in_out_size,
-	     const char *in_name)
+	     const char *in_name, bool in_use_collective)
     : state_accessor(obj), m_grids { NULL, NULL, NULL },
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_own_offset { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
@@ -80,7 +80,7 @@ fft3d::fft3d(class iris *obj,
     }
 
     for(int i=0;i<4;i++) {
-	setup_remap(i);
+	setup_remap(i, in_use_collective);
     }
 
     for(int i=0;i<3;i++) {
@@ -208,7 +208,7 @@ void fft3d::setup_grid(int in_which)
 //  = 2 for remap from m_grids[1] to m_grids[2]
 //  = 3 for remap from m_grids[2] to m_grids[3]
 //  = 4 for remap from m_grids[3] to m_mesh
-void fft3d::setup_remap(int in_which)
+void fft3d::setup_remap(int in_which, bool in_use_collective)
 {
     char remap_name[256];
     switch(in_which) {
@@ -220,7 +220,8 @@ void fft3d::setup_remap(int in_which)
 				       m_own_offset[0],       // to m_grids[0]
 				       m_own_size[0],
 				       2,                     // complex
-				       0, remap_name);      // no permutation
+				       0, remap_name,         // no permutation
+				       in_use_collective);
 	break;
 
     case 1:  // XYZ -> ZXY
@@ -231,7 +232,8 @@ void fft3d::setup_remap(int in_which)
 				       m_own_offset[1],       // to m_grids[1]
 				       m_own_size[1],
 				       2,                     // complex
-				       1, remap_name);      // x<-y<-z<-x
+				       1, remap_name,         // x<-y<-z<-x
+				       in_use_collective);
 	break;
 
     case 2:  // ZXY -> YZX
@@ -262,7 +264,8 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1, remap_name);
+					   1, remap_name,
+					   in_use_collective);
 	}
 	break;
 
@@ -294,7 +297,8 @@ void fft3d::setup_remap(int in_which)
 					   t_own_offset2,
 					   t_own_size2,
 					   2,
-					   1, remap_name);
+					   1, remap_name,
+					   in_use_collective);
 	}
 	break;
     }

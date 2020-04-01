@@ -49,6 +49,8 @@ namespace ORG_NCSA_IRIS {
     int binom(int n, int k);
 
     iris_real root_of(simple_fn fn, iris_real x0, void *obj);  // using secant method
+
+    void qsort_int(int *in_data, size_t in_num);
 }
 
 #endif

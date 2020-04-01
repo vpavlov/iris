@@ -47,9 +47,10 @@ remap::remap(class iris *obj,
 	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
 	     int in_permute,
-	     const char *in_name)
+	     const char *in_name,
+	     bool in_use_collective)
     : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
-      m_nrecv(0)
+      m_nrecv(0), m_use_collective(in_use_collective), m_collective_comm(MPI_COMM_NULL)
 {
     m_name = strdup(in_name);
     m_from.xlo = in_from_offset[0];
@@ -76,6 +77,9 @@ remap::remap(class iris *obj,
     m_to.yhi = in_to_offset[1] + in_to_size[1] - 1;
     m_to.zhi = in_to_offset[2] + in_to_size[2] - 1;
 
+    m_comm_list = (int *)memory::wmalloc(m_local_comm->m_size * sizeof(int));
+    m_comm_len = 0;
+    
     // All processors need this info from all other processors
 
     box_t<int> *to = (box_t<int> *)memory::wmalloc(m_local_comm->m_size * sizeof(box_t<int>));
@@ -95,20 +99,6 @@ remap::remap(class iris *obj,
     for(int i=0;i<m_local_comm->m_size;i++) {
 
 	box_t<int> overlap = m_from && to[i];  // find intersection
-
-	m_logger->trace("%s m_from [%d:%d][%d:%d][%d:%d] to[%d] [%d:%d][%d:%d][%d:%d] overlap [%d:%d][%d:%d][%d:%d]",
-			m_name,
-			m_from.xlo, m_from.xhi,
-			m_from.ylo, m_from.yhi,
-			m_from.zlo, m_from.zhi,
-			i,
-			to[i].xlo, to[i].xhi,
-			to[i].ylo, to[i].yhi,
-			to[i].zlo, to[i].zhi,
-			overlap.xlo, overlap.xhi,
-			overlap.ylo, overlap.yhi,
-			overlap.zlo, overlap.zhi);
-
 	if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
 	    nsend++;
 	}
@@ -130,6 +120,7 @@ remap::remap(class iris *obj,
 
 	    box_t<int> overlap = m_from && to[iproc];
 	    if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
+		m_comm_list[m_comm_len++] = iproc;
 		m_send_plans[nsend].m_peer = iproc;
 		m_send_plans[nsend].m_offset = in_unit_size *
 		    ROW_MAJOR_OFFSET(overlap.xlo - m_from.xlo,
@@ -141,17 +132,15 @@ remap::remap(class iris *obj,
 		m_send_plans[nsend].m_ny = overlap.ysize;
 		m_send_plans[nsend].m_nz = in_unit_size * overlap.zsize;
 		m_send_plans[nsend].m_stride_line = in_unit_size * m_from.zsize;
-		m_send_plans[nsend].m_stride_plane = 
-		    in_unit_size * m_from.ysize * m_from.zsize;
-		m_send_plans[nsend].m_size = in_unit_size *
-		    overlap.xsize * overlap.ysize * overlap.zsize;
+		m_send_plans[nsend].m_stride_plane = in_unit_size * m_from.ysize * m_from.zsize;
+		m_send_plans[nsend].m_size = in_unit_size * overlap.xsize * overlap.ysize * overlap.zsize;
 		m_send_plans[nsend++].m_bufloc = 0;
 	    }
 	}
 
-	// if we're sending to self, don't count it
+	// if we're sending to self, don't count it if not using collective
 	m_nsend = nsend;
-	if(m_send_plans[nsend-1].m_peer == m_local_comm->m_rank) {
+	if(!m_use_collective && (m_send_plans[nsend-1].m_peer == m_local_comm->m_rank)) {
 	    m_nsend--;
 	}
     }
@@ -195,6 +184,18 @@ remap::remap(class iris *obj,
 
 	    box_t<int> overlap = m_to && from[iproc];
 	    if(overlap.xsize > 0 && overlap.ysize > 0 && overlap.zsize > 0) {
+
+		bool found = false;
+		for (int j=0;j<m_comm_len;j++) {
+		    if (m_comm_list[j] == iproc) {
+			found = true;
+		    }
+		}
+		if (!found) {
+		    m_comm_list[m_comm_len++] = iproc;
+		}
+		
+		
 		m_recv_plans[nrecv].m_peer = iproc;
 		
 		if(in_permute == 0) {
@@ -247,7 +248,7 @@ remap::remap(class iris *obj,
 
 	// if we're recving from self, don't count it
 	m_nrecv = nrecv;
-	if(m_recv_plans[nrecv-1].m_peer == m_local_comm->m_rank) {
+	if(!m_use_collective && (m_recv_plans[nrecv-1].m_peer == m_local_comm->m_rank)) {
 	    m_nrecv--;
 	}
 
@@ -258,6 +259,61 @@ remap::remap(class iris *obj,
 
     }
 
+    if(m_use_collective) {
+	bool appending = true;
+	while(appending) {
+	    int new_len = m_comm_len;
+	    appending = false;
+	    for(int i=0;i<m_comm_len;i++) {
+		for(int j=0;j<m_local_comm->m_size;j++) {
+		    box_t<int> overlap1 = from[m_comm_list[i]] && to[j];
+		    if(overlap1.xsize > 0 && overlap1.ysize > 0 && overlap1.zsize > 0) {
+			bool found = false;
+			for(int k=0;k<new_len;k++) {
+			    if(m_comm_list[k] == j) {
+				found = true;
+				break;
+			    }
+			}
+			if(!found) {
+			    m_comm_list[new_len++] = j;
+			    appending = true;
+			}
+		    }
+
+		    box_t<int> overlap2 = from[m_comm_list[i]] && to[j];
+		    if(overlap2.xsize > 0 && overlap2.ysize > 0 && overlap2.zsize > 0) {
+			bool found = false;
+			for(int k=0;k<new_len;k++) {
+			    if(m_comm_list[k] == j) {
+				found = true;
+				break;
+			    }
+			}
+			if(!found) {
+			    m_comm_list[new_len++] = j;
+			    appending = true;
+			}
+		    }
+		}
+	    }
+	    m_comm_len = new_len;
+	}
+
+	if(m_comm_len > 0) {
+	    qsort_int(m_comm_list, m_comm_len);
+	    m_comm_list = (int *)memory::wrealloc(m_comm_list, m_comm_len*sizeof(int));
+	    MPI_Group local_group, collective_group;
+	    MPI_Comm_group(m_local_comm->m_comm, &local_group);
+	    MPI_Group_incl(local_group, m_comm_len, m_comm_list, &collective_group);
+	    MPI_Comm_create(m_local_comm->m_comm, collective_group, &m_collective_comm);
+	    MPI_Group_free(&local_group);
+	    MPI_Group_free(&collective_group);
+	}else {
+	    MPI_Comm_create(m_local_comm->m_comm, MPI_GROUP_EMPTY, &m_collective_comm);
+	}
+    }
+    
     int size = 0;
     for(int i=0;i<m_nsend;i++) {
 	size = MAX(size, m_send_plans[i].m_size);
@@ -284,9 +340,13 @@ remap::~remap()
     }
 
     memory::wfree(m_sendbuf);
+    memory::wfree(m_comm_list);
+    if(m_collective_comm != MPI_COMM_NULL) {
+	MPI_Comm_free(&m_collective_comm);
+    }
 }
 
-void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+void remap::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
 {
     MPI_Request *req = new MPI_Request[m_nrecv];
 
@@ -319,4 +379,85 @@ void remap::perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
     }
 
     delete req;
+}
+
+void remap::perform_collective(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+{
+    if(m_comm_len <= 0) {
+	return;
+    }
+
+    int isend;
+    int irecv;
+    int send_buff_size = 0;
+    int recv_buff_size = 0;
+
+    for(int i=0;i<m_nsend;i++) {
+	send_buff_size += m_send_plans[i].m_size;
+    }
+    for(int i=0;i<m_nrecv;i++) {
+	recv_buff_size += m_recv_plans[i].m_size;
+    }
+
+    iris_real *send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
+    iris_real *recv_buff = (iris_real *)memory::wmalloc(recv_buff_size * sizeof(iris_real));
+    int *send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *send_offsets = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_offsets = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_map = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+
+    int offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	send_counts[i] = 0;
+	send_offsets[i] = 0;
+	for(int j=0;j<m_nsend;j++) {
+	    remap_item *plan = &m_send_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		send_counts[i] = plan->m_size;
+		send_offsets[i] = offset;
+		plan->pack(&in_src[plan->m_offset], &send_buff[offset]);
+		offset += plan->m_size;
+		break;
+	    }
+	}
+    }
+
+    offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	recv_counts[i] = 0;
+	recv_offsets[i] = 0;
+	recv_map[i] = -1;
+	for(int j=0;j<m_nrecv;j++) {
+	    remap_item *plan = &m_recv_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		recv_counts[i] = plan->m_size;
+		recv_offsets[i] = offset;
+		offset += plan->m_size;
+		recv_map[i] = j;
+		break;
+	    }
+	}
+    }
+
+    MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
+		  m_collective_comm);
+
+    offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	if(recv_map[i] != -1) {
+	    remap_item *plan = &m_recv_plans[recv_map[i]];
+	    plan->unpack(&recv_buff[offset], &in_dest[plan->m_offset]);
+	    offset += plan->m_size;
+	}
+    }
+
+    memory::wfree(send_counts);
+    memory::wfree(recv_counts);
+    memory::wfree(send_offsets);
+    memory::wfree(recv_offsets);
+    memory::wfree(recv_map);
+    memory::wfree(send_buff);
+    memory::wfree(recv_buff);
 }

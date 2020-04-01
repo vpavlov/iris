@@ -43,13 +43,25 @@ namespace ORG_NCSA_IRIS {
 	      int *in_from_offset, int *in_from_size, 
 	      int *in_to_offset, int *in_to_size, 
 	      int in_unit_size,
-	      int in_permute, const char *in_name);
+	      int in_permute, const char *in_name,
+	      bool in_use_collective);
 	~remap();
 
-	void perform(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
-
+	void perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+	{
+	    if(m_use_collective) {
+		perform_collective(in_src, in_dest, in_buf);
+	    }else {
+		perform_p2p(in_src, in_dest, in_buf);
+	    }
+	}
+	
     private:
-      char *m_name;
+
+	void perform_p2p(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
+	void perform_collective(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
+	
+	char *m_name;
 	box_t<int> m_from;
 	box_t<int> m_to;
 	int m_nsend;  // number of items to send
@@ -58,6 +70,12 @@ namespace ORG_NCSA_IRIS {
 	class remap_item *m_recv_plans;
 	bool m_self;  // are we also receiving from self?
 	iris_real *m_sendbuf;  // buffer for sending
+
+	// collective support
+	bool m_use_collective;
+	int *m_comm_list;
+	int m_comm_len;
+	MPI_Comm m_collective_comm;
     };
 
 }

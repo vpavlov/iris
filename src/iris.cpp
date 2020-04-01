@@ -123,6 +123,11 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     memset(&(m_solver_params[0]), 0,
 	   IRIS_SOLVER_PARAM_CNT * sizeof(solver_param_t));
 
+    // default value for P3M FFT3D remap -- use collective comm
+    solver_param_t def_param;
+    def_param.i = 1;
+    set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
+    
     // initially, all calculation parameters are un-set (thus - free)
     m_qtot2 = 0.0;
     m_cutoff = 0.0;
@@ -872,7 +877,7 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 
 	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
 	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->info("i %d retval %f %f %f %f",i, bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
+	      m_logger->trace("i %d retval %f %f %f %f",i, bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
 	    }
 
 	    hwm += ev.size - 7*sizeof(iris_real);
@@ -895,7 +900,7 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	    
 	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
 	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->info("i %d bahor %f %f %f %f",i,bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
+	      m_logger->trace("i %d bahor %f %f %f %f",i,bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
 	    }
 
 	    hwm += (*out_counts)[i]*unit;

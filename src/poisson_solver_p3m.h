@@ -54,7 +54,7 @@ namespace ORG_NCSA_IRIS {
 	void calculate_green_function();
 	void calculate_k();
 	void calculate_virial_coeff();
-    void calculate_denominator();
+	void calculate_denominator();
 
 	inline iris_real denominator1(const iris_real &x)
 	{

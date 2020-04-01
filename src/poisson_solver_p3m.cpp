@@ -84,6 +84,9 @@ void poisson_solver_p3m::commit()
 	return;
     }
 
+    solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
+    bool use_collective = (p.i == 1)?true:false;
+    
     if(m_fft_grid) { delete m_fft_grid; }
 
     m_fft_grid = new grid(m_iris, "P3M FFT GRID");
@@ -115,7 +118,8 @@ void poisson_solver_p3m::commit()
 			m_fft_offset,
 			m_fft_size,
 			1,
-			0, "initial_remap");
+			0, "initial_remap",
+			use_collective);
 
     memory::destroy_3d(m_greenfn);
     memory::create_3d(m_greenfn, m_fft_size[0], m_fft_size[1], m_fft_size[2]);
@@ -145,13 +149,13 @@ void poisson_solver_p3m::commit()
     if(m_fft1 != NULL) { delete m_fft1; }
     m_fft1 = new fft3d(m_iris,
 		       m_fft_offset, m_fft_size,
-		       m_fft_offset, m_fft_size, "fft1");
+		       m_fft_offset, m_fft_size, "fft1", use_collective);
 		       
 
     if(m_fft2 != NULL) { delete m_fft2; }
     m_fft2 = new fft3d(m_iris,
 		       m_fft_offset, m_fft_size,
-		       m_mesh->m_own_offset, m_mesh->m_own_size, "fft2");
+		       m_mesh->m_own_offset, m_mesh->m_own_size, "fft2", use_collective);
     
     int n = 2 * m_fft1->m_count;
     
