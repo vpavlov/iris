@@ -65,7 +65,7 @@ namespace ORG_NCSA_IRIS {
 	fft3d(class iris *obj,
 	      int *in_in_offset, int *in_in_size,
 	      int *in_out_offset, int *in_out_size,
-	      char *in_name);
+	      const char *in_name);
 
 	~fft3d();
 
@@ -83,7 +83,7 @@ namespace ORG_NCSA_IRIS {
 	int m_count;               // number of items in own mesh
 
     private:
-	char *m_name;
+	const char *m_name;
 	int m_in_size[3];
 	int m_in_offset[3];
 	int m_out_size[3];

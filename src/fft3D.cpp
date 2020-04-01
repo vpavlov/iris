@@ -42,7 +42,7 @@ using namespace ORG_NCSA_IRIS;
 fft3d::fft3d(class iris *obj,
 	     int *in_in_offset, int *in_in_size,
 	     int *in_out_offset, int *in_out_size,
-	     char *in_name)
+	     const char *in_name)
     : state_accessor(obj), m_grids { NULL, NULL, NULL },
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_own_offset { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },

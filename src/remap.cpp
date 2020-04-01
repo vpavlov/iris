@@ -47,7 +47,7 @@ remap::remap(class iris *obj,
 	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
 	     int in_permute,
-	     char *in_name)
+	     const char *in_name)
     : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
       m_nrecv(0)
 {

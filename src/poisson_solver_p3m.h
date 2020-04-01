@@ -54,26 +54,26 @@ namespace ORG_NCSA_IRIS {
 	void calculate_green_function();
 	void calculate_k();
 	void calculate_virial_coeff();
-        void calculate_denominator();
+    void calculate_denominator();
 
-	inline iris_real denominator(const iris_real &x, const iris_real &y, const iris_real &z)
+	inline iris_real denominator1(const iris_real &x)
 	{
-	    iris_real sx, sy, sz;
-	    sx = sy = sz = 0.0;
+	    iris_real sx;
+	    sx = 0.0;
 
 	    for(int i = m_chass->m_order - 1; i >= 0; i--) {
-		iris_real c = m_chass->m_gfd_coeff[i];
-		sx = c + sx * x;
-		sy = c + sy * y;
-		sz = c + sz * z;
-	    }
-	    iris_real s = sx * sy * sz;
-	    return s*s;
+			iris_real c = m_chass->m_gfd_coeff[i];
+			sx = c + sx * x;
+		}
+	    
+		return sx*sx;
 	}
 
     private:
 	iris_real ***m_greenfn;  // green function table, actually a 3D array
-	iris_real ***m_denominator; // denominators buffer
+	iris_real *m_denominator_x; // denominators buffer
+	iris_real *m_denominator_y; // denominators buffer
+	iris_real *m_denominator_z; // denominators buffer
 	iris_real *m_kx;         // kx (2πi/L) tabulated
 	iris_real *m_ky;         // ky (2πj/L) tabulated
 	iris_real *m_kz;         // kz (2πk/L) tabulated
