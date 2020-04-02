@@ -53,6 +53,8 @@ namespace ORG_NCSA_IRIS {
 	void kspace_Ez(iris_real *in_phi, iris_real *out_Ez);
 
 	void calculate_green_function();
+	void calculate_gf_fact();
+	void calculate_gf_full();
 	void calculate_k();
 	void calculate_virial_coeff();
 	void calculate_denominator();
@@ -71,7 +73,7 @@ namespace ORG_NCSA_IRIS {
 	}
 
     private:
-	iris_real ***m_greenfn;  // green function table, actually a 3D array
+	iris_real *m_greenfn;  // green function table, actually a 3D array
 	iris_real *m_denominator_x; // denominators buffer
 	iris_real *m_denominator_y; // denominators buffer
 	iris_real *m_denominator_z; // denominators buffer

@@ -41,6 +41,7 @@
 #include "remap.h"
 #include "grid.h"
 #include "comm_rec.h"
+#include "utils.h"
 
 #define  _PI   3.141592653589793238462643383279
 #define _2PI   6.283185307179586476925286766559
@@ -61,7 +62,7 @@ poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
 
 poisson_solver_p3m::~poisson_solver_p3m()
 {
-    memory::destroy_3d(m_greenfn);
+    memory::destroy_1d(m_greenfn);
     memory::destroy_1d(m_denominator_x);    
     memory::destroy_1d(m_denominator_y);    
     memory::destroy_1d(m_denominator_z);
@@ -97,14 +98,11 @@ void poisson_solver_p3m::commit()
     if(m_fft_grid) { delete m_fft_grid; }
 
     m_fft_grid = new grid(m_iris, "P3M FFT GRID");
-    if (m_mesh->m_size[0] > m_local_comm->m_size)
-	{
-	    m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
-	}
-    else if (m_mesh->m_size[0]*m_mesh->m_size[1] > m_local_comm->m_size)
-	{
-	    m_fft_grid->set_pref(0, 0, 1);  // e.g. grid will be 64x2x1, mesh will be 2x64x128
-	}
+    if (m_mesh->m_size[0] > m_local_comm->m_size) {
+	m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
+    }else if (m_mesh->m_size[0]*m_mesh->m_size[1] > m_local_comm->m_size) {
+	m_fft_grid->set_pref(0, 0, 1);  // e.g. grid will be 64x2x1, mesh will be 2x64x128
+    }
 
     m_fft_grid->commit();
 
@@ -128,8 +126,8 @@ void poisson_solver_p3m::commit()
 			0, "initial_remap",
 			use_collective);
 
-    memory::destroy_3d(m_greenfn);
-    memory::create_3d(m_greenfn, m_fft_size[0], m_fft_size[1], m_fft_size[2]);
+    memory::destroy_1d(m_greenfn);
+    memory::create_1d(m_greenfn, m_fft_size[0] * m_fft_size[1] * m_fft_size[2]);
 
     memory::destroy_1d(m_kx);
     memory::create_1d(m_kx, m_fft_size[0]);
@@ -187,11 +185,13 @@ void poisson_solver_p3m::kspace_phi(iris_real *io_rho_phi)
     int nz = m_fft_size[2];
     
     int idx = 0;
+    int n = 0;
     for(int i=0;i<nx;i++) {
 	for(int j=0;j<ny;j++) {
 	    for(int k=0;k<nz;k++) {
-		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
-		io_rho_phi[idx++] *= scaleinv * m_greenfn[i][j][k];
+		io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
+		io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
+		n++;
 	    }
 	}
     }
@@ -208,10 +208,11 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
 
     if(m_iris->m_compute_global_virial) {
 	int idx = 0;
+	int n = 0;
 	for(int i=0;i<nx;i++) {
 	    for(int j=0;j<ny;j++) {
 		for(int k=0;k<nz;k++) {
-		    iris_real ener = s2 * m_greenfn[i][j][k] *
+		    iris_real ener = s2 * m_greenfn[n++] *
 			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
 			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
 		    for(int m = 0;m<6;m++) {
@@ -226,10 +227,11 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
 	}
     }else {
 	int idx = 0;
+	int n = 0;
 	for(int i=0;i<nx;i++) {
 	    for(int j=0;j<ny;j++) {
 		for(int k=0;k<nz;k++) {
-		    m_iris->m_Ek += s2 * m_greenfn[i][j][k] *
+		    m_iris->m_Ek += s2 * m_greenfn[n++] *
 			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
 			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
 		    idx += 2;
@@ -353,9 +355,154 @@ void poisson_solver_p3m::calculate_green_function()
     const iris_real yL = m_domain->m_global_box.ysize;
     const iris_real zL = m_domain->m_global_box.zsize;
 
+    const int xM = m_mesh->m_size[0];
+    const int yM = m_mesh->m_size[1];
+    const int zM = m_mesh->m_size[2];
+    
+    const int nbx = static_cast<int> ((alpha*xL/(_PI*xM)) * pow(-log(EPS),0.25));
+    const int nby = static_cast<int> ((alpha*yL/(_PI*yM)) * pow(-log(EPS),0.25));
+    const int nbz = static_cast<int> ((alpha*zL/(_PI*zM)) * pow(-log(EPS),0.25));
+
+    if(nbx == 0 && nby == 0 && nbz == 0) {
+	calculate_gf_fact();
+    }else {
+	calculate_gf_full();
+    }
+}
+
+void poisson_solver_p3m::calculate_gf_fact()
+{
+    const iris_real alpha = m_iris->m_alpha;
+
+    const iris_real xL = m_domain->m_global_box.xsize;
+    const iris_real yL = m_domain->m_global_box.ysize;
+    const iris_real zL = m_domain->m_global_box.zsize;
+
+    const int xM = m_mesh->m_size[0];
+    const int yM = m_mesh->m_size[1];
+    const int zM = m_mesh->m_size[2];
+    
     const iris_real kxm = (_2PI/xL);
     const iris_real kym = (_2PI/yL);
     const iris_real kzm = (_2PI/zL);
+	
+    const int _2n = 2*m_chass->m_order;
+
+    iris_real *greenfn_x;
+    iris_real *greenfn_y;
+    iris_real *greenfn_z;
+	
+    int nx = m_fft_size[0];
+    int ny = m_fft_size[1];
+    int nz = m_fft_size[2];
+    
+    int sx = m_fft_offset[0];
+    int sy = m_fft_offset[1];
+    int sz = m_fft_offset[2];
+    
+    int ex = sx + nx;
+    int ey = sy + ny;
+    int ez = sz + nz;
+
+    memory::create_1d(greenfn_x, nx);
+    memory::create_1d(greenfn_y, ny);
+    memory::create_1d(greenfn_z, nz);
+    
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int from, to;
+	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
+	
+	// k = 2pij/L
+	// h = L/M
+	// kh/2 = 2pij/L * L/M = 2pi*j/M
+	for (int x = sx + from; x < sx + to; x++) {
+	    int xj = x - xM * (2 * x / xM);
+	    iris_real xkplusb = kxm * xj;
+	    iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
+	    iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
+	    iris_real part2 = xrho * xwnsq;
+	    greenfn_x[x - sx] = part2 / m_denominator_x[x - sx];
+	}
+    }
+
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int from, to;
+	setup_work_sharing(ny, m_iris->m_nthreads, &from, &to);
+	for (int y = sy + from; y < sy + to; y++) {
+	    int yj = y - yM * (2 * y / yM);
+	    iris_real ykplusb = kym * yj;
+	    iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
+	    iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
+	    iris_real part2 = yrho * ywnsq;
+	    greenfn_y[y - sy] = part2 / m_denominator_y[y - sy];
+	}
+    }
+	    
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int from, to;
+	setup_work_sharing(nz, m_iris->m_nthreads, &from, &to);
+	for (int z = sz + from; z < sz + to; z++) {
+	    int zj = z - zM * (2 * z / zM);
+	    
+	    iris_real zkplusb = kzm * zj;
+	    iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
+	    iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
+	    
+	    iris_real part2 = zrho * zwnsq;
+	    
+	    greenfn_z[z - sz] = part2 / m_denominator_z[z - sz];
+	}
+    }
+	    
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int from, to;
+	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
+	for (int x = sx + from; x < sx + to; x++) {
+	    int xj = x - xM * (2 * x / xM);
+	    for (int y = sy; y < ey; y++) {
+		int yj = y - yM * (2 * y / yM);
+		for (int z = sz; z < ez; z++) {
+		    int zj = z - zM * (2 * z / zM); // convert from 0..P to 0..P/2, -P/2...-1
+		    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
+		    if (ksq != 0.0) {
+			iris_real part1 = _4PI / ksq;
+			iris_real part2 = greenfn_x[x - sx] * greenfn_y[y - sy] * greenfn_z[z - sz];
+			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = part1 * part2;
+		    }else {
+			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = 0.0;
+		    }
+		}
+	    }
+	}
+    }
+	
+    memory::destroy_1d(greenfn_x);
+    memory::destroy_1d(greenfn_y);
+    memory::destroy_1d(greenfn_z);
+}
+
+void poisson_solver_p3m::calculate_gf_full()
+{
+    const iris_real alpha = m_iris->m_alpha;
+
+    const iris_real xL = m_domain->m_global_box.xsize;
+    const iris_real yL = m_domain->m_global_box.ysize;
+    const iris_real zL = m_domain->m_global_box.zsize;
 
     const int xM = m_mesh->m_size[0];
     const int yM = m_mesh->m_size[1];
@@ -364,187 +511,78 @@ void poisson_solver_p3m::calculate_green_function()
     const int nbx = static_cast<int> ((alpha*xL/(_PI*xM)) * pow(-log(EPS),0.25));
     const int nby = static_cast<int> ((alpha*yL/(_PI*yM)) * pow(-log(EPS),0.25));
     const int nbz = static_cast<int> ((alpha*zL/(_PI*zM)) * pow(-log(EPS),0.25));
+    
+    const iris_real kxm = (_2PI/xL);
+    const iris_real kym = (_2PI/yL);
+    const iris_real kzm = (_2PI/zL);
 	
     const int _2n = 2*m_chass->m_order;
 
     int nx = m_fft_size[0];
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
-
+    
     int sx = m_fft_offset[0];
     int sy = m_fft_offset[1];
     int sz = m_fft_offset[2];
-
+    
     int ex = sx + nx;
     int ey = sy + ny;
     int ez = sz + nz;
 
-    if (nbx == 0 && nby == 0 && nbz == 0) {
-	iris_real *greenfn_x;
-	iris_real *greenfn_y;
-	iris_real *greenfn_z;
-	
-	memory::create_1d(greenfn_x, nx);
-	memory::create_1d(greenfn_y, ny);
-	memory::create_1d(greenfn_z, nz);
-	
 #if defined _OPENMP
-#pragma omp parallel default(none)
+#pragma omp parallel
 #endif
-	{
-	    int from, to;
-	    setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
+    {
+	int from, to;
+	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
 	    
-	    // k = 2pij/L
-	    // h = L/M
-	    // kh/2 = 2pij/L * L/M = 2pi*j/M
-	    
-	    for (int x = sx + from; x < sx + to; x++) {
-		int xj = x - xM * (2 * x / xM);
-		
-		iris_real xkplusb = kxm * xj;
-		iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
-		iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
-		
-		iris_real part2 = xrho * xwnsq;
-		
-		greenfn_x[x - sx] = part2 / m_denominator_x[x - sx];
-	    }
-
-	    setup_work_sharing(ny, m_iris->m_nthreads, &from, &to);
-	    
-	    for (int y = sy + from; y < sy + to; y++) {
+	// k = 2pij/L
+	// h = L/M
+	// kh/2 = 2pij/L * L/M = 2pi*j/M
+	int n = 0;
+	for (int x = sx + from; x < sx + to; x++) {
+	    int xj = x - xM * (2 * x / xM);
+	    for (int y = sy; y < ey; y++) {
 		int yj = y - yM * (2 * y / yM);
-		
-		iris_real ykplusb = kym * yj;
-		iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
-		iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
-		
-		iris_real part2 = yrho * ywnsq;
-		
-		greenfn_y[y - sy] = part2 / m_denominator_y[y - sy];
-	    }
-	    
-	    setup_work_sharing(nz, m_iris->m_nthreads, &from, &to);
-	    
-	    for (int z = sz + from; z < sz + to; z++) {
-		int zj = z - zM * (2 * z / zM);
-		
-		iris_real zkplusb = kzm * zj;
-		iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
-		iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
-		
-		iris_real part2 = zrho * zwnsq;
-		
-		greenfn_z[z - sz] = part2 / m_denominator_z[z - sz];
-	    }
-	    
-	    setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
-	    for (int x = sx + from; x < sx + to; x++)
-		{
-		    int xj = x - xM * (2 * x / xM);
-		    for (int y = sy; y < ey; y++)
-			{
-			    int yj = y - yM * (2 * y / yM);
-			    for (int z = sz; z < ez; z++)
-				{
-				    int zj = z - zM * (2 * z / zM); // convert from 0..P to 0..P/2, -P/2...-1
-				    
-				    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
-				    
-				    if (ksq != 0.0)
-					{
-					    iris_real part1 = _4PI / ksq;
-					    iris_real part2 = greenfn_x[x - sx] * greenfn_y[y - sy] * greenfn_z[z - sz];
-					    
-					    m_greenfn[x - sx][y - sy][z - sz] = part1 * part2;
-					}
-				    else
-					{
-					    m_greenfn[x - sx][y - sy][z - sz] = 0.0;
-					}
-				}
-			}
-		}
-	}
-	
-	memory::destroy_1d(greenfn_x);
-	memory::destroy_1d(greenfn_y);
-	memory::destroy_1d(greenfn_z);
-    }
-    else {
-#if defined _OPENMP
-#pragma omp parallel default(none)
-#endif
-	{
-	    int from, to;
-	    setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
-	    
-	    // k = 2pij/L
-	    // h = L/M
-	    // kh/2 = 2pij/L * L/M = 2pi*j/M
-	    int n = 0;
-	    for (int x = sx + from; x < sx + to; x++)
-		{
-		    int xj = x - xM * (2 * x / xM);
-		    
-		    for (int y = sy; y < ey; y++)
-			{
-			    int yj = y - yM * (2 * y / yM);
-			    
-			    for (int z = sz; z < ez; z++)
-				{
-				    int zj = z - zM * (2 * z / zM);               // convert from 0..P to 0..P/2, -P/2...-1
-				    
-				    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
-				    
-				    if (ksq != 0.0)
-					{
-					    iris_real part1 = _4PI / ksq;
-					    iris_real part2 = 0.0;
-					    
-					    for (int bx = -nbx; bx <= nbx; bx++)
-						{
-						    iris_real xkplusb = kxm * (xj + xM * bx);
-						    iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
-						    iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
-						    
-						    for (int by = -nby; by <= nby; by++)
-							{
-							    iris_real ykplusb = kym * (yj + yM * by);
-							    iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
-							    iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
+		for (int z = sz; z < ez; z++) {
+		    int zj = z - zM * (2 * z / zM);               // convert from 0..P to 0..P/2, -P/2...-1
+		    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
+		    if (ksq != 0.0) {
+			iris_real part1 = _4PI / ksq;
+			iris_real part2 = 0.0;
+			for (int bx = -nbx; bx <= nbx; bx++) {
+			    iris_real xkplusb = kxm * (xj + xM * bx);
+			    iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
+			    iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
+
+			    for (int by = -nby; by <= nby; by++) {
+				iris_real ykplusb = kym * (yj + yM * by);
+				iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
+				iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
 							    
-							    for (int bz = -nbz; bz <= nbz; bz++)
-								{
-								    iris_real zkplusb = kzm * (zj + zM * bz);
-								    iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
-								    iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
+				for (int bz = -nbz; bz <= nbz; bz++) {
+				    iris_real zkplusb = kzm * (zj + zM * bz);
+				    iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
+				    iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
+				    
+				    // k . (k+b)
+				    iris_real k_dot_kplusb = kxm * xj * xkplusb + kym * yj * ykplusb + kzm * zj * zkplusb;
 								    
-								    // k . (k+b)
-								    iris_real k_dot_kplusb =
-									kxm * xj * xkplusb +
-									kym * yj * ykplusb +
-									kzm * zj * zkplusb;
+				    // (k+b) . (k+b)
+				    iris_real kplusb_sq = xkplusb * xkplusb + ykplusb * ykplusb + zkplusb * zkplusb;
 								    
-								    // (k+b) . (k+b)
-								    iris_real kplusb_sq = xkplusb * xkplusb + ykplusb * ykplusb + zkplusb * zkplusb;
-								    
-								    part2 += (k_dot_kplusb / kplusb_sq) * xrho * yrho * zrho * xwnsq * ywnsq * zwnsq;
-								}
-							}
-						}
-					    iris_real part3 = m_denominator_x[x - sx]*m_denominator_y[y - sy]*m_denominator_z[z - sz];
-					    
-					    m_greenfn[x - sx][y - sy][z - sz] = part1 * part2 / part3;
-					}
-				    else
-					{
-					    m_greenfn[x - sx][y - sy][z - sz] = 0.0;
-					}
+				    part2 += (k_dot_kplusb / kplusb_sq) * xrho * yrho * zrho * xwnsq * ywnsq * zwnsq;
 				}
+			    }
 			}
+			iris_real part3 = m_denominator_x[x - sx]*m_denominator_y[y - sy]*m_denominator_z[z - sz];
+			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = part1 * part2 / part3;
+		    }else {
+			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = 0.0;
+		    }
 		}
+	    }
 	}
     }
 }
