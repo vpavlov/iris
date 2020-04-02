@@ -62,7 +62,8 @@ namespace ORG_NCSA_IRIS {
 
 	void ijk_to_xyz(int i, int j, int k,
 			iris_real &x, iris_real &y, iris_real &z);
-
+	void handle_box_resize();
+      
     private:
 
 

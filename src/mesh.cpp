@@ -116,6 +116,21 @@ void mesh::set_size(int nx, int ny, int nz)
 		m_size[0] * m_size[1] * m_size[2]);
 }
 
+void mesh::handle_box_resize()
+{
+    m_h[0] = m_domain->m_global_box.xsize / m_size[0];
+    m_h[1] = m_domain->m_global_box.ysize / m_size[1];
+    m_h[2] = m_domain->m_global_box.zsize / m_size[2];
+    
+    m_h3 = m_h[0] * m_h[1] * m_h[2];
+    
+    m_hinv[0] = m_size[0] / m_domain->m_global_box.xsize;
+    m_hinv[1] = m_size[1] / m_domain->m_global_box.ysize;
+    m_hinv[2] = m_size[2] / m_domain->m_global_box.zsize;
+    
+    m_h3inv = m_hinv[0] * m_hinv[1] * m_hinv[2];
+}
+
 void mesh::commit()
 {
     if(!m_domain->m_initialized) {

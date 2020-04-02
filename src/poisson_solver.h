@@ -42,6 +42,7 @@ namespace ORG_NCSA_IRIS {
 
 	virtual void commit() = 0;
 	virtual void solve() = 0;
+	virtual void handle_box_resize() = 0;
 
 	void set_dirty(bool in_dirty) { m_dirty = in_dirty; };
 

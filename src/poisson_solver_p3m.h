@@ -43,6 +43,7 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 	void solve();
+	void handle_box_resize();
 
     private:
 	void kspace_phi(iris_real *io_rho_phi);
