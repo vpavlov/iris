@@ -212,6 +212,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     solver_param_t def_param;
     def_param.i = 1;
     set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
+
+    m_layout = -1;  // layout not setup yet
 }
 
 iris::~iris()
@@ -392,6 +394,23 @@ void iris::perform_commit()
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
 	m_chass->commit();      // does not depend on anything
+
+	if (m_layout == -1) {
+	    // TODO: maybe see which dimension is smallest, but seems like a lot
+	    // of work for the whole library to be able to handle all different
+	    // layout scenarios, so leave it for later. For now judge by the
+	    // X dim (and Y in second case) only and make Z be always whole...
+	    if (m_mesh->m_size[0] >= m_local_comm->m_size) {
+		m_proc_grid->set_pref(0, 1, 1);  // 128x128x128 mesh on 8 proc -> 16x128x128
+		m_layout = IRIS_LAYOUT_TRAYS_XYZ;
+	    }else if (m_mesh->m_size[0]*m_mesh->m_size[1] >= m_local_comm->m_size) {
+		m_proc_grid->set_pref(0, 0, 1);  // 128x128x128 mesh on 256 proc -> 16x16x128
+		m_layout = IRIS_LAYOUT_PENCILS_XYZ;
+	    }else {
+		throw std::domain_error("Too many processors; 3D domain decomposition not supported yet!");
+	    }
+	}
+
 	m_proc_grid->commit();  // does not depend on anything
 	m_domain->commit();     // depends on m_proc_grid
 	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
@@ -600,7 +619,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
 		      MPI_Win in_pending_win)
 {
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_tag, in_comm, req);
-    if(is_server() && in_pending_win) {
+    if(is_server() && (in_pending_win != MPI_WIN_NULL)) {
 	int one = 1;
 	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
 		in_pending_win);
