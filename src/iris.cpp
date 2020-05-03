@@ -361,7 +361,7 @@ void iris::set_global_box(box_t<iris_real> *in_box)
 	// the client leader sends to the server leader the global box
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_SET_GBOX_FANOUT, sizeof(box_t<iris_real>), in_box, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_SET_GBOX_FANOUT, sizeof(box_t<iris_real>), in_box, &req, MPI_WIN_NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
 	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, comm, MPI_STATUS_IGNORE);
     }
@@ -369,13 +369,6 @@ void iris::set_global_box(box_t<iris_real> *in_box)
     MPI_Barrier(m_local_comm->m_comm);
 }
 
-
-void iris::set_grid_pref(int x, int y, int z)
-{
-    if(is_server()) {
-	m_proc_grid->set_pref(x, y, z);
-    }
-}
 
 void iris::set_solver(int in_which_solver)
 {
@@ -426,7 +419,7 @@ box_t<iris_real> *iris::get_local_boxes()
 	// the client leader sends to the server leader request to get the local boxes
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, MPI_WIN_NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
 	MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
     }
@@ -450,7 +443,7 @@ void iris::commit()
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
         m_logger->trace("sending event");
-	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, MPI_WIN_NULL);
         m_logger->trace("commit MPI_Wait");
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
         m_logger->trace("commit MPI_Recv");
@@ -472,7 +465,7 @@ void iris::quit()
     if(is_leader()) {
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_QUIT_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_QUIT_FANOUT, 0, NULL, &req, MPI_WIN_NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
 	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, comm, MPI_STATUS_IGNORE);
     }
@@ -938,7 +931,7 @@ void iris::get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *ou
     if(is_leader()) {  // client leader asks server leader to do whatever needs to be done
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_GGE_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_GGE_FANOUT, 0, NULL, &req, MPI_WIN_NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
 	MPI_Recv(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, comm, MPI_STATUS_IGNORE);
     }
@@ -1190,7 +1183,7 @@ bool iris::fanout_event(struct event_t *event)
     }
 
     for(int i=0;i<m_server_size;i++) {
-	send_event(comm, i, event->tag + 1, event->size, event->data, req + i, NULL);
+	send_event(comm, i, event->tag + 1, event->size, event->data, req + i, MPI_WIN_NULL);
     }
     
     MPI_Waitall(m_server_size, req, MPI_STATUS_IGNORE);

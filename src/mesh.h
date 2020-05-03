@@ -72,15 +72,7 @@ namespace ORG_NCSA_IRIS {
 			    iris_real *out_forces);
 	void assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 			       iris_real *out_forces);
-
-	void send_rho_halo(int in_dim, int in_dir,
-			   iris_real **out_sendbuf, MPI_Request *out_req);
-	void recv_rho_halo(int in_dim, int in_dir);
 	void extract_rho();
-
-	void send_field_halo(int in_dim, int in_dir,
-			   iris_real **out_sendbuf, MPI_Request *out_req);
-	void recv_field_halo(int in_dim, int in_dir);
 	void imtract_field();
 	void imtract_phi();
 

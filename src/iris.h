@@ -127,9 +127,6 @@ namespace ORG_NCSA_IRIS {
 	// Sets or resets the Ewald splitting parameter (1/distance)
 	void set_alpha(iris_real in_alpha);
 
-	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
-	void set_grid_pref(int x, int y, int z);
-	
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
 
