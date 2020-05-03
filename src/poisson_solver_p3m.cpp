@@ -695,5 +695,7 @@ void poisson_solver_p3m::solve()
     kspace_Ez(m_work1, m_work2);
     m_fft2->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
 
-    m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0]));
+    //////////////// we do not need this ////////////////////////
+    // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
+    /////////////////////////////////////////////////////////////
 }

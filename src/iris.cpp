@@ -122,12 +122,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     // clear solver parameters
     memset(&(m_solver_params[0]), 0,
 	   IRIS_SOLVER_PARAM_CNT * sizeof(solver_param_t));
-
-    // default value for P3M FFT3D remap -- use collective comm
-    solver_param_t def_param;
-    def_param.i = 1;
-    set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
-    
+ 
     // initially, all calculation parameters are un-set (thus - free)
     m_qtot2 = 0.0;
     m_cutoff = 0.0;
@@ -212,6 +207,11 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
 	m_logger->trace("This node is a leader; other leader's local rank = %d", m_other_leader);
     }
+
+    // default value for P3M FFT3D remap -- use collective comm
+    solver_param_t def_param;
+    def_param.i = 1;
+    set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
 }
 
 iris::~iris()

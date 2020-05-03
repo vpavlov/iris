@@ -141,6 +141,19 @@ void mesh::commit()
 	throw std::logic_error("mesh commit called without size being initialized!");
     }
 
+    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	memory::wfree(it->second);
+    }
+
+    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	memory::wfree(it->second);
+    }
+
+    m_ncharges.clear();
+    m_charges.clear();
+    m_forces.clear();	
+
+
     if(m_dirty) {
 	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
 	m_h[1] = m_domain->m_global_box.ysize / m_size[1];
@@ -291,17 +304,6 @@ void mesh::commit()
 				 right,
 				 IRIS_TAG_PHI_HALO);
 	
-	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	    memory::wfree(it->second);
-	}
-
-	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
-	    memory::wfree(it->second);
-	}
-
-	m_ncharges.clear();
-	m_charges.clear();
-	m_forces.clear();	
 	// other configuration that depends on ours must be reset
 	if(m_solver != NULL) {
 	    m_solver->set_dirty(true);
