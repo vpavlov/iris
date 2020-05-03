@@ -38,7 +38,6 @@
 #include "fft3D.h"
 #include "openmp.h"
 #include "timer.h"
-#include "remap.h"
 #include "grid.h"
 #include "comm_rec.h"
 #include "utils.h"
@@ -56,7 +55,7 @@ poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
       m_work1(NULL), m_work2(NULL), m_work3(NULL),
-      m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
+      m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
 
@@ -76,7 +75,6 @@ poisson_solver_p3m::~poisson_solver_p3m()
     if(m_fft1) { delete m_fft1; }
     if(m_fft2) { delete m_fft2; }
     if(m_fft_grid) { delete m_fft_grid; }
-    if(m_remap) { delete m_remap; }
 }
 
 void poisson_solver_p3m::handle_box_resize()
@@ -114,17 +112,6 @@ void poisson_solver_p3m::commit()
     m_fft_offset[0] = c[0] * m_fft_size[0];
     m_fft_offset[1] = c[1] * m_fft_size[1];
     m_fft_offset[2] = c[2] * m_fft_size[2];
-
-    if(m_remap) { delete m_remap; }
-
-    m_remap = new remap(m_iris,
-			m_mesh->m_own_offset,
-			m_mesh->m_own_size,
-			m_fft_offset,
-			m_fft_size,
-			1,
-			0, "initial_remap",
-			use_collective);
 
     memory::destroy_1d(m_greenfn);
     memory::create_1d(m_greenfn, m_fft_size[0] * m_fft_size[1] * m_fft_size[2]);
@@ -677,7 +664,8 @@ void poisson_solver_p3m::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
 
-    m_remap->perform(&(m_mesh->m_rho[0][0][0]), m_work2, m_work1);
+    memcpy(m_work2, &(m_mesh->m_rho[0][0][0]), m_fft_size[0] * m_fft_size[1] * m_fft_size[2] * sizeof(iris_real));
+    
     m_fft1->compute_fw(m_work2, m_work1);
 
     if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {

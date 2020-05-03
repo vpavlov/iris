@@ -85,7 +85,6 @@ namespace ORG_NCSA_IRIS {
 	int m_fft_size[3];
 	int m_fft_offset[3];
 	class grid  *m_fft_grid;
-	class remap *m_remap;
 	class fft3d *m_fft1, *m_fft2;
       
 	// FFT workspaces
