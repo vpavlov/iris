@@ -799,7 +799,6 @@ void mesh::assign_forces1(int in_ncharges, iris_real *in_charges,
 	    out_forces[7 + n*4 + 1] = factor * ekx;
 	    out_forces[7 + n*4 + 2] = factor * eky;
 	    out_forces[7 + n*4 + 3] = factor * ekz;
-	    m_logger->trace("out_forces %f %f %f %f in_charges %f %f %f",out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3],in_charges[n*5+0],in_charges[n*5+1],in_charges[n*5+2]);
 	}
     }
 }
