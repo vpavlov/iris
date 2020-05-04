@@ -59,6 +59,9 @@ namespace ORG_NCSA_IRIS {
 	void calculate_virial_coeff();
 	void calculate_denominator();
 
+	void commit_general(bool in_use_collective);
+	void commit_planes_yz(bool in_use_collective);
+	
 	inline iris_real denominator1(const iris_real &x)
 	{
 	    iris_real sx;
@@ -84,8 +87,7 @@ namespace ORG_NCSA_IRIS {
 
 	int m_fft_size[3];
 	int m_fft_offset[3];
-	class grid  *m_fft_grid;
-	class fft3d *m_fft1, *m_fft2;
+	class fft_base *m_fft1, *m_fft2;
       
 	// FFT workspaces
 	iris_real *m_work1;

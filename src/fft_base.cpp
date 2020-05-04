@@ -28,56 +28,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FFT3D_H__
-#define __IRIS_FFT3D_H__
+#include "iris.h"
 #include "fft_base.h"
-#include "timer.h"
 
-namespace ORG_NCSA_IRIS {
+using namespace ORG_NCSA_IRIS;
 
-    class fft3d : public fft_base {
-
-    public:
-	fft3d(class iris *obj,
-	      int *in_in_offset, int *in_in_size,
-	      int *in_out_offset, int *in_out_size,
-	      const char *in_name,
-	      bool in_use_collective);
-
-	~fft3d();
-
-	virtual iris_real *compute_fw(iris_real *src, iris_real *dest);
-	virtual void compute_bk(iris_real *src, iris_real *dest);
-
-	void dump_workspace();
-
-    private:
-	void setup_grid(int in_which);
-	void setup_remap(int in_which, bool in_use_collective);
-	void setup_plans(int in_which);
-
-
-    private:
-	int m_in_size[3];
-	int m_in_offset[3];
-	int m_out_size[3];
-	int m_out_offset[3];
-
-	class grid *m_grids[3];    // proc grids in which 1 proc a whole dim
-	int m_own_size[3][3];      // sizes for each of the grid
-	int m_own_offset[3][3];    // offsets for each of the grid
-	class remap *m_remaps[4];  // remaps between mesh->1d ffts->mesh
-	iris_real *m_scratch;      // scratch space for remapping
-
-	timer tm1[4], tm2;
-
-#ifdef FFT_FFTW
-	FFTW_(plan) m_fw_plans[3];
-	FFTW_(plan) m_bk_plans[3];
+fft_base::fft_base(iris *obj, const char *in_name, bool in_use_collective)
+    : state_accessor(obj), m_name(in_name), m_use_collective(in_use_collective),
+      m_count(0)
+{
+#if defined _OPENMP
+#if defined FFT_FFTW
+    FFTW_(init_threads);
+    FFTW_(plan_with_nthreads(m_iris->m_nthreads));
 #endif
-
-    };
-
+#endif
+    
 }
 
-#endif
+fft_base::~fft_base()
+{
+}

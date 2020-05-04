@@ -38,7 +38,7 @@
 #include "fft3D.h"
 #include "openmp.h"
 #include "timer.h"
-#include "grid.h"
+#include "proc_grid.h"
 #include "comm_rec.h"
 #include "utils.h"
 
@@ -55,7 +55,7 @@ poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
       m_work1(NULL), m_work2(NULL), m_work3(NULL),
-      m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
+      m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
 
@@ -74,7 +74,6 @@ poisson_solver_p3m::~poisson_solver_p3m()
     memory::destroy_1d(m_work3);
     if(m_fft1) { delete m_fft1; }
     if(m_fft2) { delete m_fft2; }
-    if(m_fft_grid) { delete m_fft_grid; }
 }
 
 void poisson_solver_p3m::handle_box_resize()
@@ -84,18 +83,9 @@ void poisson_solver_p3m::handle_box_resize()
     calculate_virial_coeff();
 }
 
-void poisson_solver_p3m::commit()
+void poisson_solver_p3m::commit_general(bool in_use_collective)
 {
-    if(!m_dirty) {
-	return;
-    }
-
-    solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
-    bool use_collective = (p.i == 1)?true:false;
-    
-    if(m_fft_grid) { delete m_fft_grid; }
-
-    m_fft_grid = new grid(m_iris, "P3M FFT GRID");
+    grid *m_fft_grid = new grid(m_iris, "P3M FFT GRID");
     if (m_mesh->m_size[0] > m_local_comm->m_size) {
 	m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
     }else if (m_mesh->m_size[0]*m_mesh->m_size[1] > m_local_comm->m_size) {
@@ -139,17 +129,17 @@ void poisson_solver_p3m::commit()
     calculate_virial_coeff();
 
     if(m_fft1 != NULL) { delete m_fft1; }
+    if(m_fft2 != NULL) { delete m_fft2; }
+    
     m_fft1 = new fft3d(m_iris,
 		       m_fft_offset, m_fft_size,
-		       m_fft_offset, m_fft_size, "fft1", use_collective);
-		       
-
-    if(m_fft2 != NULL) { delete m_fft2; }
+		       m_fft_offset, m_fft_size, "fft1", in_use_collective);
     m_fft2 = new fft3d(m_iris,
 		       m_fft_offset, m_fft_size,
-		       m_mesh->m_own_offset, m_mesh->m_own_size, "fft2", use_collective);
+		       m_mesh->m_own_offset, m_mesh->m_own_size,
+		       "fft2", in_use_collective);
     
-    int n = 2 * m_fft1->m_count;
+    int n = 2 * m_fft1->get_count();
     
     memory::destroy_1d(m_work1);
     memory::create_1d(m_work1, n);
@@ -159,6 +149,32 @@ void poisson_solver_p3m::commit()
 
     memory::destroy_1d(m_work3);
     memory::create_1d(m_work3, n);
+}
+
+void poisson_solver_p3m::commit_planes_yz(bool in_use_collective)
+{
+    commit_general(in_use_collective);
+}
+
+void poisson_solver_p3m::commit()
+{
+    if(!m_dirty) {
+	return;
+    }
+    
+    solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
+    bool use_collective = (p.i == 1)?true:false;
+
+    m_iris->m_logger->info("DD Layout: %d", m_iris->m_proc_grid->get_layout());
+    switch(m_iris->m_proc_grid->get_layout()) {
+	
+    case IRIS_LAYOUT_PLANES_YZ:
+	commit_planes_yz(use_collective);
+	break;
+
+    default:
+	commit_general(use_collective);
+    }
     
     m_dirty = false;
 }

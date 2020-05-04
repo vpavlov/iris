@@ -48,19 +48,6 @@ namespace ORG_NCSA_IRIS {
     
 #define IRIS_SOLVER_P3M  0x01
 #define IRIS_SOLVER_CG   0x02
-
-    // only the first two of these are supported
-#define IRIS_LAYOUT_TRAYS_XYZ    0
-#define IRIS_LAYOUT_PENCILS_XYZ  1
-#define IRIS_LAYOUT_CUBES_XYZ    2
-    
-#define IRIS_LAYOUT_TRAYS_ZXY    3
-#define IRIS_LAYOUT_PENCILS_ZXY  4
-#define IRIS_LAYOUT_CUBES_ZXY    5
-    
-#define IRIS_LAYOUT_TRAYS_YZX    6
-#define IRIS_LAYOUT_PENCILS_YZX  7
-#define IRIS_LAYOUT_CUBES_YZX    8
     
     static const iris_real _4PI = 12.566370614359172;
 
@@ -226,6 +213,7 @@ namespace ORG_NCSA_IRIS {
 	bool good_factor_quality(int n);
 	class poisson_solver *get_solver();
 
+	
     public:
 	int m_which_solver;            // P3M, CG, ...
 	int m_client_size;             // # of client nodes
@@ -275,7 +263,6 @@ namespace ORG_NCSA_IRIS {
 	class units           *m_units;       // Units system to use
     private:
 	volatile bool m_quit;  // quit the main loop
-	int m_layout;   // trays/pencils/cubes and which is last dimension...
     };
 }
 #endif

@@ -41,6 +41,7 @@
 using namespace ORG_NCSA_IRIS;
 using namespace std;
 
+
 proc_grid::proc_grid(iris *obj)
     : grid(obj, "Processor")
 {
@@ -54,7 +55,7 @@ proc_grid::~proc_grid()
 // check if mesh and domain are initialized and also set them dirty if it was
 // re-configured.
 void proc_grid::commit()
-{
+{    
     if(!m_mesh->m_initialized) {
 	throw std::logic_error("proc_grid commit called, but mesh is not initialized!");
     }
@@ -65,6 +66,10 @@ void proc_grid::commit()
 
     bool tmp_dirty = m_dirty;
 
+    if(m_dirty) {
+	figure_out_layout();
+    }
+        
     grid::commit();
 
     if(tmp_dirty) {
@@ -76,5 +81,30 @@ void proc_grid::commit()
 	if(m_domain != NULL) {
 	    m_domain->m_dirty = true;
 	}
+    }
+}
+
+void proc_grid::figure_out_layout()
+{
+    if(m_mesh->m_size[0] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_YZ;
+	set_pref(0, 1, 1);
+    }else if(m_mesh->m_size[1] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_ZX;
+	set_pref(1, 0, 1);
+    }else if(m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_XY;
+	set_pref(1, 1, 0);
+    }else if(m_mesh->m_size[0]*m_mesh->m_size[1] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_Z;
+	set_pref(0, 0, 1);
+    }else if(m_mesh->m_size[0]*m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_Y;
+	set_pref(0, 1, 0);
+    }else if(m_mesh->m_size[1]*m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_X;
+	set_pref(1, 0, 0);
+    }else {
+	m_layout = IRIS_LAYOUT_CUBES;
     }
 }

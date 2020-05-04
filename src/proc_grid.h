@@ -35,6 +35,59 @@
 
 namespace ORG_NCSA_IRIS {
 
+#define IRIS_LAYOUT_UNDEFINED -1
+    
+    /////////////////////////////////////////////////////////////
+    /// Plane domain decomposition - fastest
+    ///
+    /// It turns out that the fastest possible way to split work
+    /// between P3M nodes is make so that a single processor
+    /// "owns" one or more 2D planes. This is possible only if
+    /// the number of processors is less than or equal to the
+    /// number of mesh nodes in one of the directions.
+    /// There are 3 possible scenarios:
+    ///   - own a set of YZ planes along the X direction
+    ///   - own a set of XY planes along the Z direction
+    ///   - own a set of ZX planes along the Y direction
+    /////////////////////////////////////////////////////////////
+
+#define IRIS_LAYOUT_PLANES_YZ  0  // YZ planes in the X direction
+#define IRIS_LAYOUT_PLANES_XY  1  // XY planes in the Z direction
+#define IRIS_LAYOUT_PLANES_ZX  2  // ZX planes in the Y direction
+
+    
+    /////////////////////////////////////////////////////////////
+    /// Pencil domain decomposition - slower
+    ///
+    /// If the number of processors is bigger than the number of
+    /// mesh nodes in one direction (e.g. 256 processors for
+    /// 128x128x128 mesh), then we need to resort to pencils --
+    /// a processor owns a set of "pencils" which span a whole
+    /// dimension, for example the 128x128x128 mesh is split into
+    /// 256 8x8x128 local meshes.
+    /// There are 3 possible scenarios:
+    ///   - own a set of Z pencils along the XY plane
+    ///   - own a set of Y pencils along the ZX plane
+    ///   - own a set of X pencils along the YZ plane
+    /////////////////////////////////////////////////////////////
+    
+#define IRIS_LAYOUT_PENCILS_Z  3  // pencils along Z in the XY plane
+#define IRIS_LAYOUT_PENCILS_Y  4  // pencils along Z in the XY plane
+#define IRIS_LAYOUT_PENCILS_X  5  // pencils along Z in the XY plane
+
+    /////////////////////////////////////////////////////////////
+    /// Cubes domain decomposition - slowest
+    ///
+    /// If the number of processors is bigger than the multiple of
+    /// the number of mesh nodes in two dimensions, (e.g. 20,000
+    /// processors for 128x128x128 mesh), then we need to resort
+    /// to generic 3D domain decomposition, for example the
+    /// 128x128x128 mesh is split into 32,768 4x4x4 cubes.
+    /// This is highly unlikely to happen.
+    /////////////////////////////////////////////////////////////
+    
+#define IRIS_LAYOUT_CUBES      6  // partial in every dimention
+    
     class proc_grid : public grid {
 
     public:
@@ -43,6 +96,13 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 
+	int get_layout() { return m_layout; };
+
+    private:
+	void figure_out_layout();
+	
+    private:
+	int m_layout;
     };
 }
 

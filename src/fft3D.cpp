@@ -43,14 +43,13 @@ fft3d::fft3d(class iris *obj,
 	     int *in_in_offset, int *in_in_size,
 	     int *in_out_offset, int *in_out_size,
 	     const char *in_name, bool in_use_collective)
-    : state_accessor(obj), m_grids { NULL, NULL, NULL },
+    : fft_base(obj, in_name, in_use_collective),
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_own_offset { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_remaps { NULL, NULL, NULL, NULL },
     m_fw_plans { NULL, NULL, NULL },
     m_bk_plans { NULL, NULL, NULL },
-    m_scratch(NULL),
-    m_name(in_name)
+    m_scratch(NULL)
 {    
 #if defined _OPENMP
 #if defined FFT_FFTW

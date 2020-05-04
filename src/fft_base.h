@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2020, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -28,56 +28,55 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FFT3D_H__
-#define __IRIS_FFT3D_H__
-#include "fft_base.h"
+#ifndef __IRIS_FFT_BASE_H__
+#define __IRIS_FFT_BASE_H__
+
+#include "state_accessor.h"
 #include "timer.h"
+
+#ifdef FFT_FFTW
+
+#include "fftw3.h"
+
+#if IRIS_DOUBLE == 0
+
+typedef fftwf_complex complex_t;
+#define FFTW_(func)  fftwf_##func
+
+#elif IRIS_DOUBLE == 1
+
+typedef fftw_complex complex_t;
+#define FFTW_(func)  fftw_##func
+
+#else 
+
+#error "Unknown IRIS_DOUBLE setting!"
+
+#endif  // IRIS_DOUBLE
+
+#endif  // FFT_FFTW
 
 namespace ORG_NCSA_IRIS {
 
-    class fft3d : public fft_base {
+    class fft_base : protected state_accessor {
 
     public:
-	fft3d(class iris *obj,
-	      int *in_in_offset, int *in_in_size,
-	      int *in_out_offset, int *in_out_size,
-	      const char *in_name,
-	      bool in_use_collective);
+	fft_base(class iris *obj, const char *in_name, bool in_use_collective);
+	~fft_base();
 
-	~fft3d();
+	virtual iris_real *compute_fw(iris_real *src, iris_real *dest) = 0;
+	virtual void compute_bk(iris_real *src, iris_real *dest) = 0;
 
-	virtual iris_real *compute_fw(iris_real *src, iris_real *dest);
-	virtual void compute_bk(iris_real *src, iris_real *dest);
+	int get_count() { return m_count; };
+	
+    protected:
+	const char *m_name;
+	bool m_use_collective;
 
-	void dump_workspace();
-
-    private:
-	void setup_grid(int in_which);
-	void setup_remap(int in_which, bool in_use_collective);
-	void setup_plans(int in_which);
-
-
-    private:
-	int m_in_size[3];
-	int m_in_offset[3];
-	int m_out_size[3];
-	int m_out_offset[3];
-
-	class grid *m_grids[3];    // proc grids in which 1 proc a whole dim
-	int m_own_size[3][3];      // sizes for each of the grid
-	int m_own_offset[3][3];    // offsets for each of the grid
-	class remap *m_remaps[4];  // remaps between mesh->1d ffts->mesh
-	iris_real *m_scratch;      // scratch space for remapping
-
-	timer tm1[4], tm2;
-
-#ifdef FFT_FFTW
-	FFTW_(plan) m_fw_plans[3];
-	FFTW_(plan) m_bk_plans[3];
-#endif
-
+	int m_count;               // total number of items to do FFT on (own mesh)
+	
     };
-
+    
 }
 
 #endif
