@@ -28,18 +28,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FFT_PLANE_H__
-#define __IRIS_FFT_PLANE_H__
+#ifndef __IRIS_FFT_PENCIL_H__
+#define __IRIS_FFT_PENCIL_H__
 
 #include "fft_base.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class fft_plane : public fft_base {
+    class fft_pencil : public fft_base {
 	
     public:
-	fft_plane(class iris *obj, const char *in_name, bool in_use_collective);
-	virtual ~fft_plane();
+	fft_pencil(class iris *obj, const char *in_name, bool in_use_collective);
+	virtual ~fft_pencil();
 	
 	virtual iris_real *compute_fw(iris_real *src, iris_real *dest);
 	virtual void compute_bk(iris_real *src, iris_real *dest);
@@ -52,12 +52,18 @@ namespace ORG_NCSA_IRIS {
 #ifdef FFT_FFTW
 	FFTW_(plan) m_fw_plan1;
 	FFTW_(plan) m_fw_plan2;
+	FFTW_(plan) m_fw_plan3;
+	
 	FFTW_(plan) m_bk_plan1;
 	FFTW_(plan) m_bk_plan2;
+	FFTW_(plan) m_bk_plan3;
 #endif
 
-	class remap *m_fw_remap;  // forward: X[YZ] -> YZ[X]
-	class remap *m_bk_remap;  // backward: YZ[X] -> X[YZ]
+	class remap *m_fw_remap1;
+	class remap *m_fw_remap2;
+	
+	class remap *m_bk_remap1;
+	class remap *m_bk_remap2;
 	
     };
 }

@@ -59,8 +59,8 @@ namespace ORG_NCSA_IRIS {
 	void calculate_virial_coeff();
 	void calculate_denominator();
 
-	void commit_general(bool in_use_collective);
-	void commit_planes_yz(bool in_use_collective);
+	void setup_fft_pencils_z(bool in_use_collective);
+	void setup_fft_planes_yz(bool in_use_collective);
 	
 	inline iris_real denominator1(const iris_real &x)
 	{

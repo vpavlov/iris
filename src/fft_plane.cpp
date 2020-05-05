@@ -47,13 +47,13 @@ fft_plane::fft_plane(iris *obj, const char *in_name, bool in_use_collective)
 
 fft_plane::~fft_plane()
 {
-    delete m_remap1;
-    delete m_remap2;
+    delete m_fw_remap;
+    delete m_bk_remap;
 #ifdef FFT_FFTW
-    FFTW_(destroy_plan)(m_forward_plan1);
-    FFTW_(destroy_plan)(m_forward_plan2);
-    FFTW_(destroy_plan)(m_backward_plan1);
-    FFTW_(destroy_plan)(m_backward_plan2);
+    FFTW_(destroy_plan)(m_fw_plan1);
+    FFTW_(destroy_plan)(m_fw_plan2);
+    FFTW_(destroy_plan)(m_bk_plan1);
+    FFTW_(destroy_plan)(m_bk_plan2);
 #endif
 }
 
@@ -73,7 +73,7 @@ void fft_plane::setup_remaps()
 
     delete tmp;
     
-    m_remap1 = new remap(m_iris,
+    m_fw_remap = new remap(m_iris,
 			m_mesh->m_own_offset,
 			m_mesh->m_own_size,
 			m_out_offset,
@@ -107,7 +107,7 @@ void fft_plane::setup_remaps()
     tmp_size2[1] = m_mesh->m_own_size[m_out_mid];
     tmp_size2[2] = m_mesh->m_own_size[m_out_fast];
     
-    m_remap2 = new remap(m_iris,
+    m_bk_remap = new remap(m_iris,
 			 tmp_offset1,
 			 tmp_size1,
 			 tmp_offset2,
@@ -127,7 +127,7 @@ void fft_plane::setup_plans()
 
     int howmany = m_mesh->m_own_size[0];  // X times
 
-    m_forward_plan1 =
+    m_fw_plan1 =
 	FFTW_(plan_many_dft)(2,          // 2D FFT
 			     n,          // NxP arrays
 			     howmany,    // M arrays
@@ -142,7 +142,7 @@ void fft_plane::setup_plans()
 			     FFTW_BACKWARD,
 			     FFTW_ESTIMATE);
 
-    m_backward_plan2 =
+    m_bk_plan2 =
 	FFTW_(plan_many_dft)(2,          // 2D FFT
 			     n,          // NxP arrays
 			     howmany,    // M arrays
@@ -161,7 +161,7 @@ void fft_plane::setup_plans()
     int nx = m_out_size[0];
     int howmany2 = m_out_size[1] * m_out_size[2];  // Y*Z times
 
-    m_forward_plan2 =
+    m_fw_plan2 =
 	FFTW_(plan_many_dft)(1,          // 1D FFT
 			     &nx,        // array of M elements
 			     howmany2,   // NxP arrays
@@ -178,7 +178,7 @@ void fft_plane::setup_plans()
 
     
 
-    m_backward_plan1 =
+    m_bk_plan1 =
 	FFTW_(plan_many_dft)(1,          // 1D FFT
 			     &nx,        // array of M elements
 			     howmany2,   // NxP arrays
@@ -203,9 +203,9 @@ iris_real *fft_plane::compute_fw(iris_real *src, iris_real *dest)
 	dest[j++] = 0.0;
     }
 
-    FFTW_(execute_dft)(m_forward_plan1, (complex_t *)dest, (complex_t *)dest);
-    m_remap1->perform(dest, dest, m_scratch);
-    FFTW_(execute_dft)(m_forward_plan2, (complex_t *)dest, (complex_t *)dest);
+    FFTW_(execute_dft)(m_fw_plan1, (complex_t *)dest, (complex_t *)dest);
+    m_fw_remap->perform(dest, dest, m_scratch);
+    FFTW_(execute_dft)(m_fw_plan2, (complex_t *)dest, (complex_t *)dest);
 
     return dest;
     
@@ -213,9 +213,9 @@ iris_real *fft_plane::compute_fw(iris_real *src, iris_real *dest)
 
 void fft_plane::compute_bk(iris_real *src, iris_real *dest)
 {
-    FFTW_(execute_dft)(m_backward_plan1, (complex_t *)src, (complex_t *)src);
-    m_remap2->perform(src, src, m_scratch);
-    FFTW_(execute_dft)(m_backward_plan2, (complex_t *)src, (complex_t *)src);
+    FFTW_(execute_dft)(m_bk_plan1, (complex_t *)src, (complex_t *)src);
+    m_bk_remap->perform(src, src, m_scratch);
+    FFTW_(execute_dft)(m_bk_plan2, (complex_t *)src, (complex_t *)src);
 
     int j = 0;
     for(int i=0;i<m_count;i++) {

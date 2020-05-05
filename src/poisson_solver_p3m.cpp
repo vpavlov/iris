@@ -35,8 +35,8 @@
 #include "memory.h"
 #include "math_util.h"
 #include "logger.h"
-#include "fft3D.h"
 #include "fft_plane.h"
+#include "fft_pencil.h"
 #include "openmp.h"
 #include "timer.h"
 #include "proc_grid.h"
@@ -82,24 +82,24 @@ void poisson_solver_p3m::handle_box_resize()
     calculate_virial_coeff();
 }
 
-void poisson_solver_p3m::commit_general(bool in_use_collective)
+void poisson_solver_p3m::setup_fft_pencils_z(bool in_use_collective)
 {
     if(m_fft1 != NULL) { delete m_fft1; }
-    m_fft1 = new fft3d(m_iris, m_mesh->m_own_offset, m_mesh->m_own_size, "fft", in_use_collective);
+    m_fft1 = new fft_pencil(m_iris, "FFT-PENCILS-Z", in_use_collective);
 
-    m_fft_size[0] = m_mesh->m_own_size[0];
-    m_fft_size[1] = m_mesh->m_own_size[1];
-    m_fft_size[2] = m_mesh->m_own_size[2];
-    
-    m_fft_offset[0] = m_mesh->m_own_offset[0];
-    m_fft_offset[1] = m_mesh->m_own_offset[1];
-    m_fft_offset[2] = m_mesh->m_own_offset[2];
+    m_fft_size[0] = m_fft1->get_out_size()[0];
+    m_fft_size[1] = m_fft1->get_out_size()[1];
+    m_fft_size[2] = m_fft1->get_out_size()[2];
+
+    m_fft_offset[0] = m_fft1->get_out_offset()[0];
+    m_fft_offset[1] = m_fft1->get_out_offset()[1];
+    m_fft_offset[2] = m_fft1->get_out_offset()[2];
 }
 
-void poisson_solver_p3m::commit_planes_yz(bool in_use_collective)
+void poisson_solver_p3m::setup_fft_planes_yz(bool in_use_collective)
 {
     if(m_fft1 != NULL) { delete m_fft1; }
-    m_fft1 = new fft_plane(m_iris, "fft1", in_use_collective);
+    m_fft1 = new fft_plane(m_iris, "FFT-PLANES-YZ", in_use_collective);
 
     m_fft_size[0] = m_fft1->get_out_size()[0];
     m_fft_size[1] = m_fft1->get_out_size()[1];
@@ -123,12 +123,15 @@ void poisson_solver_p3m::commit()
     switch(m_iris->m_proc_grid->get_layout()) {
 	
     case IRIS_LAYOUT_PLANES_YZ:
-	//commit_general(use_collective);
-	commit_planes_yz(use_collective);
+	setup_fft_planes_yz(use_collective);
 	break;
 
+    case IRIS_LAYOUT_PENCILS_Z:
+	setup_fft_pencils_z(use_collective);
+	break;
+	
     default:
-	commit_general(use_collective);
+	throw std::domain_error("Unsupported layout!");
     }
 
     memory::destroy_1d(m_greenfn);
