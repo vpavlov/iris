@@ -30,12 +30,16 @@
 //==============================================================================
 #include "iris.h"
 #include "fft_base.h"
+#include "mesh.h"
+#include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
 
 fft_base::fft_base(iris *obj, const char *in_name, bool in_use_collective)
     : state_accessor(obj), m_name(in_name), m_use_collective(in_use_collective),
-      m_count(0)
+      m_out_size { 0, 0, 0 }, m_out_offset { 0, 0, 0 },
+      m_out_slow(-1), m_out_mid(-1), m_out_fast(-1),
+      m_scratch(NULL)
 {
 #if defined _OPENMP
 #if defined FFT_FFTW
@@ -43,9 +47,21 @@ fft_base::fft_base(iris *obj, const char *in_name, bool in_use_collective)
     FFTW_(plan_with_nthreads(m_iris->m_nthreads));
 #endif
 #endif
-    
+
+    m_count = m_mesh->m_own_size[0] * m_mesh->m_own_size[1] * m_mesh->m_own_size[2];
+    memory::create_1d(m_scratch, 2 * m_count);
 }
 
 fft_base::~fft_base()
 {
+    memory::destroy_1d(m_scratch);
+
+#ifdef FFT_FFTW
+#ifdef _OPENMP
+    FFTW_(cleanup_threads);
+#else
+    FFTW_(cleanup);
+#endif
+#endif
+    
 }

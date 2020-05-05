@@ -87,12 +87,11 @@ namespace ORG_NCSA_IRIS {
 
 	int m_fft_size[3];
 	int m_fft_offset[3];
-	class fft_base *m_fft1, *m_fft2;
+	class fft_base *m_fft1;
       
 	// FFT workspaces
 	iris_real *m_work1;
 	iris_real *m_work2;
-	iris_real *m_work3;  // temporary, to be removed
     };
 }
 

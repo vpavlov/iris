@@ -39,7 +39,6 @@ namespace ORG_NCSA_IRIS {
 
     public:
 	fft3d(class iris *obj,
-	      int *in_in_offset, int *in_in_size,
 	      int *in_out_offset, int *in_out_size,
 	      const char *in_name,
 	      bool in_use_collective);
@@ -58,8 +57,6 @@ namespace ORG_NCSA_IRIS {
 
 
     private:
-	int m_in_size[3];
-	int m_in_offset[3];
 	int m_out_size[3];
 	int m_out_offset[3];
 

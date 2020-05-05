@@ -36,6 +36,7 @@
 #include "math_util.h"
 #include "logger.h"
 #include "fft3D.h"
+#include "fft_plane.h"
 #include "openmp.h"
 #include "timer.h"
 #include "proc_grid.h"
@@ -53,8 +54,8 @@ poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
     : poisson_solver(obj), m_greenfn(NULL), 
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
-      m_fft1(NULL), m_fft2(NULL),
-      m_work1(NULL), m_work2(NULL), m_work3(NULL),
+      m_fft1(NULL),
+      m_work1(NULL), m_work2(NULL),
       m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
@@ -71,9 +72,7 @@ poisson_solver_p3m::~poisson_solver_p3m()
     memory::destroy_2d(m_vc);
     memory::destroy_1d(m_work1);
     memory::destroy_1d(m_work2);
-    memory::destroy_1d(m_work3);
     if(m_fft1) { delete m_fft1; }
-    if(m_fft2) { delete m_fft2; }
 }
 
 void poisson_solver_p3m::handle_box_resize()
@@ -85,23 +84,52 @@ void poisson_solver_p3m::handle_box_resize()
 
 void poisson_solver_p3m::commit_general(bool in_use_collective)
 {
-    grid *m_fft_grid = new grid(m_iris, "P3M FFT GRID");
-    if (m_mesh->m_size[0] > m_local_comm->m_size) {
-	m_fft_grid->set_pref(0, 1, 1);  // e.g. grid will be 64x1x1, mesh will be 2x128x128
-    }else if (m_mesh->m_size[0]*m_mesh->m_size[1] > m_local_comm->m_size) {
-	m_fft_grid->set_pref(0, 0, 1);  // e.g. grid will be 64x2x1, mesh will be 2x64x128
+    if(m_fft1 != NULL) { delete m_fft1; }
+    m_fft1 = new fft3d(m_iris, m_mesh->m_own_offset, m_mesh->m_own_size, "fft", in_use_collective);
+
+    m_fft_size[0] = m_mesh->m_own_size[0];
+    m_fft_size[1] = m_mesh->m_own_size[1];
+    m_fft_size[2] = m_mesh->m_own_size[2];
+    
+    m_fft_offset[0] = m_mesh->m_own_offset[0];
+    m_fft_offset[1] = m_mesh->m_own_offset[1];
+    m_fft_offset[2] = m_mesh->m_own_offset[2];
+}
+
+void poisson_solver_p3m::commit_planes_yz(bool in_use_collective)
+{
+    if(m_fft1 != NULL) { delete m_fft1; }
+    m_fft1 = new fft_plane(m_iris, "fft1", in_use_collective);
+
+    m_fft_size[0] = m_fft1->get_out_size()[0];
+    m_fft_size[1] = m_fft1->get_out_size()[1];
+    m_fft_size[2] = m_fft1->get_out_size()[2];
+
+    m_fft_offset[0] = m_fft1->get_out_offset()[0];
+    m_fft_offset[1] = m_fft1->get_out_offset()[1];
+    m_fft_offset[2] = m_fft1->get_out_offset()[2];
+}
+
+void poisson_solver_p3m::commit()
+{
+    if(!m_dirty) {
+	return;
     }
 
-    m_fft_grid->commit();
+    solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
+    bool use_collective = (p.i == 1)?true:false;
+        
+    m_iris->m_logger->info("DD Layout: %d", m_iris->m_proc_grid->get_layout());
+    switch(m_iris->m_proc_grid->get_layout()) {
+	
+    case IRIS_LAYOUT_PLANES_YZ:
+	//commit_general(use_collective);
+	commit_planes_yz(use_collective);
+	break;
 
-    m_fft_size[0] = m_mesh->m_size[0] / m_fft_grid->m_size[0];
-    m_fft_size[1] = m_mesh->m_size[1] / m_fft_grid->m_size[1];
-    m_fft_size[2] = m_mesh->m_size[2] / m_fft_grid->m_size[2];
-
-    int *c = m_fft_grid->m_coords;
-    m_fft_offset[0] = c[0] * m_fft_size[0];
-    m_fft_offset[1] = c[1] * m_fft_size[1];
-    m_fft_offset[2] = c[2] * m_fft_size[2];
+    default:
+	commit_general(use_collective);
+    }
 
     memory::destroy_1d(m_greenfn);
     memory::create_1d(m_greenfn, m_fft_size[0] * m_fft_size[1] * m_fft_size[2]);
@@ -127,54 +155,19 @@ void poisson_solver_p3m::commit_general(bool in_use_collective)
     calculate_green_function();
     calculate_k();
     calculate_virial_coeff();
-
-    if(m_fft1 != NULL) { delete m_fft1; }
-    if(m_fft2 != NULL) { delete m_fft2; }
     
-    m_fft1 = new fft3d(m_iris,
-		       m_fft_offset, m_fft_size,
-		       m_fft_offset, m_fft_size, "fft1", in_use_collective);
-    m_fft2 = new fft3d(m_iris,
-		       m_fft_offset, m_fft_size,
-		       m_mesh->m_own_offset, m_mesh->m_own_size,
-		       "fft2", in_use_collective);
-    
-    int n = 2 * m_fft1->get_count();
+    // regardless of the remaps happening, the number of items to FFT
+    // remains unchanged -- it is the size of the local mesh of complex iris_reals
+    int n = 2 *  // comlex
+	m_mesh->m_own_size[0] *
+	m_mesh->m_own_size[1] *
+	m_mesh->m_own_size[2];
     
     memory::destroy_1d(m_work1);
     memory::create_1d(m_work1, n);
     
     memory::destroy_1d(m_work2);
     memory::create_1d(m_work2, n);
-
-    memory::destroy_1d(m_work3);
-    memory::create_1d(m_work3, n);
-}
-
-void poisson_solver_p3m::commit_planes_yz(bool in_use_collective)
-{
-    commit_general(in_use_collective);
-}
-
-void poisson_solver_p3m::commit()
-{
-    if(!m_dirty) {
-	return;
-    }
-    
-    solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
-    bool use_collective = (p.i == 1)?true:false;
-
-    m_iris->m_logger->info("DD Layout: %d", m_iris->m_proc_grid->get_layout());
-    switch(m_iris->m_proc_grid->get_layout()) {
-	
-    case IRIS_LAYOUT_PLANES_YZ:
-	commit_planes_yz(use_collective);
-	break;
-
-    default:
-	commit_general(use_collective);
-    }
     
     m_dirty = false;
 }
@@ -680,9 +673,7 @@ void poisson_solver_p3m::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
 
-    memcpy(m_work2, &(m_mesh->m_rho[0][0][0]), m_fft_size[0] * m_fft_size[1] * m_fft_size[2] * sizeof(iris_real));
-    
-    m_fft1->compute_fw(m_work2, m_work1);
+    m_fft1->compute_fw(&(m_mesh->m_rho[0][0][0]), m_work1);
 
     if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {
 	kspace_eng(m_work1);
@@ -691,15 +682,11 @@ void poisson_solver_p3m::solve()
     kspace_phi(m_work1);
 
     kspace_Ex(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
+    m_fft1->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
     
     kspace_Ey(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
+    m_fft1->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
     
     kspace_Ez(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
-
-    //////////////// we do not need this ////////////////////////
-    // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
-    /////////////////////////////////////////////////////////////
+    m_fft1->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
 }

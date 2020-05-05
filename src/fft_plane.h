@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2020, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -28,61 +28,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FFT_BASE_H__
-#define __IRIS_FFT_BASE_H__
+#ifndef __IRIS_FFT_PLANE_H__
+#define __IRIS_FFT_PLANE_H__
 
-#include "state_accessor.h"
-#include "timer.h"
-
-#ifdef FFT_FFTW
-
-#include "fftw3.h"
-
-#if IRIS_DOUBLE == 0
-
-typedef fftwf_complex complex_t;
-#define FFTW_(func)  fftwf_##func
-
-#elif IRIS_DOUBLE == 1
-
-typedef fftw_complex complex_t;
-#define FFTW_(func)  fftw_##func
-
-#else 
-
-#error "Unknown IRIS_DOUBLE setting!"
-
-#endif  // IRIS_DOUBLE
-
-#endif  // FFT_FFTW
+#include "fft_base.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class fft_base : protected state_accessor {
-
-    public:
-	fft_base(class iris *obj, const char *in_name, bool in_use_collective);
-	~fft_base();
-
-	virtual iris_real *compute_fw(iris_real *src, iris_real *dest) = 0;
-	virtual void compute_bk(iris_real *src, iris_real *dest) = 0;
-
-	int get_count() { return m_count; };
-	int *get_out_size() { return m_out_size; };
-	int *get_out_offset() { return m_out_offset; };
+    class fft_plane : public fft_base {
 	
-    protected:
-	const char *m_name;
-	bool        m_use_collective;
-	long        m_count;          // total number of items to do FFT on (own mesh)
-	int         m_out_size[3];    // grid state after forward FFT
-	int         m_out_offset[3];  // grid state after forward FFT
-	int         m_out_slow;       // which (0=X, 1=Y, 2=Z) is the slow moving index (after FW FFT)
-	int         m_out_mid;        // mid moving index
-	int         m_out_fast;       // fast moving index
-	iris_real * m_scratch;        // scratch space for remapping
+    public:
+	fft_plane(class iris *obj, const char *in_name, bool in_use_collective);
+	virtual ~fft_plane();
+	
+	virtual iris_real *compute_fw(iris_real *src, iris_real *dest);
+	virtual void compute_bk(iris_real *src, iris_real *dest);
+
+    private:
+
+	void setup_remaps();
+	void setup_plans();
+	
+#ifdef FFT_FFTW
+	FFTW_(plan) m_forward_plan1;  // 2D FFT plan for YZ transform
+	FFTW_(plan) m_forward_plan2;  // 1D FFT plan for X transform
+	FFTW_(plan) m_backward_plan1;  // 2D FFT plan for YZ transform
+	FFTW_(plan) m_backward_plan2;  // 1D FFT plan for X transform
+#endif
+	class remap *m_remap1;
+	class remap *m_remap2;
+	
     };
-    
 }
 
 #endif
