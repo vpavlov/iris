@@ -79,23 +79,43 @@ void fft_plane::setup_remaps()
 			m_out_offset,
 			m_out_size,
 			2,
-			0, "remap-fw",
+			2, "remap-fw",
 			m_use_collective);
 
-    
-    m_remap2 = new remap(m_iris,
-			 m_out_offset,
-			 m_out_size,
-			 m_mesh->m_own_offset,
-			 m_mesh->m_own_size,
-			 2,
-			 0, "remap-bk",
-			 m_use_collective);
 
     // After forward FFT, the layout is YZX
-    m_out_slow = 0;
-    m_out_mid = 1;
-    m_out_fast = 2;    
+    m_out_slow = 1;
+    m_out_mid = 2;
+    m_out_fast = 0;
+
+    int tmp_offset1[3];
+    int tmp_size1[3];
+    int tmp_offset2[3];
+    int tmp_size2[3];
+
+    tmp_offset1[0] = m_out_offset[m_out_slow];
+    tmp_offset1[1] = m_out_offset[m_out_mid];
+    tmp_offset1[2] = m_out_offset[m_out_fast];
+    tmp_size1[0] = m_out_size[m_out_slow];
+    tmp_size1[1] = m_out_size[m_out_mid];
+    tmp_size1[2] = m_out_size[m_out_fast];
+    
+    tmp_offset2[0] = m_mesh->m_own_offset[m_out_slow];
+    tmp_offset2[1] = m_mesh->m_own_offset[m_out_mid];
+    tmp_offset2[2] = m_mesh->m_own_offset[m_out_fast];
+    tmp_size2[0] = m_mesh->m_own_size[m_out_slow];
+    tmp_size2[1] = m_mesh->m_own_size[m_out_mid];
+    tmp_size2[2] = m_mesh->m_own_size[m_out_fast];
+    
+    m_remap2 = new remap(m_iris,
+			 tmp_offset1,
+			 tmp_size1,
+			 tmp_offset2,
+			 tmp_size2,
+			 2,
+			 1, "remap-bk",
+			 m_use_collective);
+
 }
 
 void fft_plane::setup_plans()
@@ -147,12 +167,12 @@ void fft_plane::setup_plans()
 			     howmany2,   // NxP arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
-			     howmany2,          // contiguous input
-			     1,         // distance between arrays
+			     1,           // contiguous input
+			     nx,         // distance between arrays
 			     NULL,       // output
 			     NULL,       // same phisical as logical dimension
-			     howmany2,          // contiguous output
-			     1,         // distance between arrays
+			     1,          // contiguous output
+			     nx,         // distance between arrays
 			     FFTW_BACKWARD,
 			     FFTW_ESTIMATE);
 
@@ -164,12 +184,12 @@ void fft_plane::setup_plans()
 			     howmany2,   // NxP arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
-			     howmany2,          // contiguous input
-			     1,        // distance between arrays
+			     1,          // contiguous input
+			     nx,        // distance between arrays
 			     NULL,       // output
 			     NULL,       // same phisical as logical dimension
-			     howmany2,          // contiguous output
-			     1,         // distance between arrays
+			     1,          // contiguous output
+			     nx,         // distance between arrays
 			     FFTW_FORWARD,
 			     FFTW_ESTIMATE);
     
@@ -182,7 +202,7 @@ iris_real *fft_plane::compute_fw(iris_real *src, iris_real *dest)
 	dest[j++] = src[i];
 	dest[j++] = 0.0;
     }
-    
+
     FFTW_(execute_dft)(m_forward_plan1, (complex_t *)dest, (complex_t *)dest);
     m_remap1->perform(dest, dest, m_scratch);
     FFTW_(execute_dft)(m_forward_plan2, (complex_t *)dest, (complex_t *)dest);

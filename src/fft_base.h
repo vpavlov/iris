@@ -70,6 +70,9 @@ namespace ORG_NCSA_IRIS {
 	int get_count() { return m_count; };
 	int *get_out_size() { return m_out_size; };
 	int *get_out_offset() { return m_out_offset; };
+	int get_slow() { return m_out_slow; };
+	int get_mid() { return m_out_mid; };
+	int get_fast() { return m_out_fast; };
 	
     protected:
 	const char *m_name;

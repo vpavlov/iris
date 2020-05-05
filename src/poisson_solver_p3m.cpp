@@ -182,14 +182,9 @@ void poisson_solver_p3m::kspace_phi(iris_real *io_rho_phi)
     
     int idx = 0;
     int n = 0;
-    for(int i=0;i<nx;i++) {
-	for(int j=0;j<ny;j++) {
-	    for(int k=0;k<nz;k++) {
-		io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
-		io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
-		n++;
-	    }
-	}
+    for(int n=0;n<nx*ny*nz;n++) {
+	io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
+	io_rho_phi[idx++] *= scaleinv * m_greenfn[n];
     }
 }
 
@@ -205,34 +200,25 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
     if(m_iris->m_compute_global_virial) {
 	int idx = 0;
 	int n = 0;
-	for(int i=0;i<nx;i++) {
-	    for(int j=0;j<ny;j++) {
-		for(int k=0;k<nz;k++) {
-		    iris_real ener = s2 * m_greenfn[n++] *
-			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
-			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
-		    for(int m = 0;m<6;m++) {
-			m_iris->m_virial[m] += ener * m_vc[idx/2][m];
-		    }
-		    if(m_iris->m_compute_global_energy) {
-			m_iris->m_Ek += ener;
-		    }
-		    idx += 2;
-		}
+	for(int n=0;n<nx*ny*nz;n++) {
+	    iris_real ener = s2 * m_greenfn[n] *
+		(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
+		 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
+	    for(int m = 0;m<6;m++) {
+		m_iris->m_virial[m] += ener * m_vc[idx/2][m];
 	    }
+	    if(m_iris->m_compute_global_energy) {
+		m_iris->m_Ek += ener;
+	    }
+	    idx += 2;
 	}
     }else {
 	int idx = 0;
-	int n = 0;
-	for(int i=0;i<nx;i++) {
-	    for(int j=0;j<ny;j++) {
-		for(int k=0;k<nz;k++) {
-		    m_iris->m_Ek += s2 * m_greenfn[n++] *
-			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
-			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
-		    idx += 2;
-		}
-	    }
+	for(int n=0;n<nx*ny*nz;n++) {
+	    m_iris->m_Ek += s2 * m_greenfn[n] *
+		(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
+		 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
+	    idx += 2;
 	}
     }
 }
@@ -244,12 +230,12 @@ void poisson_solver_p3m::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
     int nz = m_fft_size[2];
 
     int idx = 0;
-    for(int i=0;i<nx;i++) {
-	for(int j=0;j<ny;j++) {
-	    for(int k=0;k<nz;k++) {
+    for(int j=0;j<ny;j++) {
+	for(int k=0;k<nz;k++) {
+	    for(int i=0;i<nx;i++) {
 		out_Ex[idx]   =  in_phi[idx+1]*m_kx[i];
 		out_Ex[idx+1] = -in_phi[idx  ]*m_kx[i];
-		idx+=2;
+		idx += 2;
 	    }
 	}
     }
@@ -262,12 +248,12 @@ void poisson_solver_p3m::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
     int nz = m_fft_size[2];
 
     int idx = 0;
-    for(int i=0;i<nx;i++) {
-	for(int j=0;j<ny;j++) {
-	    for(int k=0;k<nz;k++) {
+    for(int j=0;j<ny;j++) {
+	for(int k=0;k<nz;k++) {
+	    for(int i=0;i<nx;i++) {
 		out_Ey[idx]   =  in_phi[idx+1]*m_ky[j];
 		out_Ey[idx+1] = -in_phi[idx  ]*m_ky[j];
-		idx+=2;
+		idx += 2;
 	    }
 	}
     }
@@ -280,12 +266,12 @@ void poisson_solver_p3m::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
     int nz = m_fft_size[2];
 
     int idx = 0;
-    for(int i=0;i<nx;i++) {
-	for(int j=0;j<ny;j++) {
-	    for(int k=0;k<nz;k++) {
+    for(int j=0;j<ny;j++) {
+	for(int k=0;k<nz;k++) {
+	    for(int i=0;i<nx;i++) {
 		out_Ez[idx]   =  in_phi[idx+1]*m_kz[k];
 		out_Ez[idx+1] = -in_phi[idx  ]*m_kz[k];
-		idx+=2;
+		idx += 2;
 	    }
 	}
     }
@@ -478,9 +464,9 @@ void poisson_solver_p3m::calculate_gf_fact()
 		    if (ksq != 0.0) {
 			iris_real part1 = _4PI / ksq;
 			iris_real part2 = greenfn_x[x - sx] * greenfn_y[y - sy] * greenfn_z[z - sz];
-			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = part1 * part2;
+			m_greenfn[ROW_MAJOR_OFFSET(y-sy, z-sz, x-sx, nz, nx)] = part1 * part2;
 		    }else {
-			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = 0.0;
+			m_greenfn[ROW_MAJOR_OFFSET(y-sy, z-sz, x-sx, nz, nx)] = 0.0;
 		    }
 		}
 	    }
@@ -573,9 +559,9 @@ void poisson_solver_p3m::calculate_gf_full()
 			    }
 			}
 			iris_real part3 = m_denominator_x[x - sx]*m_denominator_y[y - sy]*m_denominator_z[z - sz];
-			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = part1 * part2 / part3;
+			m_greenfn[ROW_MAJOR_OFFSET(y-sy, z-sz, x-sx, nz, nx)] = part1 * part2 / part3;
 		    }else {
-			m_greenfn[ROW_MAJOR_OFFSET(x-sx, y-sy, z-sz, ny, nz)] = 0.0;
+			m_greenfn[ROW_MAJOR_OFFSET(y-sy, z-sz, x-sx, nz, nx)] = 0.0;
 		    }
 		}
 	    }
@@ -644,9 +630,9 @@ void poisson_solver_p3m::calculate_virial_coeff()
     int ez = sz + nz;
 
     int n = 0;
-    for(int x = sx; x < ex; x++) {
-	for(int y = sy; y < ey; y++) {
-	    for(int z = sz; z < ez; z++) {
+    for(int y = sy; y < ey; y++) {
+	for(int z = sz; z < ez; z++) {
+	    for(int x = sx; x < ex; x++) {
 		iris_real sq =
 		    m_kx[x-sx]*m_kx[x-sx] +
 		    m_ky[y-sy]*m_ky[y-sy] +
