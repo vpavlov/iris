@@ -107,4 +107,8 @@ void proc_grid::figure_out_layout()
     }else {
 	throw std::domain_error("Impossible to hold a whole dimension on a processor, so cannot do even 1D FFT!");
     }
+
+    // m_layout = IRIS_LAYOUT_PENCILS_Z;
+    // set_pref(0, 0, 1);
+    
 }

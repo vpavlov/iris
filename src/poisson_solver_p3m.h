@@ -68,11 +68,11 @@ namespace ORG_NCSA_IRIS {
 	    sx = 0.0;
 
 	    for(int i = m_chass->m_order - 1; i >= 0; i--) {
-			iris_real c = m_chass->m_gfd_coeff[i];
-			sx = c + sx * x;
-		}
+		iris_real c = m_chass->m_gfd_coeff[i];
+		sx = c + sx * x;
+	    }
 	    
-		return sx*sx;
+	    return sx*sx;
 	}
 
     private:

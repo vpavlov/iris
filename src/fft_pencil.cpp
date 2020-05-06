@@ -41,6 +41,11 @@ using namespace ORG_NCSA_IRIS;
 fft_pencil::fft_pencil(iris *obj, const char *in_name, bool in_use_collective)
     : fft_base(obj, in_name, in_use_collective)
 {
+    // After forward FFT, the layout is YZX
+    m_out_slow = 1;
+    m_out_mid = 2;
+    m_out_fast = 0;
+    
     setup_remaps();
     setup_plans();
 }
@@ -144,26 +149,21 @@ void fft_pencil::setup_remaps()
     //////////////////////////////////////////
     // First backward remap: YZ[X] -> ZX[Y] //
     //////////////////////////////////////////
-    
-    
-    // After forward FFT, the layout is YZX
-    m_out_slow = 1;
-    m_out_mid = 2;
-    m_out_fast = 0;
 
-    tmp_offset1[0] = m_out_offset[m_out_slow];
-    tmp_offset1[1] = m_out_offset[m_out_mid];
-    tmp_offset1[2] = m_out_offset[m_out_fast];
-    tmp_size1[0] = m_out_size[m_out_slow];
-    tmp_size1[1] = m_out_size[m_out_mid];
-    tmp_size1[2] = m_out_size[m_out_fast];
     
-    tmp_offset2[0] = offset1[m_out_slow];
-    tmp_offset2[1] = offset1[m_out_mid];
-    tmp_offset2[2] = offset1[m_out_fast];
-    tmp_size2[0] = size1[m_out_slow];
-    tmp_size2[1] = size1[m_out_mid];
-    tmp_size2[2] = size1[m_out_fast];
+    tmp_offset1[0] = m_out_offset[1];
+    tmp_offset1[1] = m_out_offset[2];
+    tmp_offset1[2] = m_out_offset[0];
+    tmp_size1[0] = m_out_size[1];
+    tmp_size1[1] = m_out_size[2];
+    tmp_size1[2] = m_out_size[0];
+    
+    tmp_offset2[0] = offset1[1];
+    tmp_offset2[1] = offset1[2];
+    tmp_offset2[2] = offset1[0];
+    tmp_size2[0] = size1[1];
+    tmp_size2[1] = size1[2];
+    tmp_size2[2] = size1[0];
     
     m_bk_remap1 = new remap(m_iris,
 			    tmp_offset1,
@@ -202,11 +202,11 @@ void fft_pencil::setup_remaps()
 			    2,
 			    2, "remap-bk2",
 			    m_use_collective);
-    
 }
 
 void fft_pencil::setup_plans()
 {
+#ifdef FFT_FFTW
     m_fw_plan1 =
 	FFTW_(plan_many_dft)(1,          // 1D FFT
 			     &(m_mesh->m_own_size[2]),          // size = Z
@@ -297,6 +297,7 @@ void fft_pencil::setup_plans()
 			     m_mesh->m_own_size[0],  // distance between arrays
 			     FFTW_FORWARD,
 			     FFTW_ESTIMATE);
+#endif
 }
 
 iris_real *fft_pencil::compute_fw(iris_real *src, iris_real *dest)
@@ -307,24 +308,29 @@ iris_real *fft_pencil::compute_fw(iris_real *src, iris_real *dest)
 	dest[j++] = 0.0;
     }
 
+#ifdef FFT_FFTW
     FFTW_(execute_dft)(m_fw_plan1, (complex_t *)dest, (complex_t *)dest);
     m_fw_remap1->perform(dest, dest, m_scratch);
     FFTW_(execute_dft)(m_fw_plan2, (complex_t *)dest, (complex_t *)dest);
     m_fw_remap2->perform(dest, dest, m_scratch);
     FFTW_(execute_dft)(m_fw_plan3, (complex_t *)dest, (complex_t *)dest);
-
+#endif
+    
     return dest;
     
 }
 
 void fft_pencil::compute_bk(iris_real *src, iris_real *dest)
 {
+
+#ifdef FFT_FFTW
     FFTW_(execute_dft)(m_bk_plan1, (complex_t *)src, (complex_t *)src);
     m_bk_remap1->perform(src, src, m_scratch);
     FFTW_(execute_dft)(m_bk_plan2, (complex_t *)src, (complex_t *)src);
     m_bk_remap2->perform(src, src, m_scratch);
     FFTW_(execute_dft)(m_bk_plan3, (complex_t *)src, (complex_t *)src);
-
+#endif
+    
     int j = 0;
     for(int i=0;i<m_count;i++) {
 	dest[i] = src[j];

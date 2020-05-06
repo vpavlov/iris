@@ -41,6 +41,11 @@ using namespace ORG_NCSA_IRIS;
 fft_plane::fft_plane(iris *obj, const char *in_name, bool in_use_collective)
     : fft_base(obj, in_name, in_use_collective)
 {
+    // after forward FFT, layout is YZX
+    m_out_slow = 1;
+    m_out_mid = 2;
+    m_out_fast = 0;
+    
     setup_remaps();
     setup_plans();
 }
@@ -83,29 +88,24 @@ void fft_plane::setup_remaps()
 			m_use_collective);
 
 
-    // After forward FFT, the layout is YZX
-    m_out_slow = 1;
-    m_out_mid = 2;
-    m_out_fast = 0;
-
     int tmp_offset1[3];
     int tmp_size1[3];
     int tmp_offset2[3];
     int tmp_size2[3];
 
-    tmp_offset1[0] = m_out_offset[m_out_slow];
-    tmp_offset1[1] = m_out_offset[m_out_mid];
-    tmp_offset1[2] = m_out_offset[m_out_fast];
-    tmp_size1[0] = m_out_size[m_out_slow];
-    tmp_size1[1] = m_out_size[m_out_mid];
-    tmp_size1[2] = m_out_size[m_out_fast];
+    tmp_offset1[0] = m_out_offset[1];
+    tmp_offset1[1] = m_out_offset[2];
+    tmp_offset1[2] = m_out_offset[0];
+    tmp_size1[0] = m_out_size[1];
+    tmp_size1[1] = m_out_size[2];
+    tmp_size1[2] = m_out_size[0];
     
-    tmp_offset2[0] = m_mesh->m_own_offset[m_out_slow];
-    tmp_offset2[1] = m_mesh->m_own_offset[m_out_mid];
-    tmp_offset2[2] = m_mesh->m_own_offset[m_out_fast];
-    tmp_size2[0] = m_mesh->m_own_size[m_out_slow];
-    tmp_size2[1] = m_mesh->m_own_size[m_out_mid];
-    tmp_size2[2] = m_mesh->m_own_size[m_out_fast];
+    tmp_offset2[0] = m_mesh->m_own_offset[1];
+    tmp_offset2[1] = m_mesh->m_own_offset[2];
+    tmp_offset2[2] = m_mesh->m_own_offset[0];
+    tmp_size2[0] = m_mesh->m_own_size[1];
+    tmp_size2[1] = m_mesh->m_own_size[2];
+    tmp_size2[2] = m_mesh->m_own_size[0];
     
     m_bk_remap = new remap(m_iris,
 			 tmp_offset1,
@@ -115,22 +115,17 @@ void fft_plane::setup_remaps()
 			 2,
 			 1, "remap-bk",
 			 m_use_collective);
-
 }
 
 void fft_plane::setup_plans()
 {
-    int n[2];
-    
-    n[0] = m_mesh->m_own_size[1];  // YxZ arrays
-    n[1] = m_mesh->m_own_size[2];
+    int n[] = { m_mesh->m_own_size[1], m_mesh->m_own_size[2] };
 
-    int howmany = m_mesh->m_own_size[0];  // X times
-
+#ifdef FFT_FFTW
     m_fw_plan1 =
 	FFTW_(plan_many_dft)(2,          // 2D FFT
 			     n,          // NxP arrays
-			     howmany,    // M arrays
+			     m_mesh->m_own_size[0],    // M arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
 			     1,          // contiguous input
@@ -144,8 +139,8 @@ void fft_plane::setup_plans()
 
     m_bk_plan2 =
 	FFTW_(plan_many_dft)(2,          // 2D FFT
-			     n,          // NxP arrays
-			     howmany,    // M arrays
+			     n,          // NxP size
+			     m_mesh->m_own_size[0],  // M arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
 			     1,          // contiguous input
@@ -156,43 +151,37 @@ void fft_plane::setup_plans()
 			     n[0]*n[1],  // distance between arrays
 			     FFTW_FORWARD,
 			     FFTW_ESTIMATE);
-
-
-    int nx = m_out_size[0];
-    int howmany2 = m_out_size[1] * m_out_size[2];  // Y*Z times
 
     m_fw_plan2 =
 	FFTW_(plan_many_dft)(1,          // 1D FFT
-			     &nx,        // array of M elements
-			     howmany2,   // NxP arrays
+			     &(m_out_size[0]),        // array of M elements
+			     m_out_size[1] * m_out_size[2],   // NxP arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
 			     1,           // contiguous input
-			     nx,         // distance between arrays
+			     m_out_size[0],         // distance between arrays
 			     NULL,       // output
 			     NULL,       // same phisical as logical dimension
 			     1,          // contiguous output
-			     nx,         // distance between arrays
+			     m_out_size[0],         // distance between arrays
 			     FFTW_BACKWARD,
 			     FFTW_ESTIMATE);
 
-    
-
     m_bk_plan1 =
 	FFTW_(plan_many_dft)(1,          // 1D FFT
-			     &nx,        // array of M elements
-			     howmany2,   // NxP arrays
+			     &(m_out_size[0]),        // array of M elements
+			     m_out_size[1] * m_out_size[2],   // NxP arrays
 			     NULL,       // input
 			     NULL,       // same phisical as logical dimension
 			     1,          // contiguous input
-			     nx,        // distance between arrays
+			     m_out_size[0],         // distance between arrays
 			     NULL,       // output
 			     NULL,       // same phisical as logical dimension
 			     1,          // contiguous output
-			     nx,         // distance between arrays
+			     m_out_size[0],         // distance between arrays
 			     FFTW_FORWARD,
 			     FFTW_ESTIMATE);
-    
+#endif    
 }
 
 iris_real *fft_plane::compute_fw(iris_real *src, iris_real *dest)
@@ -203,20 +192,25 @@ iris_real *fft_plane::compute_fw(iris_real *src, iris_real *dest)
 	dest[j++] = 0.0;
     }
 
+#ifdef FFT_FFTW
     FFTW_(execute_dft)(m_fw_plan1, (complex_t *)dest, (complex_t *)dest);
     m_fw_remap->perform(dest, dest, m_scratch);
     FFTW_(execute_dft)(m_fw_plan2, (complex_t *)dest, (complex_t *)dest);
-
+#endif
+    
     return dest;
     
 }
 
 void fft_plane::compute_bk(iris_real *src, iris_real *dest)
 {
+    
+#ifdef FFT_FFTW
     FFTW_(execute_dft)(m_bk_plan1, (complex_t *)src, (complex_t *)src);
     m_bk_remap->perform(src, src, m_scratch);
     FFTW_(execute_dft)(m_bk_plan2, (complex_t *)src, (complex_t *)src);
-
+#endif
+    
     int j = 0;
     for(int i=0;i<m_count;i++) {
 	dest[i] = src[j];

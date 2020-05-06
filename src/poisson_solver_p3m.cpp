@@ -208,7 +208,7 @@ void poisson_solver_p3m::kspace_eng(iris_real *in_rho_phi)
 		(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
 		 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
 	    for(int m = 0;m<6;m++) {
-		m_iris->m_virial[m] += ener * m_vc[idx/2][m];
+		m_iris->m_virial[m] += ener * m_vc[n][m];
 	    }
 	    if(m_iris->m_compute_global_energy) {
 		m_iris->m_Ek += ener;
@@ -457,12 +457,12 @@ void poisson_solver_p3m::calculate_gf_fact()
     {
 	int from, to;
 	setup_work_sharing(nx, m_iris->m_nthreads, &from, &to);
-	for (int x = sx + from; x < sx + to; x++) {
-	    int xj = x - xM * (2 * x / xM);
-	    for (int y = sy; y < ey; y++) {
-		int yj = y - yM * (2 * y / yM);
-		for (int z = sz; z < ez; z++) {
-		    int zj = z - zM * (2 * z / zM); // convert from 0..P to 0..P/2, -P/2...-1
+	for (int y = sy; y < ey; y++) {
+	    int yj = y - yM * (2 * y / yM);
+	    for (int z = sz; z < ez; z++) {
+		int zj = z - zM * (2 * z / zM); // convert from 0..P to 0..P/2, -P/2...-1
+		for (int x = sx + from; x < sx + to; x++) {
+		    int xj = x - xM * (2 * x / xM);
 		    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
 		    if (ksq != 0.0) {
 			iris_real part1 = _4PI / ksq;
@@ -475,7 +475,7 @@ void poisson_solver_p3m::calculate_gf_fact()
 	    }
 	}
     }
-	
+
     memory::destroy_1d(greenfn_x);
     memory::destroy_1d(greenfn_y);
     memory::destroy_1d(greenfn_z);
@@ -526,31 +526,29 @@ void poisson_solver_p3m::calculate_gf_full()
 	// h = L/M
 	// kh/2 = 2pij/L * L/M = 2pi*j/M
 	int n = 0;
-	for (int x = sx + from; x < sx + to; x++) {
-	    int xj = x - xM * (2 * x / xM);
-	    for (int y = sy; y < ey; y++) {
-		int yj = y - yM * (2 * y / yM);
-		for (int z = sz; z < ez; z++) {
-		    int zj = z - zM * (2 * z / zM);               // convert from 0..P to 0..P/2, -P/2...-1
+	for (int y = sy; y < ey; y++) {
+	    int yj = y - yM * (2 * y / yM);
+	    for (int z = sz; z < ez; z++) {
+		int zj = z - zM * (2 * z / zM);               // convert from 0..P to 0..P/2, -P/2...-1
+		for (int x = sx + from; x < sx + to; x++) {
+		    int xj = x - xM * (2 * x / xM);
 		    iris_real ksq = square(kxm * xj) + square(kym * yj) + square(kzm * zj);
 		    if (ksq != 0.0) {
 			iris_real part1 = _4PI / ksq;
 			iris_real part2 = 0.0;
-			for (int bx = -nbx; bx <= nbx; bx++) {
-			    iris_real xkplusb = kxm * (xj + xM * bx);
-			    iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
-			    iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
+			for (int by = -nby; by <= nby; by++) {
+			    iris_real ykplusb = kym * (yj + yM * by);
+			    iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
+			    iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
+			    for (int bz = -nbz; bz <= nbz; bz++) {
+				iris_real zkplusb = kzm * (zj + zM * bz);
+				iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
+				iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
+				for (int bx = -nbx; bx <= nbx; bx++) {
+				    iris_real xkplusb = kxm * (xj + xM * bx);
+				    iris_real xrho = exp(-0.25 * square(xkplusb / alpha));
+				    iris_real xwnsq = pow_sinx_x(xkplusb * xL / (2 * xM), _2n);
 
-			    for (int by = -nby; by <= nby; by++) {
-				iris_real ykplusb = kym * (yj + yM * by);
-				iris_real yrho = exp(-0.25 * square(ykplusb / alpha));
-				iris_real ywnsq = pow_sinx_x(ykplusb * yL / (2 * yM), _2n);
-							    
-				for (int bz = -nbz; bz <= nbz; bz++) {
-				    iris_real zkplusb = kzm * (zj + zM * bz);
-				    iris_real zrho = exp(-0.25 * square(zkplusb / alpha));
-				    iris_real zwnsq = pow_sinx_x(zkplusb * zL / (2 * zM), _2n);
-				    
 				    // k . (k+b)
 				    iris_real k_dot_kplusb = kxm * xj * xkplusb + kym * yj * ykplusb + kzm * zj * zkplusb;
 								    
