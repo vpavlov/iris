@@ -202,14 +202,14 @@ namespace ORG_NCSA_IRIS {
 	}
     };
 
-#define IRIS_CUDA
+
 #ifdef IRIS_CUDA
     class memory_gpu {
 
     public:
 
 	static void *wmalloc(size_t nbytes);
-	static void *wrealloc(void *ptr, size_t nbytes,, size_t old_size));
+	static void *wrealloc(void *ptr, size_t nbytes, size_t old_size);
 	static void wfree(void *ptr);
 
 	//**********************************************************************
@@ -239,20 +239,8 @@ namespace ORG_NCSA_IRIS {
 
 	template<typename T>
 	static void destroy_3d(T ***&array);
-
-	//**********************************************************************
-	// 4D Arrays
-	//**********************************************************************
-
-	template<typename T>
-	static T ****create_4d(T ****&array, int n1, int n2, int n3, int n4, 
-			       bool clear = false);
-	
-	template<typename T>
-	static void destroy_4d(T ****&array);
-    };
-
+	};
 #endif
-}
+};
 
 #endif
