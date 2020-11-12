@@ -58,7 +58,7 @@ void *memory_gpu::wrealloc(void *ptr, size_t nbytes, size_t old_size)
 
 	void *tmp = wmalloc(nbytes);
     cudaMemcpy(tmp, ptr, MIN(nbytes,old_size),cudaMemcpyDeviceToDevice);
-	free(ptr);
+	wfree(ptr);
 	return tmp;
  };
 
