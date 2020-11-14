@@ -201,10 +201,11 @@ bool clear, T init_val)
         cudaDeviceSynchronize();
     }
 
-    int nblocks = get_NBlocks(n1,IRIS_CUDA_NTHREADS_2D);
+    int nblocks1 = get_NBlocks(n1,IRIS_CUDA_NTHREADS_2D);
+    int nblocks2 = get_NBlocks(n2,IRIS_CUDA_NTHREADS_2D);
     int nthreads = IRIS_CUDA_NTHREADS_2D;
     
-    assign_3d_indexing_kernel<<<dim3(nblocks,nblocks),dim3(nthreads,nthreads)>>>(array, tmp, data, n1, n2, n3);
+    assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads,nthreads)>>>(array, tmp, data, n1, n2, n3);
     cudaDeviceSynchronize();
     return array;
 };
