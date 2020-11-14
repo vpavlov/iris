@@ -33,11 +33,11 @@
 
 using namespace ORG_NCSA_IRIS;
 
-remap_item_complex_permute2::remap_item_complex_permute2()
+remap_item_complex_permute2_gpu::remap_item_complex_permute2_gpu()
 {
 }
 
-remap_item_complex_permute2::~remap_item_complex_permute2()
+remap_item_complex_permute2_gpu::~remap_item_complex_permute2_gpu()
 {
 }
 
@@ -74,7 +74,7 @@ void unpack_kernel(iris_real *src, iris_real *dest,
 	}
 }
 
-void remap_item_complex_permute2::unpack(iris_real *src, iris_real *dest)
+void remap_item_complex_permute2_gpu::unpack(iris_real *src, iris_real *dest)
 {
 	int nblocks1 = get_NBlocks(m_nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(m_ny,IRIS_CUDA_NTHREADS_3D);

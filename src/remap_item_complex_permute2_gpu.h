@@ -35,11 +35,11 @@
 
 namespace ORG_NCSA_IRIS {
 
-    class remap_item_complex_permute2 : public remap_item_gpu {
+    class remap_item_complex_permute2_gpu : public remap_item_gpu {
 
     public:
-	remap_item_complex_permute2();
-	~remap_item_complex_permute2();
+	remap_item_complex_permute2_gpu();
+	~remap_item_complex_permute2_gpu();
 
 	virtual void unpack(iris_real *src, iris_real *dest);
     };
