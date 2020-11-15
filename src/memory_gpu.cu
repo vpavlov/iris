@@ -67,9 +67,9 @@ void memory_gpu::wfree(void *ptr)
     cudaFree(ptr);
 };
 
-template<typename T>
+
 __global__
-void memory_set_kernel(T* ptr, size_t n, T val)
+void memory_gpu::memory_set_kernel(iris_real* ptr, size_t n, iris_real val)
 {
     size_t ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,n);
@@ -84,19 +84,19 @@ void memory_set_kernel(T* ptr, size_t n, T val)
 //**********************************************************************
 // 1D Arrays
 //**********************************************************************
-template<typename T>
-T *memory_gpu::create_1d(T *&array, int n1, bool clear)
+
+iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear)
 {
-    array =  (T *)wmalloc(sizeof(T) * n1);
+    array =  (iris_real *)wmalloc(sizeof(iris_real) * n1);
     if(clear) {
-        memory_set_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,n1,(T)0);
+        memory_set_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,n1,(iris_real)0);
         cudaDeviceSynchronize();
     }
     return array;
 };
 
-template<typename T>
-void memory_gpu::destroy_1d(T *&array)
+
+void memory_gpu::destroy_1d(iris_real *&array)
 {
     if(array == NULL) {
 	return;
@@ -108,9 +108,8 @@ void memory_gpu::destroy_1d(T *&array)
 
 ////////////////////////////////////////////
 
-template <typename T>
 __global__
-void assign_2d_indexing_kernel(T** array,T* tmp, int n1, int n2)
+void assign_2d_indexing_kernel(iris_real** array,iris_real* tmp, int n1, int n2)
 {
 
     size_t xndx = IRIS_CUDA_INDEX(x);
@@ -128,25 +127,25 @@ void assign_2d_indexing_kernel(T** array,T* tmp, int n1, int n2)
 //**********************************************************************
 // 2D Arrays
 //**********************************************************************
-template<typename T>
-T **memory_gpu::create_2d(T **&array, int n1, int n2, bool clear)
+
+iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear)
 {
     size_t nitems = n1 * n2;
-    array =  (T **)wmalloc(sizeof(T *) * n1);
-    T* data = (T *)wmalloc(sizeof(T) * nitems);
+    array =  (iris_real **)wmalloc(sizeof(iris_real *) * n1);
+    iris_real* data = (iris_real *)wmalloc(sizeof(iris_real) * nitems);
     if(clear) {
-        memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems,(T)0);
+        memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems,(iris_real)0);
         cudaDeviceSynchronize();
     }
 
-    assign_2d_indexing_kernel<T><<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>(array,data,n1,n2);
+    assign_2d_indexing_kernel<iris_real><<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>(array,data,n1,n2);
     cudaDeviceSynchronize();
 
     return array;
 };
 
-template<typename T>
-void memory_gpu::destroy_2d(T **&array)
+
+void memory_gpu::destroy_2d(iris_real **&array)
 {
     if(array == NULL) {
     return;
@@ -159,9 +158,8 @@ void memory_gpu::destroy_2d(T **&array)
 
 /////////////////////////////////////////////////////////
 
-template <typename T>
 __global__
-void assign_3d_indexing_kernel(T*** array, T** tmp, T* data, int n1, int n2, int n3)
+void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* data, int n1, int n2, int n3)
 {
     size_t xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,n1);
@@ -188,14 +186,14 @@ void assign_3d_indexing_kernel(T*** array, T** tmp, T* data, int n1, int n2, int
 //**********************************************************************
 // 3D Arrays
 //**********************************************************************
-template<typename T>
-T ***memory_gpu::create_3d(T ***&array, int n1, int n2, int n3,
-bool clear, T init_val)
+
+iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
+bool clear, iris_real init_val)
 {
     size_t nitems = n1 * n2 * n3;
-    array   = (T ***) wmalloc(sizeof(T **) * n1);
-    T **tmp = (T **)  wmalloc(sizeof(T *)  * n1 * n2);
-    T *data = (T *)   wmalloc(sizeof(T)    * nitems);
+    array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1);
+    iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
+    iris_real *data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
     if(clear) {
         memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems, init_val);
         cudaDeviceSynchronize();
@@ -210,8 +208,8 @@ bool clear, T init_val)
     return array;
 };
 
-template<typename T>
-void memory_gpu::destroy_3d(T ***&array)
+
+void memory_gpu::destroy_3d(iris_real ***&array)
 {
     if(array == NULL) {
     return;

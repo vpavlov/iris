@@ -211,34 +211,28 @@ namespace ORG_NCSA_IRIS {
 	static void *wmalloc(size_t nbytes);
 	static void *wrealloc(void *ptr, size_t nbytes, size_t old_size);
 	static void wfree(void *ptr);
-
+	static void memory_set_kernel(iris_real* ptr, size_t n, iris_real val);
 	//**********************************************************************
 	// 1D Arrays
 	//**********************************************************************
-	template<typename T>
-	static T *create_1d(T *&array, int n1, bool clear = false);
+	static iris_real *create_1d(iris_real *&array, int n1, bool clear = false);
 	
-	template<typename T>
-	static void destroy_1d(T *&array);
+	static void destroy_1d(iris_real *&array);
 
 	//**********************************************************************
 	// 2D Arrays
 	//**********************************************************************
-	template<typename T>
-	static T **create_2d(T **&array, int n1, int n2, bool clear = false);
+	static iris_real **create_2d(iris_real **&array, int n1, int n2, bool clear = false);
 	
-	template<typename T>
-	static void destroy_2d(T **&array);
+	static void destroy_2d(iris_real **&array);
 
 	//**********************************************************************
 	// 3D Arrays
 	//**********************************************************************
-	template<typename T>
-	static T ***create_3d(T ***&array, int n1, int n2, int n3,
-			      bool clear = false, T init_val = 0);
+	static iris_real ***create_3d(iris_real ***&array, int n1, int n2, int n3,
+			      bool clear = false, iris_real init_val = 0);
 
-	template<typename T>
-	static void destroy_3d(T ***&array);
+	static void destroy_3d(iris_real ***&array);
 	};
 #endif
 };
