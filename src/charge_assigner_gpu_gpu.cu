@@ -243,6 +243,23 @@ void charge_assigner_gpu::commit()
     }
 }
 
+__device__
+void compute_weights_dev(iris_real dx, iris_real dy, iris_real dz, 
+                         iris_real* m_coeff, iris_real*** weights, int order)
+{
+    iris_real r1, r2, r3;
+    for(int i = 0; i < order; i++) {
+        r1 = r2 = r3 = (iris_real)0.0;
+        for(int j = order - 1; j >= 0; j--) {
+            r1 = m_coeff[i*order + j] + r1 * dx;
+            r2 = m_coeff[i*order + j] + r2 * dy;
+            r3 = m_coeff[i*order + j] + r3 * dz;
+        }
+        weights[0][i] = r1;
+        weights[1][i] = r2;
+        weights[2][i] = r3;
+    }
+}
 
 __global__
 void compute_weights_kernel(iris_real dx, iris_real dy, iris_real dz,int tid, iris_real* m_coeff, iris_real*** m_weights, int m_order)

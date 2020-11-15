@@ -33,6 +33,8 @@
 #include <tuple>
 #include "state_accessor.h"
 
+#define IRIS_MAX_ORDER 7
+
 namespace ORG_NCSA_IRIS {
 
     class charge_assigner_gpu : protected state_accessor {
@@ -109,5 +111,9 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_dcoeff;     // derivative of interpolation coefficients
 
     };
+
+	// device function for weights computing
+	void compute_weights_dev(iris_real dx, iris_real dy, iris_real dz, 
+                         iris_real* m_coeff, iris_real*** weights, int order);
 }
 #endif
