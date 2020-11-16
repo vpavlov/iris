@@ -40,6 +40,7 @@ union solver_param_t
 #define IRIS_SOLVER_CG_STENCIL_PADE_M  1  // nom order of Pade approximant
 #define IRIS_SOLVER_CG_STENCIL_PADE_N  2  // denom order of Pade approximant
 #define IRIS_SOLVER_P3M_USE_COLLECTIVE 3  // whether to use collective calls for the FFT3D remap
-#define IRIS_SOLVER_PARAM_CNT          4  // number of different parameters
+#define IRIS_SOLVER_FMM_NCRIT          4  // avg. number of particles in cell (determines max level)
+#define IRIS_SOLVER_PARAM_CNT          5  // number of different parameters
 
 #endif

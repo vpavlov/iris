@@ -214,6 +214,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     solver_param_t def_param;
     def_param.i = 1;
     set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
+
+    // default value for FMM NCRIT - 64
+    def_param.i = 64;
+    set_solver_param(IRIS_SOLVER_FMM_NCRIT, def_param);
 }
 
 iris::~iris()
