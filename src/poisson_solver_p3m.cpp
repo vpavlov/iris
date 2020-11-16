@@ -297,14 +297,15 @@ void poisson_solver_p3m::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 
 void poisson_solver_p3m::calculate_denominator()
 {
-    const int xM = m_mesh->m_size[0];
-    const int yM = m_mesh->m_size[1];
-    const int zM = m_mesh->m_size[2];
 
 #if defined _OPENMP
 #pragma omp parallel default(none)
 #endif
     {
+	const int xM = m_mesh->m_size[0];
+	const int yM = m_mesh->m_size[1];
+	const int zM = m_mesh->m_size[2];
+	
 	int nx = m_fft_size[0];
 	int ny = m_fft_size[1];
 	int nz = m_fft_size[2];
