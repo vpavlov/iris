@@ -27,10 +27,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#error "not ported yet"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-#include "iris.h"
+#include "iris_gpu.h"
 #include "mesh_gpu.h"
 #include "proc_grid.h"
 #include "memory.h"

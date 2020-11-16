@@ -27,18 +27,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_MESH_H__
-#define __IRIS_MESH_H__
+#ifndef __IRIS_GPU_MESH_H__
+#define __IRIS_GPU_MESH_H__
 
 #include <tuple>
-#include "state_accessor.h"
+#include "state_accessor_gpu.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class mesh_gpu : protected state_accessor {
+    class mesh_gpu : protected state_accessor_gpu {
 
     public:
-	mesh_gpu(class iris *obj);
+	mesh_gpu(class iris_gpu *obj);
 	~mesh_gpu();
 
 	void set_size(int nx, int ny, int nz);

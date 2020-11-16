@@ -30,7 +30,7 @@
 //==============================================================================
 #include <string.h>
 #include <stdexcept>
-#include "iris.h"
+#include "iris_gpu.h"
 #include "remap_gpu.h"
 #include "logger.h"
 #include "memory.h"
@@ -44,14 +44,14 @@
 #error "buffer allocation (buffer_manager) and gpu dev synchronization NOT READY"
 
 using namespace ORG_NCSA_IRIS;
-remap_gpu::remap_gpu(class iris *obj,
+remap_gpu::remap_gpu(class iris_gpu *obj,
 	     int *in_from_offset, int *in_from_size, 
 	     int *in_to_offset, int *in_to_size,
 	     int in_unit_size,
 	     int in_permute,
 	     const char *in_name,
 	     bool in_use_collective)
-    : state_accessor(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
+    : state_accessor_gpu(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
       m_nrecv(0), m_use_collective(in_use_collective), m_collective_comm(MPI_COMM_NULL)
 {
     m_name = strdup(in_name);

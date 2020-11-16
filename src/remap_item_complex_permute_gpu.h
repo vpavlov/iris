@@ -28,8 +28,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_REMAP_ITEM_COMPLEX_PERMUTE_H__
-#define __IRIS_REMAP_ITEM_COMPLEX_PERMUTE_H__
+#ifndef __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE_H__
+#define __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE_H__
 
 #include "remap_item_gpu.h"
 

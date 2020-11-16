@@ -20,30 +20,61 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
-#define __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
+#include <mpi.h>
+#include "iris_gpu.h"
+#include "proc_grid_gpu.h"
+#include "comm_rec_gpu.h"
+#include "logger.h"
+#include "factorizer.h"
 
-#include "remap_item_gpu.h"
+#include "domain_gpu.h"
+#include "memory.h"
+#include "mesh_gpu.h"
 
-namespace ORG_NCSA_IRIS {
+using namespace ORG_NCSA_IRIS;
+using namespace std;
 
-    class remap_item_complex_permute2_gpu : public remap_item_gpu {
-
-    public:
-	remap_item_complex_permute2_gpu();
-	~remap_item_complex_permute2_gpu();
-
-	virtual void unpack(iris_real *src, iris_real *dest);
-    };
-
+proc_grid_gpu::proc_grid_gpu(iris_gpu *obj)
+    : grid_gpu(obj, "Processor")
+{
 }
 
-#endif
+proc_grid_gpu::~proc_grid_gpu()
+{
+}
+
+// The proc grid, apart from doing whatever grid is doing in commit, must also
+// check if mesh and domain are initialized and also set them dirty if it was
+// re-configured.
+void proc_grid_gpu::commit()
+{
+    if(!m_mesh->m_initialized) {
+	throw std::logic_error("proc_grid commit called, but mesh is not initialized!");
+    }
+
+    if(!m_domain->m_initialized) {
+	throw std::logic_error("proc_grid commit called, but domain is not initialized!");
+    }
+
+    bool tmp_dirty = m_dirty;
+
+    grid_gpu::commit();
+
+    if(tmp_dirty) {
+
+	// other configuration that depends on ours must be re-set
+	if(m_mesh != NULL) {
+	    m_mesh->m_dirty = true;
+	}
+	if(m_domain != NULL) {
+	    m_domain->m_dirty = true;
+	}
+    }
+}

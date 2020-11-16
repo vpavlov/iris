@@ -27,8 +27,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_BUFFER_MANAGER_H__
-#define __IRIS_BUFFER_MANAGER_H__
+#ifndef __IRIS_GPU_BUFFER_MANAGER_H__
+#define __IRIS_GPU_BUFFER_MANAGER_H__
 #include <limits>
 #include <new>
 

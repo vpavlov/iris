@@ -27,20 +27,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_CHARGE_ASSIGNER_H__
-#define __IRIS_CHARGE_ASSIGNER_H__
+#ifndef __IRIS_GPU_CHARGE_ASSIGNER_H__
+#define __IRIS_GPU_CHARGE_ASSIGNER_H__
 
 #include <tuple>
-#include "state_accessor.h"
+#include "state_accessor_gpu.h"
 
 #define IRIS_MAX_ORDER 7
 
 namespace ORG_NCSA_IRIS {
 
-    class charge_assigner_gpu : protected state_accessor {
+    class charge_assigner_gpu : protected state_accessor_gpu {
 
     public:
-	charge_assigner_gpu(class iris *in_obj);
+	charge_assigner_gpu(class iris_gpu *in_obj);
 	~charge_assigner_gpu();
 
 	void set_order(int in_order);

@@ -20,30 +20,39 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
-#define __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
+#ifndef __IRIS_GPU_DOMAIN_H__
+#define __IRIS_GPU_DOMAIN_H__
 
-#include "remap_item_gpu.h"
+#include <stdexcept>
+#include "state_accessor_gpu.h"
+#include "box.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class remap_item_complex_permute2_gpu : public remap_item_gpu {
+    class domain_gpu : protected state_accessor_gpu {
 
     public:
-	remap_item_complex_permute2_gpu();
-	~remap_item_complex_permute2_gpu();
+	domain_gpu(class iris_gpu *obj);
+	~domain_gpu();
 
-	virtual void unpack(iris_real *src, iris_real *dest);
+	void set_global_box(iris_real x0, iris_real y0, iris_real z0,
+			    iris_real x1, iris_real y1, iris_real z1);
+
+	void commit();
+
+    public:
+	bool m_dirty;
+	bool m_initialized;
+	box_t<iris_real> m_global_box;
+	box_t<iris_real> m_local_box;
+
     };
-
 }
-
 #endif

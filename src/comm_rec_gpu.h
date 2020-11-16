@@ -20,30 +20,35 @@
 // all copies or substantial portions of the Software.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY,
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
-#define __IRIS_GPU_REMAP_ITEM_COMPLEX_PERMUTE2_H__
+#ifndef __IRIS_GPU_COMM_REC_H__
+#define __IRIS_GPU_COMM_REC_H__
 
-#include "remap_item_gpu.h"
+#include "state_accessor_gpu.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class remap_item_complex_permute2_gpu : public remap_item_gpu {
+    class comm_rec_gpu : protected state_accessor_gpu {
 
     public:
-	remap_item_complex_permute2_gpu();
-	~remap_item_complex_permute2_gpu();
+	comm_rec_gpu(class iris_gpu *in_obj, MPI_Comm in_comm);
+	~comm_rec_gpu();
 
-	virtual void unpack(iris_real *src, iris_real *dest);
+	bool peek_event(struct event_t &out_event);
+	void get_event(struct event_t &out_event);
+	void get_event(int in_peer, int in_tag, struct event_t &out_event);
+
+    public:
+	MPI_Comm m_comm;
+	int m_rank;
+	int m_size;
     };
-
 }
 
 #endif

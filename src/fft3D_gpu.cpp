@@ -28,22 +28,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include "iris.h"
+#include "iris_gpu.h"
 #include "fft3D_gpu.h"
-#include "mesh.h"
+#include "mesh_gpu.h"
 #include "logger.h"
-#include "grid.h"
+#include "grid_gpu.h"
 #include "remap_gpu.h"
-#include "comm_rec.h"
+#include "comm_rec_gpu.h"
 #include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
 
-fft3d_gpu::fft3d_gpu(class iris *obj,
+fft3d_gpu::fft3d_gpu(class iris_gpu *obj,
 	     int *in_in_offset, int *in_in_size,
 	     int *in_out_offset, int *in_out_size,
 	     const char *in_name, bool in_use_collective)
-    : state_accessor(obj), m_grids { NULL, NULL, NULL },
+    : state_accessor_gpu(obj), m_grids { NULL, NULL, NULL },
     m_own_size { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_own_offset { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } },
     m_remaps { NULL, NULL, NULL, NULL },
@@ -173,7 +173,7 @@ void fft3d_gpu::setup_grid(int in_which)
 	break;
     }
 
-    m_grids[in_which] = new grid(m_iris, grid_name);
+    m_grids[in_which] = new grid_gpu(m_iris, grid_name);
 
     if(m_mesh->m_size[last] >= m_local_comm->m_size) {
 	m_grids[in_which]->set_pref(xp1, yp1, zp1);

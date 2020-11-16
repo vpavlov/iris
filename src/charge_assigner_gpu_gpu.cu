@@ -30,13 +30,13 @@
 #include <stdexcept>
 #include <vector>
 #include <tuple>
-#include "iris.h"
+#include "iris_gpu.h"
 #include "charge_assigner_gpu.h"
-#include "mesh.h"
+#include "mesh_gpu.h"
 #include "proc_grid.h"
-#include "comm_rec.h"
+#include "comm_rec_gpu.h"
 #include "memory.h"
-#include "domain.h"
+#include "domain_gpu.h"
 #include "logger.h"
 #include "event.h"
 #include "openmp.h"
@@ -141,7 +141,7 @@ static iris_real gfd_coeff5[] = { 1.0, -5.0/3, 7.0/9, -17.0/189, 2.0/2835 };
 static iris_real gfd_coeff6[] = { 1.0, -2.0, 19.0/15, -256.0/945, 62.0/4725, -4.0/155925 };
 static iris_real gfd_coeff7[] = { 1.0, -7.0/3, 28.0/15, -16.0/27, 26.0/405, -2.0/1485, 4.0/6081075 };
 
-charge_assigner_gpu::charge_assigner_gpu(iris *obj)
+charge_assigner_gpu::charge_assigner_gpu(iris_gpu *obj)
     :state_accessor(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL)
 {
 }

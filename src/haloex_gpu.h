@@ -27,8 +27,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_HALOEX_H__
-#define __IRIS_HALOEX_H__
+#ifndef __IRIS_GPU_HALOEX_H__
+#define __IRIS_GPU_HALOEX_H__
 
 #include <mpi.h>
 #include "real.h"

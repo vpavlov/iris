@@ -28,18 +28,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_REMAP_H__
-#define __IRIS_REMAP_H__
+#ifndef __IRIS_GPU_REMAP_H__
+#define __IRIS_GPU_REMAP_H__
 
-#include "state_accessor.h"
+#include "state_accessor_gpu.h"
 #include "box.h"
 
 namespace ORG_NCSA_IRIS {
     
-    class remap_gpu : protected state_accessor {
+    class remap_gpu : protected state_accessor_gpu {
 
     public:
-	remap_gpu(class iris *obj,
+	remap_gpu(class iris_gpu *obj,
 	      int *in_from_offset, int *in_from_size, 
 	      int *in_to_offset, int *in_to_size, 
 	      int in_unit_size,

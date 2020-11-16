@@ -27,18 +27,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#error "not ported yet"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-#include "iris.h"
+#include "iris_gpu.h"
 #include "mesh_gpu.h"
-#include "proc_grid.h"
+#include "proc_grid_gpu.h"
 #include "memory.h"
-#include "domain.h"
+#include "domain_gpu.h"
 #include "logger.h"
 #include "event.h"
 #include "charge_assigner_gpu.h"
-#include "comm_rec.h"
+#include "comm_rec_gpu.h"
 #include "tags.h"
 #include "poisson_solver.h"
 #include "openmp.h"
@@ -47,8 +48,8 @@
 
 using namespace ORG_NCSA_IRIS;
 
-mesh_gpu::mesh_gpu(iris *obj)
-    :state_accessor(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
+mesh_gpu::mesh_gpu(iris_gpu *obj)
+    :state_accessor_gpu(obj), m_size{0, 0, 0}, m_rho(NULL), m_rho_plus(NULL),
      m_dirty(true), m_initialized(false), m_phi(NULL), m_phi_plus(NULL),
      m_Ex(NULL), m_Ey(NULL), m_Ez(NULL), m_Ex_plus(NULL), m_Ey_plus(NULL),
      m_Ez_plus(NULL), m_rho_haloex(NULL), m_Ex_haloex(NULL), m_Ey_haloex(NULL), m_Ez_haloex(NULL),
@@ -134,7 +135,7 @@ void mesh_gpu::handle_box_resize()
 void mesh_gpu::commit()
 {
     if(!m_domain->m_initialized) {
-	throw std::logic_error("mesh_gpu commit called, but domain is not initialized!");
+	throw std::logic_error("mesh_gpu commit called, but domain_gpu is not initialized!");
     }
 
     if(!m_initialized) {
