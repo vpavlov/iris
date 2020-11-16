@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -42,13 +42,14 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
-#include "poisson_solver.h"
+#include "solver.h"
 #include "poisson_solver_p3m.h"
 #include "poisson_solver_cg.h"
 #include "timer.h"
 #include "utils.h"
 #include "factorizer.h"
 #include "openmp.h"
+#include "fmm.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -75,36 +76,36 @@ using namespace ORG_NCSA_IRIS;
 			       " may only be called from server nodes!"); \
     }
 
-iris::iris(MPI_Comm in_uber_comm)
-    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-      m_remote_leader(0)
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm):
+    m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
+    m_remote_leader(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(MPI_Comm in_uber_comm, int in_leader)
-    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-      m_remote_leader(in_leader)
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader):
+    m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
+    m_remote_leader(in_leader)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(int in_client_size, int in_server_size,
+iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm,
-	   MPI_Comm in_uber_comm, int in_remote_leader)
-    : m_client_size(in_client_size), m_server_size(in_server_size),
-      m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+	   MPI_Comm in_uber_comm, int in_remote_leader):
+    m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
+    m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
      
 {
     init(in_local_comm, in_uber_comm);
 }
 
-iris::iris(int in_client_size, int in_server_size,
+iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm, int in_local_leader,
-	   MPI_Comm in_uber_comm, int in_remote_leader)
-    : m_client_size(in_client_size), m_server_size(in_server_size),
-      m_role(in_role), m_local_leader(in_local_leader),
-      m_remote_leader(in_remote_leader)
+	   MPI_Comm in_uber_comm, int in_remote_leader):
+    m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
+    m_role(in_role), m_local_leader(in_local_leader),
+    m_remote_leader(in_remote_leader)
 {
     init(in_local_comm, in_uber_comm);
 }
@@ -133,7 +134,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_hx_free = true;
     m_hy_free = true;
     m_hz_free = true;
-    m_which_solver = IRIS_SOLVER_P3M;
     m_dirty = true;
 
     m_compute_global_energy = true;
@@ -183,12 +183,16 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_mesh = NULL;
     m_chass = NULL;
     m_solver = NULL;
-
+    
     if(is_server()) {
 	m_domain = new domain(this);
-	m_proc_grid = new proc_grid(this);
-	m_mesh = new mesh(this);
-	m_chass = new charge_assigner(this);
+	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
+	    m_proc_grid = new proc_grid(this);
+	    m_mesh = new mesh(this);
+	    m_chass = new charge_assigner(this);
+	}else if(m_which_solver == IRIS_SOLVER_FMM) {
+	    m_solver = new fmm(this);
+	}
     }
 
     m_quit = false;
@@ -292,9 +296,13 @@ void iris::set_alpha(iris_real in_alpha)
 void iris::set_order(int in_order)
 {
     if(is_server()) {
-	m_chass->set_order(in_order);
-	m_order_free = false;
-	m_dirty = true;
+	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
+	    m_chass->set_order(in_order);
+	    m_order_free = false;
+	    m_dirty = true;
+	}else if(m_which_solver == IRIS_SOLVER_FMM) {
+	    m_solver->set_order(in_order);
+	}
     }
 }
 
@@ -375,12 +383,6 @@ void iris::set_grid_pref(int x, int y, int z)
     if(is_server()) {
 	m_proc_grid->set_pref(x, y, z);
     }
-}
-
-void iris::set_solver(int in_which_solver)
-{
-    m_which_solver = in_which_solver;
-    m_dirty = true;
 }
 
 void iris::perform_commit()
@@ -1168,7 +1170,7 @@ bool iris::good_factor_quality(int n)
     }
 }
 
-poisson_solver *iris::get_solver()
+solver *iris::get_solver()
 {
     switch(m_which_solver) {
     case IRIS_SOLVER_P3M:
@@ -1176,6 +1178,9 @@ poisson_solver *iris::get_solver()
 
     case IRIS_SOLVER_CG:
 	return new poisson_solver_cg(this);
+
+    default:
+	return m_solver;
     }
 }
 

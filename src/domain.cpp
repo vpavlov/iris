@@ -33,7 +33,7 @@
 #include "logger.h"
 #include "proc_grid.h"
 #include "mesh.h"
-#include "poisson_solver.h"
+#include "solver.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -69,7 +69,10 @@ void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
     m_initialized = true;
     m_dirty = true;
 
-    m_mesh->handle_box_resize();
+    if(m_mesh != NULL) {
+	m_mesh->handle_box_resize();
+    }
+    
     if(m_solver != NULL) {
 	m_solver->handle_box_resize();
     }

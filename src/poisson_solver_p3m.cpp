@@ -51,7 +51,7 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver_p3m::poisson_solver_p3m(class iris *obj)
-    : poisson_solver(obj), m_greenfn(NULL), 
+    : solver(obj), m_greenfn(NULL), 
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
@@ -297,14 +297,16 @@ void poisson_solver_p3m::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 
 void poisson_solver_p3m::calculate_denominator()
 {
-    const int xM = m_mesh->m_size[0];
-    const int yM = m_mesh->m_size[1];
-    const int zM = m_mesh->m_size[2];
 
 #if defined _OPENMP
 #pragma omp parallel default(none)
 #endif
     {
+
+	const int xM = m_mesh->m_size[0];
+	const int yM = m_mesh->m_size[1];
+	const int zM = m_mesh->m_size[2];
+
 	int nx = m_fft_size[0];
 	int ny = m_fft_size[1];
 	int nz = m_fft_size[2];

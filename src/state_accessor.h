@@ -83,7 +83,7 @@ namespace ORG_NCSA_IRIS {
 	proc_grid *&m_proc_grid;
 	mesh *&m_mesh;
 	charge_assigner *&m_chass;
-	poisson_solver *&m_solver;
+	solver *&m_solver;
 	units *&m_units;
     };
 

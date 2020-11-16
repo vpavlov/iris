@@ -48,7 +48,8 @@ namespace ORG_NCSA_IRIS {
 
 #define IRIS_SOLVER_P3M  0x01
 #define IRIS_SOLVER_CG   0x02
-
+#define IRIS_SOLVER_FMM  0x03
+    
     static const iris_real _4PI = 12.566370614359172;
 
     // type of function called to set pieces of the right-hand side
@@ -63,21 +64,21 @@ namespace ORG_NCSA_IRIS {
 	//   - distributed mode: every node is either client XOR server
 
 	// Use this constructor when for shared mode and rank 0 is the leader
-	iris(MPI_Comm in_uber_comm);
+	iris(int in_which_solver, MPI_Comm in_uber_comm);
 
 	// Use this constructor when for shared mode and you want to specify
 	// a different leader
-	iris(MPI_Comm in_uber_comm, int in_leader);
+	iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader);
 
 	// Use this constructor when in distributed mode and the local leader
 	// of each group is its respective rank 0
-	iris(int in_client_size, int in_server_size,
+	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
 
 	// Use this constructor when in distributed  mode and you want to
 	// specify a local leader != 0
-	iris(int in_client_size, int in_server_size,
+	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm, int in_local_leader,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
 
@@ -214,7 +215,7 @@ namespace ORG_NCSA_IRIS {
 	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
 	int  h_estimate(int dim, iris_real alpha, iris_real eps);
 	bool good_factor_quality(int n);
-	class poisson_solver *get_solver();
+	class solver *get_solver();
 
     public:
 	int m_which_solver;            // P3M, CG, ...
@@ -261,7 +262,7 @@ namespace ORG_NCSA_IRIS {
 	class proc_grid       *m_proc_grid;   // MPI Comm related stuff
 	class mesh            *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;       // Charge assignmen machinery
-	class poisson_solver  *m_solver;      // The Poisson equation solver itself
+	class solver          *m_solver;      // The Poisson equation solver itself
 	class units           *m_units;       // Units system to use
     private:
 	volatile bool m_quit;  // quit the main loop

@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,28 +27,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <cmath>
-#include "poisson_solver.h"
-#include "domain.h"
-#include "mesh.h"
-#include "charge_assigner.h"
-#include "memory.h"
-#include "math_util.h"
-#include "logger.h"
-#include "fft3D.h"
-#include "openmp.h"
-#include "timer.h"
-#include "remap.h"
-#include "grid.h"
+#ifndef __IRIS_FMM_H__
+#define __IRIS_FMM_H__
+#include "solver.h"
 
-using namespace ORG_NCSA_IRIS;
+namespace ORG_NCSA_IRIS {
 
-poisson_solver::poisson_solver(class iris *obj)
-    : state_accessor(obj), m_dirty(true)
-{
-};
+    class fmm : public solver {
 
-poisson_solver::~poisson_solver()
-{
+    public:
+	fmm(class iris *obj);
+	~fmm();
+
+	void commit();
+	void solve();
+	void handle_box_resize();
+	void set_order(int in_order);
+
+    private:
+	int m_order;   // multipole expansion order (p)
+	
+    };
 }
 
+#endif

@@ -40,7 +40,7 @@
 #include "charge_assigner.h"
 #include "comm_rec.h"
 #include "tags.h"
-#include "poisson_solver.h"
+#include "solver.h"
 #include "openmp.h"
 #include "haloex.h"
 #include "timer.h"

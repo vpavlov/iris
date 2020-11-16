@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,28 +27,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POISSON_SOLVER_H__
-#define __IRIS_POISSON_SOLVER_H__
+#include "fmm.h"
+#include "logger.h"
 
-#include "state_accessor.h"
+using namespace ORG_NCSA_IRIS;
 
-namespace ORG_NCSA_IRIS {
-
-    class poisson_solver : protected state_accessor {
-
-    public:
-	poisson_solver(class iris *obj);
-	~poisson_solver();
-
-	virtual void commit() = 0;
-	virtual void solve() = 0;
-	virtual void handle_box_resize() = 0;
-
-	void set_dirty(bool in_dirty) { m_dirty = in_dirty; };
-
-    protected:
-	bool m_dirty;  // wether to recalculate on commit
-    };
+fmm::fmm(class iris *obj):
+    solver(obj), m_order(10)
+{
 }
 
-#endif
+fmm::~fmm()
+{
+}
+
+void fmm::set_order(int in_order)
+{
+    m_order = in_order;
+    m_dirty = true;
+}
+
+void fmm::commit()
+{
+}
+
+void fmm::solve()
+{
+}
+
+void fmm::handle_box_resize()
+{
+}
