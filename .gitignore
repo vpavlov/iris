@@ -2,4 +2,4 @@ build
 src/config.h
 *~
 .vscode
-examples/bob_trj/
+examples/bob_trj/*
