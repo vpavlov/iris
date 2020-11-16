@@ -33,7 +33,7 @@
 using namespace ORG_NCSA_IRIS;
 
 fmm::fmm(class iris *obj):
-    solver(obj), m_order(10)
+    solver(obj)
 {
 }
 
@@ -41,20 +41,14 @@ fmm::~fmm()
 {
 }
 
-void fmm::set_order(int in_order)
-{
-    m_order = in_order;
-    m_dirty = true;
-}
-
 void fmm::commit()
 {
+    m_logger->info("FMM Order = %d", m_iris->m_order);
+    m_dirty = false;
 }
 
 void fmm::solve()
 {
+    m_logger->trace("fmm::solve()");
 }
 
-void fmm::handle_box_resize()
-{
-}

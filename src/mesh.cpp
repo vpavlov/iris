@@ -69,14 +69,6 @@ mesh::~mesh()
     memory::destroy_3d(m_Ez);
     memory::destroy_3d(m_Ez_plus);
     
-    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	memory::wfree(it->second);
-    }
-
-    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
-	memory::wfree(it->second);
-    }
-
     if(m_rho_haloex != NULL) {
 	delete m_rho_haloex;
     }
@@ -140,19 +132,6 @@ void mesh::commit()
     if(!m_initialized) {
 	throw std::logic_error("mesh commit called without size being initialized!");
     }
-
-    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	memory::wfree(it->second);
-    }
-
-    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
-	memory::wfree(it->second);
-    }
-
-    m_ncharges.clear();
-    m_charges.clear();
-    m_forces.clear();	
-
 
     if(m_dirty) {
 	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
@@ -446,9 +425,9 @@ void mesh::assign_charges()
 	memset(&(m_Ey_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 	memset(&(m_Ez_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+    for(auto it = m_iris->m_ncharges.begin(); it != m_iris->m_ncharges.end(); it++) {
 	int ncharges = it->second;
-	iris_real *charges = m_charges[it->first];
+	iris_real *charges = m_iris->m_charges[it->first];
 
 	for(int i = 0; i < ncharges; i++) {
 	    iris_real q = charges[i*5 + 3];
@@ -1094,7 +1073,7 @@ void mesh::assign_forces(bool ad)
     bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
     MPI_Comm comm = m_iris->client_comm();
 
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+    for(auto it = m_iris->m_ncharges.begin(); it != m_iris->m_ncharges.end(); it++) {
 	int peer = it->first;
 	int ncharges = it->second;
 	int size = 7*sizeof(iris_real) +             // 1 real for the E(k) energy + 6 reals for the virial
@@ -1119,11 +1098,11 @@ void mesh::assign_forces(bool ad)
 	    forces[6] = 0.0;
 	}
 	
-	m_forces[peer] = forces;
+	m_iris->m_forces[peer] = forces;
 	if(ad) {
-	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
+	    assign_forces1_ad(ncharges, m_iris->m_charges[it->first], forces);
 	}else {
-	    assign_forces1(ncharges, m_charges[it->first], forces);
+	    assign_forces1(ncharges, m_iris->m_charges[it->first], forces);
 	}
 
 	MPI_Request req;

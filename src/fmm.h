@@ -41,11 +41,9 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 	void solve();
-	void handle_box_resize();
-	void set_order(int in_order);
+	void handle_box_resize() {};
 
     private:
-	int m_order;   // multipole expansion order (p)
 	
     };
 }

@@ -186,12 +186,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     
     if(is_server()) {
 	m_domain = new domain(this);
+	m_proc_grid = new proc_grid(this);
 	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
-	    m_proc_grid = new proc_grid(this);
 	    m_mesh = new mesh(this);
 	    m_chass = new charge_assigner(this);
-	}else if(m_which_solver == IRIS_SOLVER_FMM) {
-	    m_solver = new fmm(this);
 	}
     }
 
@@ -226,6 +224,14 @@ iris::~iris()
 
     if(m_chass != NULL) {
 	delete m_chass;
+    }
+
+    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	memory::wfree(it->second);
+    }
+
+    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	memory::wfree(it->second);
     }
 
     if(m_mesh != NULL) {
@@ -296,12 +302,11 @@ void iris::set_alpha(iris_real in_alpha)
 void iris::set_order(int in_order)
 {
     if(is_server()) {
+	m_order_free = false;
+	m_dirty = true;
+	m_order = in_order;
 	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
 	    m_chass->set_order(in_order);
-	    m_order_free = false;
-	    m_dirty = true;
-	}else if(m_which_solver == IRIS_SOLVER_FMM) {
-	    m_solver->set_order(in_order);
 	}
     }
 }
@@ -389,8 +394,10 @@ void iris::perform_commit()
 {
     if(is_server()) {
 	if(m_dirty) {
-	    auto_tune_parameters();
-
+	    if(m_which_solver == IRIS_SOLVER_P3M) {
+		auto_tune_parameters();
+	    }
+	    
 	    if(m_solver != NULL) {
 		delete m_solver;
 	    }
@@ -400,11 +407,33 @@ void iris::perform_commit()
 
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
-	m_chass->commit();      // does not depend on anything
-	m_proc_grid->commit();  // does not depend on anything
-	m_domain->commit();     // depends on m_proc_grid
-	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
-	m_solver->commit();     // depends on m_mesh
+	if(m_chass != NULL) {
+	    m_chass->commit();      // does not depend on anything
+	}
+	if(m_proc_grid != NULL) {
+	    m_proc_grid->commit();  // does not depend on anything
+	}
+	if(m_domain != NULL) {
+	    m_domain->commit();     // depends on m_proc_grid
+	}
+
+	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	    memory::wfree(it->second);
+	}
+	
+	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	    memory::wfree(it->second);
+	}
+	m_ncharges.clear();
+	m_charges.clear();
+	m_forces.clear();	
+	
+	if(m_mesh != NULL) {
+	    m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
+	}
+	if(m_solver != NULL) {
+	    m_solver->commit();     // depends on m_mesh
+	}
 	m_quit = false;
     }
 }
@@ -677,8 +706,8 @@ bool iris::handle_charges(event_t *event)
     int ncharges = event->size / unit;
     m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
 
-    m_mesh->m_ncharges[event->peer] = ncharges;
-    m_mesh->m_charges[event->peer] = (iris_real *)event->data;
+    m_ncharges[event->peer] = ncharges;
+    m_charges[event->peer] = (iris_real *)event->data;
 
     if(!is_client()) {
 	MPI_Request req;
@@ -692,13 +721,11 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_logger->trace("Client called 'commit_charges'. Initiating computation...");
-    m_logger->trace("Server called 'assign_charges'. Initiating computation...");
-    m_mesh->assign_charges();
-    m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
-    m_mesh->exchange_rho_halo();
-    m_logger->trace("Server called 'solve'. Initiating computation...");
-    //    m_mesh->dump_ascii("rho", m_mesh->m_rho);
+    m_logger->trace("handle_commit_charges()");
+    if(m_mesh != NULL) {
+	m_mesh->assign_charges();
+	m_mesh->exchange_rho_halo();
+    }
     solve();
     bool ad = false;
     if(m_which_solver == IRIS_SOLVER_P3M) {
@@ -706,20 +733,15 @@ bool iris::handle_commit_charges()
     }else if(m_which_solver == IRIS_SOLVER_CG) {
 	m_mesh->exchange_phi_halo();
 	ad = true;
+    }else if(m_which_solver == IRIS_SOLVER_FMM) {
+	// TODO: what to do with the forces
     }else {
-	throw std::logic_error("Don't know how to handle forces for this solver!");
+       	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
 
-    // m_mesh->dump_ascii("Ex", m_mesh->m_Ex);
-    // m_mesh->dump_ascii("Ey", m_mesh->m_Ey);
-    // m_mesh->dump_ascii("Ez", m_mesh->m_Ez);
-
-    m_logger->trace("Server called 'assign_forces'. Initiating computation...");
-    m_mesh->assign_forces(ad);
-    // m_mesh->dump_ascii("Ex_plus", m_mesh->m_Ex_plus);
-    // m_mesh->dump_ascii("Ey_plus", m_mesh->m_Ey_plus);
-    // m_mesh->dump_ascii("Ez_plus", m_mesh->m_Ez_plus);
-    m_logger->trace("Server ended 'assign_forces'. Initiating computation...");
+    if(m_mesh != NULL) {
+	m_mesh->assign_forces(ad);
+    }
     return false;  // no need to hodl
 }
 
@@ -1179,8 +1201,11 @@ solver *iris::get_solver()
     case IRIS_SOLVER_CG:
 	return new poisson_solver_cg(this);
 
+    case IRIS_SOLVER_FMM:
+	return new fmm(this);
+	
     default:
-	return m_solver;
+	throw new std::logic_error("Unimplemented solver!");
     }
 }
 

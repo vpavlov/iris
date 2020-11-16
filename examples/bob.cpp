@@ -485,16 +485,16 @@ int main(int argc, char **argv)
     // calculations in order to prepare for the calculation proper.
     x->config_auto_tune(input.natoms, input.qtot2, CUTOFF);
     
-    // solver_param_t nsigmas;
-    // nsigmas.r = 6.0;
-    // x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
+    solver_param_t nsigmas;
+    nsigmas.r = 6.0;
+    x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
 
-    // solver_param_t pade;
-    // pade.i = 0;
-    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_M, pade);
+    solver_param_t pade;
+    pade.i = 0;
+    x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_M, pade);
 
-    // pade.i = 2;
-    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
+    pade.i = 2;
+    x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
     
     x->set_order(4);
     x->set_mesh_size(128, 128, 128);

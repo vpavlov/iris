@@ -43,7 +43,6 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 	void handle_box_resize() {};
-	void set_order(int in_order) {};
 	
 	void set_stencil_width(int in_width);
 	void set_max_iters(int in_max_iters);

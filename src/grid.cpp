@@ -92,7 +92,9 @@ void grid::select_grid_size()
 {
     int num_factors;
     int **factors = grid_factorizations(m_local_comm->m_size, &num_factors);
-    num_factors = filter_factors_mod(num_factors, factors, m_mesh->m_size);
+    if(m_mesh != NULL) {
+	num_factors = filter_factors_mod(num_factors, factors, m_mesh->m_size);
+    }
     num_factors = filter_factors_exact(num_factors, factors, m_pref);
     if(num_factors == 0) {
 	throw domain_error("Impossible grid processor assignment!");

@@ -55,7 +55,7 @@ proc_grid::~proc_grid()
 // re-configured.
 void proc_grid::commit()
 {
-    if(!m_mesh->m_initialized) {
+    if(m_mesh != NULL && !m_mesh->m_initialized) {
 	throw std::logic_error("proc_grid commit called, but mesh is not initialized!");
     }
 

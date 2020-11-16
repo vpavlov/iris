@@ -219,6 +219,7 @@ namespace ORG_NCSA_IRIS {
 
     public:
 	int m_which_solver;            // P3M, CG, ...
+	int m_order;                   // approximation order (different for different solvers)
 	int m_client_size;             // # of client nodes
 	int m_server_size;             // # of server nodes
 	int m_role;                    // is this node client or server or both
@@ -229,6 +230,10 @@ namespace ORG_NCSA_IRIS {
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 
+	std::map<int, int> m_ncharges;           // per sending rank
+	std::map<int, iris_real *> m_charges;    // per sending rank
+	std::map<int, iris_real *> m_forces;     // per recv rank
+	
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
 	bool                   m_compute_global_virial;  // whether to compute global long-range virial
 	iris_real              m_Ek;  // E(k) contribution to the global energy (from this process only)
