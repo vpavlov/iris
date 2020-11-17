@@ -31,9 +31,10 @@
 #include <mpi.h>
 #include "iris_gpu.h"
 #include "comm_rec_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "event.h"
 #include "memory.h"
+#include "tags.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -62,8 +63,12 @@ bool comm_rec_gpu::peek_event(event_t &out_event)
 	out_event.tag = status.MPI_TAG;
 	MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
 	if(out_event.size != 0) {
-	    out_event.data = memory::wmalloc(out_event.size);
-	}else {
+        if (out_event.tag==IRIS_TAG_CHARGES) {
+            out_event.data = memory_gpu::wmalloc(out_event.size);
+        } else {
+    	    out_event.data = memory::wmalloc(out_event.size);
+        }
+	} else {
 	    out_event.data = NULL;
 	}
 	MPI_Recv(out_event.data, out_event.size, MPI_BYTE,
