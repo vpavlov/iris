@@ -211,7 +211,7 @@ namespace ORG_NCSA_IRIS {
 	static void *wmalloc(size_t nbytes);
 	static void *wrealloc(void *ptr, size_t nbytes, size_t old_size);
 	static void wfree(void *ptr);
-	static void memory_set_kernel(iris_real* ptr, size_t n, iris_real val);
+	
 	//**********************************************************************
 	// 1D Arrays
 	//**********************************************************************
