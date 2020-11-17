@@ -38,6 +38,7 @@
 #include "event.h"
 #include "units.h"
 #include "solver_param.h"
+#include "buffer_manager_gpu.h"
 
 namespace ORG_NCSA_IRIS {
 
@@ -256,14 +257,16 @@ namespace ORG_NCSA_IRIS {
 	class comm_rec_gpu        *m_uber_comm;   // to facilitate comm with world
 	class comm_rec_gpu        *m_local_comm;  // ...within group (client/server)
 	class comm_rec_gpu        *m_inter_comm;  // ...between groups
-	class logger          *m_logger;      // Logger
+	class logger_gpu          *m_logger;      // Logger
 	class domain_gpu          *m_domain;      // Domain of the simulation
 	class proc_grid_gpu       *m_proc_grid;   // MPI Comm related stuff
 	class mesh_gpu            *m_mesh;        // Computational mesh
 	class charge_assigner_gpu *m_chass;       // Charge assignmen machinery
 	class poisson_solver  *m_solver;      // The Poisson equation solver itself
 	class units           *m_units;       // Units system to use
-    private:
+	class buffer_manager_gpu<iris_real>  *m_gpu_buffers; // manages pre-allocated buffers in the gpu memory
+    
+	private:
 	volatile bool m_quit;  // quit the main loop
     };
 }

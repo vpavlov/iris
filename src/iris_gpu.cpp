@@ -35,7 +35,7 @@
 #include <omp.h>
 #include <string.h>
 #include "iris_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "comm_rec_gpu.h"
 #include "domain_gpu.h"
 #include "mesh_gpu.h"
@@ -50,6 +50,7 @@
 #include "utils.h"
 #include "factorizer.h"
 #include "openmp.h"
+#include "buffer_manager_gpu.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -177,7 +178,7 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	clear_wff();
     }
 
-    m_logger = new logger(this);
+    m_logger = new logger_gpu(this);
 
     m_domain = NULL;
     m_proc_grid = NULL;
@@ -190,6 +191,8 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_proc_grid = new proc_grid_gpu(this);
 	m_mesh = new mesh_gpu(this);
 	m_chass = new charge_assigner_gpu(this);
+    #warning "remove hardcoding..."
+    m_gpu_buffers = new buffer_manager_gpu<iris_real>(16,1024*1024*1024); // 1GB of GPU Memory allocated
     }
 
     m_quit = false;
