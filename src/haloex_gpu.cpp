@@ -236,14 +236,7 @@ void haloex_gpu::send(int in_dim, int in_dir)
     int idx = in_dim*2 + in_dir;
     iris_real *sendbuf = m_sendbufs[idx];
 
-    int n = 0;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		sendbuf[n++] = m_data[i][j][k];
-	    }
-	}
-    }
+	copy_to_sendbuf(sendbuf,m_data,sx,sy,sz,ex,ey,ez);
     
     size_t size = nx*ny*nz*sizeof(iris_real);
     MPI_Isend(sendbuf, size, MPI_BYTE, *(m_hood + idx),
@@ -320,18 +313,8 @@ void haloex_gpu::recv(int in_dim, int in_dir)
     MPI_Recv(recvbuf, size, MPI_BYTE, *(m_hood + in_dim*2 + 1 - in_dir),
 	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
 
-    int n = 0;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		if(m_mode == 0) {
-		    m_data[i][j][k] += recvbuf[n++];
-		}else {
-		    m_data[i][j][k] = recvbuf[n++];
-		}
-	    }
-	}
-    }
+	copy_from_recvbuf(recvbuf, m_data, m_mode,
+					  sx, sy, sz, ex, ey, ez);
 }
 
 void haloex_gpu::exch(int dim)

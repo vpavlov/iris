@@ -72,7 +72,11 @@ namespace ORG_NCSA_IRIS {
 
 	MPI_Request m_req[6];
     };
-
+	
+	void copy_to_sendbuf(iris_real *sendbuf,iris_real ***data,
+						int sx,int sy, int sz, int ex, int ey,int ez);
+	void copy_from_recvbuf(iris_real *recvbuf,iris_real ***data, int mode,
+						int sx,int sy, int sz, int ex, int ey,int ez);
 }
 
 #endif
