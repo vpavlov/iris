@@ -32,9 +32,6 @@
 #include <limits>
 #include <new>
 
-#ifdef IRIS_CUDA
-
-#include "buffer_manager_gpu.h"
 #include "memory.h"
 
 namespace ORG_NCSA_IRIS {
@@ -137,6 +134,5 @@ namespace ORG_NCSA_IRIS {
     };
 
 };
-#endif
 
 #endif
