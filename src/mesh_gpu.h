@@ -84,6 +84,7 @@ namespace ORG_NCSA_IRIS {
 	void recv_field_halo(int in_dim, int in_dir);
 	void imtract_field();
 	void imtract_phi();
+	void assign_energy_virial_data(iris_real *forces, bool include_energy_virial);
 
     public:
 	bool      m_dirty;  // if we need to re-calculate upon commit

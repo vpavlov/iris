@@ -27,26 +27,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#error "not ported yet"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include "iris_gpu.h"
 #include "mesh_gpu.h"
-#include "proc_grid.h"
+#include "proc_grid_gpu.h"
 #include "memory.h"
-#include "domain.h"
-#include "logger.h"
+#include "domain_gpu.h"
+#include "logger_gpu.h"
 #include "event.h"
 #include "charge_assigner_gpu.h"
-#include "comm_rec.h"
+#include "comm_rec_gpu.h"
 #include "real.h"
 #include "tags.h"
-#include "poisson_solver.h"
+/////// temporary commented #include "poisson_solver.h"
 #include "openmp.h"
 #include "haloex_gpu.h"
 #include "timer.h"
 #include "cuda_parameters.h"
+#include "memory_gpu.cuh"
+#include "charge_assigner_gpu.cuh"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -192,22 +193,24 @@ void mesh_gpu::assign_charges_gpu(iris_real* sendbuff_gpu)
 }
 
 __global__
-void assign_charges1_kernel(iris_real *in_charges, iris_real ***m_rho_plus,
+void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
+	iris_real ***m_rho_plus,
 	iris_real lbox_xlo, iris_real lbox_ylo, iris_real lbox_zlo,
-	iris_real m_h_2, iris_real ics_bump, iris_real ics_center,
+	iris_real m_h_0, iris_real m_h_1, iris_real m_h_2,
+	iris_real ics_bump, iris_real ics_center,
 	int order, iris_real *m_coeff, iris_real m_h3inv, iris_real *sendbuff_gpu)
 {
 	size_t ndx = IRIS_CUDA_INDEX(x);
-    int chunk_size = IRIS_CUDA_CHUNK(x,n);
+    int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
     size_t from = ndx*chunk_size;
-	size_t to = MIN((ndx+1)*chunk_size,n);
+	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
 	
 	for(int n=from;n<to;n++) {
 		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
 		int iz = (int) (tz + ics_bump);
 
-		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h[0];
-		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h[1];
+		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
+		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
 
 		int ix = (int) (tx + ics_bump);
 		int iy = (int) (ty + ics_bump);
@@ -242,13 +245,14 @@ void assign_charges1_kernel(iris_real *in_charges, iris_real ***m_rho_plus,
 
 void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real *sendbuff_gpu)
 {
-    box_t<iris_real> *gbox = &(m_domain->m_global_box);
+    //box_t<iris_real> *gbox = &(m_domain->m_global_box);
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
-	assign_charges1_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>
-	(in_charges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, m_h[2], 
+	assign_charges1_kernel<<<get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>
+	(in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
+	m_h[0], m_h[1], m_h[2], 
 	m_chass->m_ics_bump, m_chass->m_ics_center,
-	m_chass->m_order,m_chass->m_coeff, m_h3inv, sendbuff_gpu);
+	m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
 
 }
 
@@ -267,6 +271,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 void mesh_gpu::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 			MPI_Request *out_req)
 {
+	#warning "not ported yet"
     int A = -m_chass->m_ics_from;
     int C = m_chass->m_ics_to;
     if(m_chass->m_order % 2) {
@@ -346,6 +351,7 @@ void mesh_gpu::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 
 void mesh_gpu::recv_rho_halo(int in_dim, int in_dir)
 {
+	#warning "not ported yet"
     event_t ev;
 
     m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
@@ -426,6 +432,30 @@ void mesh_gpu::recv_rho_halo(int in_dim, int in_dir)
     memory::wfree(ev.data);
 }
 
+__global__
+void extract_kernel(iris_real ***rho, iris_real ***rho_plus,
+						int sx, int sy,int sz, int ex,int ey, int ez)
+{
+	size_t xndx = IRIS_CUDA_INDEX(x);
+    int xchunk_size = IRIS_CUDA_CHUNK(x,ex-sx);
+    size_t yndx = IRIS_CUDA_INDEX(y);
+    int ychunk_size = IRIS_CUDA_CHUNK(y,ey-sy);
+    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
+
+	int i_from = sx+xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,ex);
+	int j_from = sy+yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ey);
+	int k_from = sz+zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,ez);
+
+	for(int i=i_from;i<i_to;i++) {
+		for(int j=j_from;j<j_to;j++) {
+			for(int k=k_from;k<k_to;k++) {
+				rho[i-sx][j-sy][k-sz] = rho_plus[i][j][k];
+			}
+		}
+	}
+}
+
 // The halo is exchanged; extract rho from rho_plus
 void mesh_gpu::extract_rho()
 {
@@ -436,24 +466,58 @@ void mesh_gpu::extract_rho()
     sx = sy = sz = -m_chass->m_ics_from;
     ex = sx + m_own_size[0];
     ey = sy + m_own_size[1];
-    ez = sz + m_own_size[2];
+	ez = sz + m_own_size[2];
 
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_rho[i-sx][j-sy][k-sz] = m_rho_plus[i][j][k];
-	    }
-	}
-    }
+	// nx = m_own_size[0] etc., but the code below left for simplicity 
+	nx = ex - sx;
+	ny = ey - sy;
+	nz = ez - sz;
+	
+	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
+	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
+	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
+    int nthreads = IRIS_CUDA_NTHREADS_3D;
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+	auto threads = dim3(nthreads,nthreads,nthreads);
+	
+	extract_kernel<<<blocks,threads>>>(m_rho, m_rho_plus,
+										   sx, sy, sz, ex, ey, ez);
+
+    cudaDeviceSynchronize();
+// port to gpu
+    // for(int i=sx;i<ex;i++) {
+	// for(int j=sy;j<ey;j++) {
+	//     for(int k=sz;k<ez;k++) {
+	// 	m_rho[i-sx][j-sy][k-sz] = m_rho_plus[i][j][k];
+	//     }
+	// }
+    // }
 }
 
+
 __global__
-void mesh_gpu::ijk_to_xyz(int i, int j, int k,
-		      iris_real &x, iris_real &y, iris_real &z)
+void imtract_kernel(iris_real ***v3_plus, iris_real ***v3,
+						int sx, int sy,int sz, int ex,int ey, int ez)
 {
-    x = m_domain->m_local_box.xlo + i * m_h[0];
-    y = m_domain->m_local_box.ylo + j * m_h[1];
-    z = m_domain->m_local_box.zlo + k * m_h[2];
+	size_t xndx = IRIS_CUDA_INDEX(x);
+    int xchunk_size = IRIS_CUDA_CHUNK(x,ex-sx);
+    size_t yndx = IRIS_CUDA_INDEX(y);
+    int ychunk_size = IRIS_CUDA_CHUNK(y,ey-sy);
+    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
+
+	int i_from = sx+xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,ex);
+	int j_from = sy+yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ey);
+	int k_from = sz+zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,ez);
+
+	for(int i=i_from;i<i_to;i++) {
+		for(int j=j_from;j<j_to;j++) {
+			for(int k=k_from;k<k_to;k++) {
+				v3_plus[i][j][k] = v3[i-sx][j-sy][k-sz];
+			}
+		}
+	}
 }
 
 // Copy Ex, Ey and Ez to inner regions of Ex_plus, etc., thus preparing
@@ -468,16 +532,39 @@ void mesh_gpu::imtract_field()
     ex = sx + m_own_size[0];
     ey = sy + m_own_size[1];
     ez = sz + m_own_size[2];
-    
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_Ex_plus[i][j][k] = m_Ex[i-sx][j-sy][k-sz];
-		m_Ey_plus[i][j][k] = m_Ey[i-sx][j-sy][k-sz];
-		m_Ez_plus[i][j][k] = m_Ez[i-sx][j-sy][k-sz];
-	    }
-	}
-    }
+	
+	// nx = m_own_size[0] etc., but the code below left for simplicity 
+	nx = ex - sx;
+	ny = ey - sy;
+	nz = ez - sz;
+	
+	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
+	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
+	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
+    int nthreads = IRIS_CUDA_NTHREADS_3D;
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+	auto threads = dim3(nthreads,nthreads,nthreads);
+	
+	imtract_kernel<<<blocks,threads>>>(m_Ex_plus, m_Ex,
+									   sx, sy, sz, ex, ey, ez);
+	imtract_kernel<<<blocks,threads>>>(m_Ey_plus, m_Ey,
+									   sx, sy, sz, ex, ey, ez);
+	imtract_kernel<<<blocks,threads>>>(m_Ez_plus, m_Ez,
+									   sx, sy, sz, ex, ey, ez);
+    cudaDeviceSynchronize();
+
+
+	////
+    // for(int i=sx;i<ex;i++) {
+	// for(int j=sy;j<ey;j++) {
+	//     for(int k=sz;k<ez;k++) {
+	// 	m_Ex_plus[i][j][k] = m_Ex[i-sx][j-sy][k-sz];
+	// 	m_Ey_plus[i][j][k] = m_Ey[i-sx][j-sy][k-sz];
+	// 	m_Ez_plus[i][j][k] = m_Ez[i-sx][j-sy][k-sz];
+	//     }
+	// }
+    // }
 }
 
 // Copy Ex, Ey and Ez to inner regions of Ex_plus, etc., thus preparing
@@ -492,14 +579,32 @@ void mesh_gpu::imtract_phi()
     ex = sx + m_own_size[0];
     ey = sy + m_own_size[1];
     ez = sz + m_own_size[2];
-    
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_phi_plus[i][j][k] = m_phi[i-sx][j-sy][k-sz];
-	    }
-	}
-    }
+	
+	// nx = m_own_size[0] etc., but the code below left for simplicity 
+	nx = ex - sx;
+	ny = ey - sy;
+	nz = ez - sz;
+
+	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
+	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
+	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
+    int nthreads = IRIS_CUDA_NTHREADS_3D;
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+	auto threads = dim3(nthreads,nthreads,nthreads);
+	
+	imtract_kernel<<<blocks,threads>>>(m_phi_plus, m_phi,
+									   sx, sy, sz, ex, ey, ez);
+
+    cudaDeviceSynchronize();
+	
+    // for(int i=sx;i<ex;i++) {
+	// for(int j=sy;j<ey;j++) {
+	//     for(int k=sz;k<ez;k++) {
+	// 	m_phi_plus[i][j][k] = m_phi[i-sx][j-sy][k-sz];
+	//     }
+	// }
+    // }
 }
 
 //
@@ -520,6 +625,7 @@ void mesh_gpu::imtract_phi()
 void mesh_gpu::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 			   MPI_Request *out_req)
 {
+	#warning "not ported yet"
     int A = -m_chass->m_ics_from;
     int C = m_chass->m_ics_to;
     if(m_chass->m_order % 2) {
@@ -602,8 +708,9 @@ void mesh_gpu::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
 
 void mesh_gpu::recv_field_halo(int in_dim, int in_dir)
 {
+	#warning "not ported yet"
     event_t ev;
-	#error "buffer manager not implemented"
+	//#error "buffer manager not implemented"
     m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
 			    IRIS_TAG_EX_HALO + in_dim*2 + in_dir, ev);
 
@@ -684,108 +791,172 @@ void mesh_gpu::recv_field_halo(int in_dim, int in_dir)
     memory::wfree(ev.data);
 }
 
-
-void mesh_gpu::assign_forces(bool ad)
+__global__
+void assign_energy_virial_data_kernel(iris_real* forces, iris_real Ek, iris_real* virial)
 {
-    bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
-    MPI_Comm comm = m_iris->client_comm();
+	forces[0] = Ek;
+	forces[1] = virial[0];
+	forces[2] = virial[1];
+	forces[3] = virial[2];
+	forces[4] = virial[3];
+	forces[5] = virial[4];
+	forces[6] = virial[5];
+}
 
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
-	int peer = it->first;
-	int ncharges = it->second;
-	int size = 7*sizeof(iris_real) +             // 1 real for the E(k) energy + 6 reals for the virial
-	    ncharges * 4 * sizeof(iris_real);        // 4 reals for each charge: id, Fx, Fy, Fz
-	iris_real *forces = (iris_real *)memory::wmalloc(size);
-
+void mesh_gpu::assign_energy_virial_data(iris_real *forces, bool include_energy_virial){
 	if(include_energy_virial) {
-	    forces[0] = m_iris->m_Ek;
-	    forces[1] = m_iris->m_virial[0];
-	    forces[2] = m_iris->m_virial[1];
-	    forces[3] = m_iris->m_virial[2];
-	    forces[4] = m_iris->m_virial[3];
-	    forces[5] = m_iris->m_virial[4];
-	    forces[6] = m_iris->m_virial[5];
+		assign_energy_virial_data_kernel<<<1,1>>>(forces,m_iris->m_Ek,m_iris->m_virial);
 	}else {
-	    forces[0] = 0.0;
-	    forces[1] = 0.0;
-	    forces[2] = 0.0;
-	    forces[3] = 0.0;
-	    forces[4] = 0.0;
-	    forces[5] = 0.0;
-	    forces[6] = 0.0;
+		memory_set_kernel<<<1,1>>>(forces,7, (iris_real)0.0);
 	}
-	
-	m_forces[peer] = forces;
-	if(ad) {
-	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
-	}else {
-	    assign_forces1(ncharges, m_charges[it->first], forces);
-	}
+	// cuda dev sync will happened after assing_forces1(_ad) 
+}
 
-	MPI_Request req;
-	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
-	MPI_Request_free(&req);
-	include_energy_virial = false;
-    }
+__global__
+void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
+	iris_real *out_forces,
+	iris_real ***m_Ex_plus, iris_real ***m_Ey_plus, iris_real ***m_Ez_plus,
+	iris_real lbox_xlo, iris_real lbox_ylo, iris_real lbox_zlo,
+	iris_real m_h_0, iris_real m_h_1, iris_real m_h_2,
+	iris_real ics_bump, iris_real ics_center,
+	int m_order, iris_real *m_coeff, iris_real m_units_ecf)
+{
+	size_t ndx = IRIS_CUDA_INDEX(x);
+    int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
+    size_t from = ndx*chunk_size;
+	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
+	
+	for(int n=from;n<to;n++) {
+		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
+		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
+		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
+
+		// the index of the cell that is to the "left" of the atom
+		int ix = (int) (tx + ics_bump);
+		int iy = (int) (ty + ics_bump);
+		int iz = (int) (tz + ics_bump);
+		
+		// distance (increasing to the left!) from the center of the
+		// interpolation grid
+		iris_real dx = ix - tx + ics_center;
+		iris_real dy = iy - ty + ics_center;
+		iris_real dz = iz - tz + ics_center;
+
+		iris_real weights[3][IRIS_MAX_ORDER];
+
+		compute_weights_dev(dx, dy, dz, m_coeff, weights, m_order);
+
+		iris_real ekx = 0.0;
+		iris_real eky = 0.0;
+		iris_real ekz = 0.0;
+		
+		for(int i = 0; i < m_order; i++) {
+		iris_real t1 = weights[0][i];
+		for(int j = 0; j < m_order; j++) {
+			iris_real t2 = t1 * weights[1][j];
+			for(int k = 0; k < m_order; k++) {
+			iris_real t3 = t2 * weights[2][k];
+			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
+			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
+			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+			}
+		}
+		}
+		
+		iris_real factor = in_charges[n*5 + 3] * m_units_ecf;
+		out_forces[7 + n*4 + 0] = in_charges[n*5 + 4]+0.333333333;  // id
+		out_forces[7 + n*4 + 1] = factor * ekx;
+		out_forces[7 + n*4 + 2] = factor * eky;
+		out_forces[7 + n*4 + 3] = factor * ekz;
+	}
 }
 
 void mesh_gpu::assign_forces1(int in_ncharges, iris_real *in_charges,
 			  iris_real *out_forces)
 {
-    box_t<iris_real> *gbox = &(m_domain->m_global_box);
+    //box_t<iris_real> *gbox = &(m_domain->m_global_box);
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
-#if defined _OPENMP
-#pragma omp parallel
-#endif
-    {
-	int tid = THREAD_ID;
-	int from, to;
-	setup_work_sharing(in_ncharges, m_iris->m_nthreads, &from, &to);
+	assign_forces1_kernel<<<get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(in_charges, in_ncharges, out_forces,
+							m_Ex_plus, m_Ey_plus, m_Ez_plus,
+							lbox->xlo, lbox->ylo, lbox->zlo,
+							m_h[0], m_h[1], m_h[2],
+							m_chass->m_ics_bump, m_chass->m_ics_center,
+							m_chass->m_order, m_chass->get_coeff(), m_units->ecf);
+	cudaDeviceSynchronize();
+}
 
+// I am writting here
+__global__
+void assign_forces1_ad_kernel(iris_real *in_charges, int in_ncharges,
+	iris_real *out_forces,
+	iris_real ***m_phi_plus,
+	iris_real gbox_xlo, iris_real gbox_ylo, iris_real gbox_zlo,
+	int m_own_offset_0, int m_own_offset_1, int m_own_offset_2,
+	iris_real m_h_0, iris_real m_h_1, iris_real m_h_2,
+	iris_real ics_bump, iris_real ics_center,
+	int m_order, iris_real *m_coeff, iris_real *m_dcoeff, iris_real m_units_ecf)
+{
+	size_t ndx = IRIS_CUDA_INDEX(x);
+    int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
+    size_t from = ndx*chunk_size;
+	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
+	
 	for(int n=from;n<to;n++) {
-	  iris_real tx=(in_charges[n*5+0]-lbox->xlo)/m_h[0];
-	  iris_real ty=(in_charges[n*5+1]-lbox->ylo)/m_h[1];
-	  iris_real tz=(in_charges[n*5+2]-lbox->zlo)/m_h[2];
+		iris_real tx=(in_charges[n*5+0]-gbox_xlo)/m_h_0-m_own_offset_0;
+		iris_real ty=(in_charges[n*5+1]-gbox_ylo)/m_h_1-m_own_offset_1;
+		iris_real tz=(in_charges[n*5+2]-gbox_zlo)/m_h_2-m_own_offset_2;
 
-	    // the index of the cell that is to the "left" of the atom
-	    int ix = (int) (tx + m_chass->m_ics_bump);
-	    int iy = (int) (ty + m_chass->m_ics_bump);
-	    int iz = (int) (tz + m_chass->m_ics_bump);
-	    
-	    // distance (increasing to the left!) from the center of the
-	    // interpolation grid
-	    iris_real dx = ix - tx + m_chass->m_ics_center;
-	    iris_real dy = iy - ty + m_chass->m_ics_center;
-	    iris_real dz = iz - tz + m_chass->m_ics_center;
+		// the index of the cell that is to the "left" of the atom
+		int ix = (int) (tx + ics_bump);
+		int iy = (int) (ty + ics_bump);
+		int iz = (int) (tz + ics_bump);
+		
+		// distance (increasing to the left!) from the center of the
+		// interpolation grid
+		iris_real dx = ix - tx + ics_center;
+		iris_real dy = iy - ty + ics_center;
+		iris_real dz = iz - tz + ics_center;
 
-	    m_chass->compute_weights(dx, dy, dz);
+		iris_real weights[3][IRIS_MAX_ORDER];
+		iris_real dweights[3][IRIS_MAX_ORDER];
 
-	    iris_real ekx = 0.0;
-	    iris_real eky = 0.0;
-	    iris_real ekz = 0.0;
-	    
-	    for(int i = 0; i < m_chass->m_order; i++) {
-		iris_real t1 = m_chass->m_weights[tid][0][i];
-		for(int j = 0; j < m_chass->m_order; j++) {
-		    iris_real t2 = t1 * m_chass->m_weights[tid][1][j];
-		    for(int k = 0; k < m_chass->m_order; k++) {
-			iris_real t3 = t2 * m_chass->m_weights[tid][2][k];
-			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
-			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
-			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
-		    }
+		compute_weights_dev(dx, dy, dz, m_coeff, weights, m_order);
+		compute_weights_dev(dx, dy, dz, m_dcoeff, dweights, m_order);
+
+
+		iris_real ekx = 0.0;
+		iris_real eky = 0.0;
+		iris_real ekz = 0.0;
+		
+		for(int i = 0; i < m_order; i++) {
+		for(int j = 0; j < m_order; j++) {
+			for(int k = 0; k < m_order; k++) {
+			ekx +=
+			    dweights[0][i] *
+			    weights[1][j] *
+			    weights[2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+			eky +=
+			    weights[0][i] *
+			    dweights[1][j] *
+			    weights[2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+			ekz +=
+			    weights[0][i] *
+			    weights[1][j] *
+			    dweights[2][k] *
+			    m_phi_plus[ix+i][iy+j][iz+k];
+			}
 		}
-	    }
-	    
-	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4]+0.333333333;  // id
-	    out_forces[7 + n*4 + 1] = factor * ekx;
-	    out_forces[7 + n*4 + 2] = factor * eky;
-	    out_forces[7 + n*4 + 3] = factor * ekz;
-	    m_logger->trace("out_forces %f %f %f %f in_charges %f %f %f",out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3],in_charges[n*5+0],in_charges[n*5+1],in_charges[n*5+2]);
+		}
+		
+		iris_real factor = in_charges[n*5 + 3] * m_units_ecf;
+		out_forces[7 + n*4 + 0] = in_charges[n*5 + 4]+0.333333333;  // id
+		out_forces[7 + n*4 + 1] = factor * ekx;
+		out_forces[7 + n*4 + 2] = factor * eky;
+		out_forces[7 + n*4 + 3] = factor * ekz;
 	}
-    }
 }
 
 void mesh_gpu::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
@@ -793,68 +964,14 @@ void mesh_gpu::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
 
-#if defined _OPENMP
-#pragma omp parallel
-#endif
-    {
-	int tid = THREAD_ID;
-	int from, to;
-	setup_work_sharing(in_ncharges, m_iris->m_nthreads, &from, &to);
-
-	for(int n=from;n<to;n++) {
-	    iris_real tx=(in_charges[n*5+0]-gbox->xlo)*m_hinv[0]-m_own_offset[0];
-	    iris_real ty=(in_charges[n*5+1]-gbox->ylo)*m_hinv[1]-m_own_offset[1];
-	    iris_real tz=(in_charges[n*5+2]-gbox->zlo)*m_hinv[2]-m_own_offset[2];
-	    
-	    // the index of the cell that is to the "left" of the atom
-	    int ix = (int) (tx + m_chass->m_ics_bump);
-	    int iy = (int) (ty + m_chass->m_ics_bump);
-	    int iz = (int) (tz + m_chass->m_ics_bump);
-	    
-	    // distance (increasing to the left!) from the center of the
-	    // interpolation grid
-	    iris_real dx = ix - tx + m_chass->m_ics_center;
-	    iris_real dy = iy - ty + m_chass->m_ics_center;
-	    iris_real dz = iz - tz + m_chass->m_ics_center;
-
-	    m_chass->compute_weights(dx, dy, dz);
-	    m_chass->compute_dweights(dx, dy, dz);
-
-	    iris_real ekx = 0.0;
-	    iris_real eky = 0.0;
-	    iris_real ekz = 0.0;
-	    
-	    for(int i = 0; i < m_chass->m_order; i++) {
-		for(int j = 0; j < m_chass->m_order; j++) {
-		    for(int k = 0; k < m_chass->m_order; k++) {
-			ekx +=
-			    m_chass->m_dweights[tid][0][i] *
-			    m_chass->m_weights[tid][1][j] *
-			    m_chass->m_weights[tid][2][k] *
-			    m_phi_plus[ix+i][iy+j][iz+k];
-			eky +=
-			    m_chass->m_weights[tid][0][i] *
-			    m_chass->m_dweights[tid][1][j] *
-			    m_chass->m_weights[tid][2][k] *
-			    m_phi_plus[ix+i][iy+j][iz+k];
-			ekz +=
-			    m_chass->m_weights[tid][0][i] *
-			    m_chass->m_weights[tid][1][j] *
-			    m_chass->m_dweights[tid][2][k] *
-			    m_phi_plus[ix+i][iy+j][iz+k];
-		    }
-		}
-	    }
-	    ekx *= m_hinv[0];
-	    eky *= m_hinv[1];
-	    ekz *= m_hinv[2];
-	    
-	    iris_real factor = in_charges[n*5 + 3] * m_units->ecf;
-	    out_forces[7 + n*4 + 0] = in_charges[n*5 + 4];  // id
-	    out_forces[7 + n*4 + 1] = factor * ekx;
-	    out_forces[7 + n*4 + 2] = factor * eky;
-	    out_forces[7 + n*4 + 3] = factor * ekz;
-	}
-    }
+	assign_forces1_ad_kernel<<<get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(in_charges, in_ncharges, out_forces,
+		m_phi_plus,
+		gbox->xlo,
+		gbox->ylo,
+		gbox->zlo, 
+		m_own_offset[0], m_own_offset[1], m_own_offset[2],
+		m_h[0], m_h[1], m_h[2],
+		m_chass->m_ics_bump, m_chass->m_ics_center,
+		m_chass->m_order, m_chass->get_coeff(), m_chass->get_dcoeff(), m_units->ecf);
+	cudaDeviceSynchronize();
 }
-

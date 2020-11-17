@@ -27,7 +27,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#error "not ported yet"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -36,7 +35,7 @@
 #include "proc_grid_gpu.h"
 #include "memory.h"
 #include "domain_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "event.h"
 #include "charge_assigner_gpu.h"
 #include "comm_rec_gpu.h"
@@ -71,11 +70,11 @@ mesh_gpu::~mesh_gpu()
     memory_gpu::destroy_3d(m_Ez_plus);
     
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	memory::wfree(it->second);
+	memory_gpu::wfree(it->second);
     }
 
     for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
-	memory::wfree(it->second);
+	memory_gpu::wfree(it->second);
     }
 
     if(m_rho_haloex != NULL) {
@@ -322,55 +321,31 @@ void mesh_gpu::commit()
 
 void mesh_gpu::assign_charges()
 {
-    iris_real sendbuf_gpu[2]; allocate and clear on gpu
+    iris_real *sendbuf_gpu;
     iris_real recvbuf[2];
+	#warning "use gpu buffer manager here..."
+	memory_gpu::create_1d(sendbuf_gpu,2,true);
 
-
-	// #error to be ported to cuda device
+	// ported to cuda device ???
     // memset(&(m_rho_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 	// memset(&(m_Ex_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 	// memset(&(m_Ey_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 	// memset(&(m_Ez_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
 
-    // for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
-	// int ncharges = it->second;
-	// iris_real *charges = m_charges[it->first];
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+		int ncharges = it->second;
+		iris_real *charges = m_charges[it->first];
 
-	// for(int i = 0; i < ncharges; i++) {
-	//     iris_real q = charges[i*5 + 3];
-	//     sendbuf[0] += q;
-	//     sendbuf[1] += q*q;
-	// }
-	// m_logger->trace("assign_charge called assign_charges1");
-	// assign_charges1(ncharges, charges);
-    // }
+		m_logger->trace("assign_charge called assign_charges_gpu");
+		assign_charges1(ncharges, charges,sendbuf_gpu);
+    }
 
     m_logger->trace("assign_charge calling MPI_Allreduce");
-    MPI_Allreduce(sendbuf, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+    MPI_Allreduce(sendbuf_gpu, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
     m_logger->trace("assign_charge called MPI_Allreduce");
     m_qtot = recvbuf[0];
     m_q2tot = recvbuf[1];
-}
-
-// The halo is exchanged; extract rho from rho_plus
-void mesh_gpu::extract_rho()
-{
-    int sx, nx, ex;
-    int sy, ny, ey;
-    int sz, nz, ez;
-
-    sx = sy = sz = -m_chass->m_ics_from;
-    ex = sx + m_own_size[0];
-    ey = sy + m_own_size[1];
-    ez = sz + m_own_size[2];
-
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_rho[i-sx][j-sy][k-sz] = m_rho_plus[i][j][k];
-	    }
-	}
-    }
+	memory_gpu::wfree(sendbuf_gpu);
 }
 
 void mesh_gpu::exchange_rho_halo()
@@ -407,3 +382,31 @@ void mesh_gpu::exchange_phi_halo()
     m_phi_haloex->exch_full();
 }
 
+void mesh_gpu::assign_forces(bool ad)
+{
+    bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
+    MPI_Comm comm = m_iris->client_comm();
+
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	int peer = it->first;
+	int ncharges = it->second;
+	int size = 7*sizeof(iris_real) +             // 1 real for the E(k) energy + 6 reals for the virial
+	    ncharges * 4 * sizeof(iris_real);        // 4 reals for each charge: id, Fx, Fy, Fz
+	#warning "buffer manager???"
+	iris_real *forces = (iris_real *)memory_gpu::wmalloc(size);
+
+	assign_energy_virial_data(forces,include_energy_virial);
+	
+	m_forces[peer] = forces;
+	if(ad) {
+	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
+	}else {
+	    assign_forces1(ncharges, m_charges[it->first], forces);
+	}
+
+	MPI_Request req;
+	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
+	MPI_Request_free(&req);
+	include_energy_virial = false;
+    }
+}
