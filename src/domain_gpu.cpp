@@ -30,10 +30,10 @@
 #include <stdexcept>
 #include "iris_gpu.h"
 #include "domain_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "proc_grid.h"
 #include "mesh_gpu.h"
-#include "poisson_solver.h"
+#include "poisson_solver_gpu.h"
 
 using namespace ORG_NCSA_IRIS;
 
