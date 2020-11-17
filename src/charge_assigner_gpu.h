@@ -110,10 +110,10 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_coeff;      // interpolation coefficients, depend on order
 	iris_real *m_dcoeff;     // derivative of interpolation coefficients
 
+	public:
+	iris_real* get_coeff() const { return m_coeff;};
+	iris_real* get_dcoeff() const { return m_dcoeff;};
     };
 
-	// device function for weights computing
-	void compute_weights_dev(iris_real dx, iris_real dy, iris_real dz, 
-                         iris_real* m_coeff, iris_real*** weights, int order);
 }
 #endif

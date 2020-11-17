@@ -33,11 +33,11 @@
 #include "iris_gpu.h"
 #include "charge_assigner_gpu.h"
 #include "mesh_gpu.h"
-#include "proc_grid.h"
+#include "proc_grid_gpu.h"
 #include "comm_rec_gpu.h"
 #include "memory.h"
 #include "domain_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "event.h"
 #include "openmp.h"
 #include "cuda_parameters.h"
@@ -142,7 +142,7 @@ static iris_real gfd_coeff6[] = { 1.0, -2.0, 19.0/15, -256.0/945, 62.0/4725, -4.
 static iris_real gfd_coeff7[] = { 1.0, -7.0/3, 28.0/15, -16.0/27, 26.0/405, -2.0/1485, 4.0/6081075 };
 
 charge_assigner_gpu::charge_assigner_gpu(iris_gpu *obj)
-    :state_accessor(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL)
+    :state_accessor_gpu(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL)
 {
 }
 
@@ -245,7 +245,7 @@ void charge_assigner_gpu::commit()
 
 __device__
 void compute_weights_dev(iris_real dx, iris_real dy, iris_real dz, 
-                         iris_real* m_coeff, iris_real*** weights, int order)
+                         iris_real* m_coeff, iris_real (&weights)[3][IRIS_MAX_ORDER], int order)
 {
     iris_real r1, r2, r3;
     for(int i = 0; i < order; i++) {
@@ -310,5 +310,5 @@ void compute_dweights_kernel(iris_real dx, iris_real dy, iris_real dz,int tid, i
 void charge_assigner_gpu::compute_dweights(iris_real dx, iris_real dy, iris_real dz)
 {
     int tid = THREAD_ID;
-    compute_dweights_kernel<<<1,m_order>>>(dx, dy, dz, tid, m_coeff, m_weights, m_order);
+    compute_dweights_kernel<<<1,m_order>>>(dx, dy, dz, tid, m_dcoeff, m_dweights, m_order);
 }
