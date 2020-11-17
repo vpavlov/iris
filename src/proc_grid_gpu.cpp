@@ -31,7 +31,7 @@
 #include "iris_gpu.h"
 #include "proc_grid_gpu.h"
 #include "comm_rec_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "factorizer.h"
 
 #include "domain_gpu.h"

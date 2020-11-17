@@ -32,7 +32,7 @@
 #include <stdexcept>
 #include "iris_gpu.h"
 #include "remap_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "memory.h"
 #include "comm_rec.h"
 #include "tags.h"

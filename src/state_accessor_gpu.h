@@ -68,7 +68,8 @@ namespace ORG_NCSA_IRIS {
 	    m_mesh(obj->m_mesh),
 	    m_chass(obj->m_chass),
 	    m_solver(obj->m_solver),
-	    m_units(obj->m_units)
+	    m_units(obj->m_units),
+		m_gpu_buffers(obj->m_gpu_buffers)
 	{};
 
 	virtual ~state_accessor_gpu() {};
@@ -78,13 +79,14 @@ namespace ORG_NCSA_IRIS {
 	comm_rec_gpu *&m_uber_comm;
 	comm_rec_gpu *&m_local_comm;
 	comm_rec_gpu *&m_inter_comm;
-	logger *&m_logger;
+	logger_gpu *&m_logger;
 	domain_gpu *&m_domain;
 	proc_grid_gpu *&m_proc_grid;
 	mesh_gpu *&m_mesh;
 	charge_assigner_gpu *&m_chass;
 	poisson_solver *&m_solver;
 	units *&m_units;
+	buffer_manager_gpu<iris_real> *&m_gpu_buffers;
     };
 
 }

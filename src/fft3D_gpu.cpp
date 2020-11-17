@@ -31,7 +31,7 @@
 #include "iris_gpu.h"
 #include "fft3D_gpu.h"
 #include "mesh_gpu.h"
-#include "logger.h"
+#include "logger_gpu.h"
 #include "grid_gpu.h"
 #include "remap_gpu.h"
 #include "comm_rec_gpu.h"
