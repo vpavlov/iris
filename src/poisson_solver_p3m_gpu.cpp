@@ -55,7 +55,7 @@ poisson_solver_p3m_gpu::poisson_solver_p3m_gpu(class iris_gpu *obj)
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
-      m_work1(NULL), m_work2(NULL), m_work3(NULL),
+      m_work1(NULL), m_work2(NULL), m_work3(NULL), m_Ek_vir(NULL),
       m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
@@ -73,6 +73,7 @@ poisson_solver_p3m_gpu::~poisson_solver_p3m_gpu()
     memory_gpu::destroy_1d(m_work1);
     memory_gpu::destroy_1d(m_work2);
     memory_gpu::destroy_1d(m_work3);
+    memory_gpu::destroy_1d(m_Ek_vir);
     if(m_fft1) { delete m_fft1; }
     if(m_fft2) { delete m_fft2; }
     if(m_fft_grid) { delete m_fft_grid; }
@@ -141,6 +142,9 @@ void poisson_solver_p3m_gpu::commit()
     memory_gpu::destroy_2d(m_vc);
     memory_gpu::create_2d(m_vc, m_fft_size[0]*m_fft_size[1]*m_fft_size[2], 6);
 
+    memory_gpu::destroy_1d(m_Ek_vir);
+    memory_gpu::create_1d(m_Ek_vir, 7);
+
     if (m_denominator_x==NULL) {
 	memory_gpu::create_1d(m_denominator_x, m_fft_size[0]);
 	memory_gpu::create_1d(m_denominator_y, m_fft_size[1]);
@@ -176,50 +180,6 @@ void poisson_solver_p3m_gpu::commit()
     m_dirty = false;
 }
 
-#error "not ported"
-void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
-{
-    // FFT is not normalized, so we need to do that now
-    iris_real s2 = square(1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]));
-
-    int nx = m_fft_size[0];
-    int ny = m_fft_size[1];
-    int nz = m_fft_size[2];
-
-    if(m_iris->m_compute_global_virial) {
-	int idx = 0;
-	int n = 0;
-	for(int i=0;i<nx;i++) {
-	    for(int j=0;j<ny;j++) {
-		for(int k=0;k<nz;k++) {
-		    iris_real ener = s2 * m_greenfn[n++] *
-			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
-			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
-		    for(int m = 0;m<6;m++) {
-			m_iris->m_virial[m] += ener * m_vc[idx/2][m];
-		    }
-		    if(m_iris->m_compute_global_energy) {
-			m_iris->m_Ek += ener;
-		    }
-		    idx += 2;
-		}
-	    }
-	}
-    }else {
-	int idx = 0;
-	int n = 0;
-	for(int i=0;i<nx;i++) {
-	    for(int j=0;j<ny;j++) {
-		for(int k=0;k<nz;k++) {
-		    m_iris->m_Ek += s2 * m_greenfn[n++] *
-			(in_rho_phi[idx  ] * in_rho_phi[idx  ] +
-			 in_rho_phi[idx+1] * in_rho_phi[idx+1]);
-		    idx += 2;
-		}
-	    }
-	}
-    }
-}
 #error "not ported"
 void poisson_solver_p3m_gpu::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
 {
