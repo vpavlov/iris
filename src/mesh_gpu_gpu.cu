@@ -443,9 +443,9 @@ void extract_kernel(iris_real ***rho, iris_real ***rho_plus,
     size_t zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
 
-	int i_from = sx+xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,ex);
-	int j_from = sy+yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ey);
-	int k_from = sz+zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,ez);
+	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
+	int j_from = sy+yndx*ychunk_size, j_to = MIN(sy+(yndx+1)*ychunk_size,ey);
+	int k_from = sz+zndx*zchunk_size, k_to = MIN(sz+(zndx+1)*zchunk_size,ez);
 
 	for(int i=i_from;i<i_to;i++) {
 		for(int j=j_from;j<j_to;j++) {
@@ -507,9 +507,9 @@ void imtract_kernel(iris_real ***v3_plus, iris_real ***v3,
     size_t zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
 
-	int i_from = sx+xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,ex);
-	int j_from = sy+yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ey);
-	int k_from = sz+zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,ez);
+	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
+	int j_from = sy+yndx*ychunk_size, j_to = MIN(sy+(yndx+1)*ychunk_size,ey);
+	int k_from = sz+zndx*zchunk_size, k_to = MIN(sz+(zndx+1)*zchunk_size,ez);
 
 	for(int i=i_from;i<i_to;i++) {
 		for(int j=j_from;j<j_to;j++) {
