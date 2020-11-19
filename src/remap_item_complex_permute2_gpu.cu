@@ -42,7 +42,7 @@ remap_item_complex_permute2_gpu::~remap_item_complex_permute2_gpu()
 }
 
 __global__
-void unpack_kernel(iris_real *src, iris_real *dest,
+void unpack_kernel2(iris_real *src, iris_real *dest,
 				int m_nx, int m_ny, int m_nz,
 				int m_stride_plane, int m_stride_line)
 {
@@ -84,6 +84,6 @@ void remap_item_complex_permute2_gpu::unpack(iris_real *src, iris_real *dest)
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
 	auto threads = dim3(nthreads,nthreads,nthreads);
 	
-	unpack_kernel<<<blocks,threads>>>
+	unpack_kernel2<<<blocks,threads>>>
 	(src, dest, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
 }

@@ -215,7 +215,7 @@ namespace ORG_NCSA_IRIS {
 	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
 	int  h_estimate(int dim, iris_real alpha, iris_real eps);
 	bool good_factor_quality(int n);
-	class poisson_solver *get_solver();
+	class poisson_solver_gpu *get_solver();
 
     public:
 	int m_which_solver;            // P3M, CG, ...
@@ -262,7 +262,7 @@ namespace ORG_NCSA_IRIS {
 	class proc_grid_gpu       *m_proc_grid;   // MPI Comm related stuff
 	class mesh_gpu            *m_mesh;        // Computational mesh
 	class charge_assigner_gpu *m_chass;       // Charge assignmen machinery
-	class poisson_solver  *m_solver;      // The Poisson equation solver itself
+	class poisson_solver_gpu  *m_solver;      // The Poisson equation solver itself
 	class units           *m_units;       // Units system to use
 	class buffer_manager_gpu<iris_real>  *m_gpu_buffers; // manages pre-allocated buffers in the gpu memory
     

@@ -84,7 +84,7 @@ namespace ORG_NCSA_IRIS {
 	proc_grid_gpu *&m_proc_grid;
 	mesh_gpu *&m_mesh;
 	charge_assigner_gpu *&m_chass;
-	poisson_solver *&m_solver;
+	poisson_solver_gpu *&m_solver;
 	units *&m_units;
 	buffer_manager_gpu<iris_real> *&m_gpu_buffers;
     };

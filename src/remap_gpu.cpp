@@ -34,14 +34,14 @@
 #include "remap_gpu.h"
 #include "logger_gpu.h"
 #include "memory.h"
-#include "comm_rec.h"
+#include "comm_rec_gpu.h"
 #include "tags.h"
 #include "utils.h"
 #include "remap_item_gpu.h"
 #include "remap_item_complex_permute_gpu.h"
 #include "remap_item_complex_permute2_gpu.h"
 
-#error "buffer allocation (buffer_manager) and gpu dev synchronization NOT READY"
+#warning "buffer allocation (buffer_manager) and gpu dev synchronization NOT READY"
 
 using namespace ORG_NCSA_IRIS;
 remap_gpu::remap_gpu(class iris_gpu *obj,
@@ -401,8 +401,8 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	recv_buff_size += m_recv_plans[i].m_size;
     }
 
-    iris_real *send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
-    iris_real *recv_buff = (iris_real *)memory::wmalloc(recv_buff_size * sizeof(iris_real));
+    iris_real *send_buff = (iris_real *)memory_gpu::wmalloc(send_buff_size * sizeof(iris_real));
+    iris_real *recv_buff = (iris_real *)memory_gpu::wmalloc(recv_buff_size * sizeof(iris_real));
     int *send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     int *recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     int *send_offsets = (int *)memory::wmalloc(m_comm_len * sizeof(int));
@@ -460,6 +460,6 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
     memory::wfree(send_offsets);
     memory::wfree(recv_offsets);
     memory::wfree(recv_map);
-    memory::wfree(send_buff);
-    memory::wfree(recv_buff);
+    memory_gpu::wfree(send_buff);
+    memory_gpu::wfree(recv_buff);
 }

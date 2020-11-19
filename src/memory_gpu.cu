@@ -34,6 +34,7 @@
 #include <cstdint>
 #include "memory.h"
 #include "utils.h"
+#include "memory_gpu.cuh"
 #include "cuda_parameters.h"
 
 using namespace ORG_NCSA_IRIS;
@@ -69,7 +70,7 @@ void memory_gpu::wfree(void *ptr)
 
 
 __global__
-void memory_gpu::memory_set_kernel(iris_real* ptr, size_t n, iris_real val)
+void memory_set_kernel(iris_real* ptr, size_t n, iris_real val)
 {
     size_t ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,n);
@@ -138,7 +139,7 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
         cudaDeviceSynchronize();
     }
 
-    assign_2d_indexing_kernel<iris_real><<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>(array,data,n1,n2);
+    assign_2d_indexing_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,data,n1,n2);
     cudaDeviceSynchronize();
 
     return array;

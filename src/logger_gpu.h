@@ -43,7 +43,7 @@ namespace ORG_NCSA_IRIS {
 
     public:
 
-	logger_gpu(class iris *obj);
+	logger_gpu(class iris_gpu *obj);
 	~logger_gpu();
 
 	void set_log_level(int in_log_level) { m_log_level = in_log_level; };

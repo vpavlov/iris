@@ -40,7 +40,7 @@
 #include "charge_assigner_gpu.h"
 #include "comm_rec_gpu.h"
 #include "tags.h"
-#include "poisson_solver.h"
+#include "poisson_solver_gpu.h"
 #include "openmp.h"
 #include "haloex_gpu.h"
 #include "timer.h"

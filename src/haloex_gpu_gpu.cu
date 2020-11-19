@@ -1,4 +1,5 @@
 #include "cuda_parameters.h"
+using namespace ORG_NCSA_IRIS;
 
 __global__
 void copy_to_sendbuf_kernel(iris_real *sendbuf, iris_real ***data,

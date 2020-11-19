@@ -31,6 +31,7 @@
 #define __IRIS_MEMORY_H__
 
 #include <stdlib.h>
+#include "real.h"
 
 namespace ORG_NCSA_IRIS {
 

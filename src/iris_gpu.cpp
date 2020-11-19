@@ -27,7 +27,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#error "not ported yet"
 #include <stdexcept>
 #include <cmath>
 #include <unistd.h>
@@ -40,12 +39,12 @@
 #include "domain_gpu.h"
 #include "mesh_gpu.h"
 #include "charge_assigner_gpu.h"
-#include "proc_grid.h"
+#include "proc_grid_gpu.h"
 #include "memory.h"
 #include "tags.h"
-#include "poisson_solver.h"
-#include "poisson_solver_p3m.h"
-#include "poisson_solver_cg.h"
+#include "poisson_solver_gpu.h"
+#include "poisson_solver_p3m_gpu.h"
+#include "poisson_solver_cg_gpu.h"
 #include "timer.h"
 #include "utils.h"
 #include "factorizer.h"
@@ -991,7 +990,7 @@ void iris_gpu::auto_tune_parameters()
     }
 }
 
-iris_real opt_acc_fn(iris_real alpha, void *obj)
+iris_real opt_acc_fn_gpu(iris_real alpha, void *obj)
 {
     iris_gpu *p = (iris_gpu *)obj;
     iris_real Q2 = p->m_qtot2;
@@ -1038,7 +1037,7 @@ void iris_gpu::atp_scenario1()
     int ny = h_estimate(1, alpha, eps);
     int nz = h_estimate(2, alpha, eps);
     m_mesh->set_size(nx, ny, nz);
-    m_alpha = root_of(opt_acc_fn, alpha, this);
+    m_alpha = root_of(opt_acc_fn_gpu, alpha, this);
     m_logger->info("  Final   α = %f; ε = %g", m_alpha, m_accuracy);
 }
 
@@ -1172,14 +1171,14 @@ bool iris_gpu::good_factor_quality(int n)
     }
 }
 
-poisson_solver *iris_gpu::get_solver()
+poisson_solver_gpu *iris_gpu::get_solver()
 {
     switch(m_which_solver) {
     case IRIS_SOLVER_P3M:
-	return new poisson_solver_p3m(this);
+	return new poisson_solver_p3m_gpu(this);
 
     case IRIS_SOLVER_CG:
-	return new poisson_solver_cg(this);
+	return new poisson_solver_cg_gpu(this);
     }
 }
 

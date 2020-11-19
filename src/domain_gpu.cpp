@@ -31,7 +31,7 @@
 #include "iris_gpu.h"
 #include "domain_gpu.h"
 #include "logger_gpu.h"
-#include "proc_grid.h"
+#include "proc_grid_gpu.h"
 #include "mesh_gpu.h"
 #include "poisson_solver_gpu.h"
 
