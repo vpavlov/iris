@@ -268,169 +268,169 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 // The routines below take this into account
 //
 // TODO: optimization: handle the case when peer is self
-void mesh_gpu::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
-			MPI_Request *out_req)
-{
-	#warning "not ported yet"
-    int A = -m_chass->m_ics_from;
-    int C = m_chass->m_ics_to;
-    if(m_chass->m_order % 2) {
-	C++;
-    }
+// void mesh_gpu::send_rho_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
+// 			MPI_Request *out_req)
+// {
+// 	#warning "not ported yet"
+//     int A = -m_chass->m_ics_from;
+//     int C = m_chass->m_ics_to;
+//     if(m_chass->m_order % 2) {
+// 	C++;
+//     }
 
-    int sx, nx, ex;
-    int sy, ny, ey;
-    int sz, nz, ez;
+//     int sx, nx, ex;
+//     int sy, ny, ey;
+//     int sz, nz, ez;
 
-    if(in_dim == 0) {
-	int B = m_own_size[0];
-	if(in_dir == 0) {
-	    sx = A + B;
-	    nx = C;
-	}else {
-	    sx = 0;
-	    nx = A;
-	}
+//     if(in_dim == 0) {
+// 	int B = m_own_size[0];
+// 	if(in_dir == 0) {
+// 	    sx = A + B;
+// 	    nx = C;
+// 	}else {
+// 	    sx = 0;
+// 	    nx = A;
+// 	}
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else if(in_dim == 1) { 
-	int B = m_own_size[1];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else if(in_dim == 1) { 
+// 	int B = m_own_size[1];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	if(in_dir == 0) {
-	    sy = A + B;
-	    ny = C;
-	}else {
-	    sy = 0;
-	    ny = A;
-	}
+// 	if(in_dir == 0) {
+// 	    sy = A + B;
+// 	    ny = C;
+// 	}else {
+// 	    sy = 0;
+// 	    ny = A;
+// 	}
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else {  
-	int B = m_own_size[2];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else {  
+// 	int B = m_own_size[2];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	if(in_dir == 0) {
-	    sz = A + B;
-	    nz = C;
-	}else {
-	    sz = 0;
-	    nz = A;
-	}
-    }
+// 	if(in_dir == 0) {
+// 	    sz = A + B;
+// 	    nz = C;
+// 	}else {
+// 	    sz = 0;
+// 	    nz = A;
+// 	}
+//     }
 
-    ex = sx + nx;
-    ey = sy + ny;
-    ez = sz + nz;
+//     ex = sx + nx;
+//     ey = sy + ny;
+//     ez = sz + nz;
 
-    size_t size = nx*ny*nz*sizeof(iris_real);
-    *out_sendbuf = (iris_real *)memory::wmalloc(size); 
-    int n = 0;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		(*out_sendbuf)[n++] = m_rho_plus[i][j][k];
-	    }
-	}
-    }
-    m_iris->send_event(m_local_comm->m_comm,
-		       m_proc_grid->m_hood[in_dim][in_dir],
-		       IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, size,
-		       *out_sendbuf, out_req, NULL);
-}
+//     size_t size = nx*ny*nz*sizeof(iris_real);
+//     *out_sendbuf = (iris_real *)memory_gpu::wmalloc(size); 
+//     int n = 0;
+//     for(int i=sx;i<ex;i++) {
+// 	for(int j=sy;j<ey;j++) {
+// 	    for(int k=sz;k<ez;k++) {
+// 		(*out_sendbuf)[n++] = m_rho_plus[i][j][k];
+// 	    }
+// 	}
+//     }
+//     m_iris->send_event(m_local_comm->m_comm,
+// 		       m_proc_grid->m_hood[in_dim][in_dir],
+// 		       IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, size,
+// 		       *out_sendbuf, out_req, NULL);
+// }
 
-void mesh_gpu::recv_rho_halo(int in_dim, int in_dir)
-{
-	#warning "not ported yet"
-    event_t ev;
+// void mesh_gpu::recv_rho_halo(int in_dim, int in_dir)
+// {
+// 	#warning "not ported yet"
+//     event_t ev;
 
-    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
-			    IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, ev);
+//     m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
+// 			    IRIS_TAG_RHO_HALO + in_dim*2 + in_dir, ev);
 
-    int A = -m_chass->m_ics_from;
-    int C = m_chass->m_ics_to;
-    if(m_chass->m_order % 2) {
-	C++;
-    }
+//     int A = -m_chass->m_ics_from;
+//     int C = m_chass->m_ics_to;
+//     if(m_chass->m_order % 2) {
+// 	C++;
+//     }
 
-    int sx, nx, ex;
-    int sy, ny, ey;
-    int sz, nz, ez;
+//     int sx, nx, ex;
+//     int sy, ny, ey;
+//     int sz, nz, ez;
 
-    if(in_dim == 0) {
-	int B = m_own_size[0];
+//     if(in_dim == 0) {
+// 	int B = m_own_size[0];
 
-	if(in_dir == 0) {   // comes from left
-	    sx = A;
-	    nx = C;
-	}else {
-	    sx = B;
-	    nx = A;
-	}
+// 	if(in_dir == 0) {   // comes from left
+// 	    sx = A;
+// 	    nx = C;
+// 	}else {
+// 	    sx = B;
+// 	    nx = A;
+// 	}
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else if(in_dim == 1) { 
-	int B = m_own_size[1];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else if(in_dim == 1) { 
+// 	int B = m_own_size[1];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	if(in_dir == 0) {
-	    sy = A;
-	    ny = C;
-	}else {
-	    sy = B;
-	    ny = A;
-	}
+// 	if(in_dir == 0) {
+// 	    sy = A;
+// 	    ny = C;
+// 	}else {
+// 	    sy = B;
+// 	    ny = A;
+// 	}
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else {  
-	int B = m_own_size[2];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else {  
+// 	int B = m_own_size[2];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	if(in_dir == 0) {
-	    sz = A;
-	    nz = C;
-	}else {
-	    sz = B;
-	    nz = A;
-	}
-    }
+// 	if(in_dir == 0) {
+// 	    sz = A;
+// 	    nz = C;
+// 	}else {
+// 	    sz = B;
+// 	    nz = A;
+// 	}
+//     }
 
-    ex = sx + nx;
-    ey = sy + ny;
-    ez = sz + nz;
+//     ex = sx + nx;
+//     ey = sy + ny;
+//     ez = sz + nz;
     
-    int n = 0;
-    iris_real *data = (iris_real *)ev.data;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_rho_plus[i][j][k] += data[n++];
-	    }
-	}
-    }
+//     int n = 0;
+//     iris_real *data = (iris_real *)ev.data;
+//     for(int i=sx;i<ex;i++) {
+// 	for(int j=sy;j<ey;j++) {
+// 	    for(int k=sz;k<ez;k++) {
+// 		m_rho_plus[i][j][k] += data[n++];
+// 	    }
+// 	}
+//     }
     
-    memory::wfree(ev.data);
-}
+//     memory::wfree(ev.data);
+// }
 
 __global__
 void extract_kernel(iris_real ***rho, iris_real ***rho_plus,
@@ -622,174 +622,174 @@ void mesh_gpu::imtract_phi()
 // |x|YYeeeX|yy|
 //
 // TODO: optimization: handle the case when peer is self
-void mesh_gpu::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
-			   MPI_Request *out_req)
-{
-	#warning "not ported yet"
-    int A = -m_chass->m_ics_from;
-    int C = m_chass->m_ics_to;
-    if(m_chass->m_order % 2) {
-	C++;
-    }
+// void mesh_gpu::send_field_halo(int in_dim, int in_dir, iris_real **out_sendbuf,
+// 			   MPI_Request *out_req)
+// {
+// 	#warning "not ported yet"
+//     int A = -m_chass->m_ics_from;
+//     int C = m_chass->m_ics_to;
+//     if(m_chass->m_order % 2) {
+// 	C++;
+//     }
 
-    int sx, nx, ex;
-    int sy, ny, ey;
-    int sz, nz, ez;
+//     int sx, nx, ex;
+//     int sy, ny, ey;
+//     int sz, nz, ez;
 
-    if(in_dim == 0) {
-	int B = m_own_size[0];
-	if(in_dir == 0) {
-	    sx = B;
-	    nx = A;
-	}else {
-	    sx = A;
-	    nx = C;
-	}
+//     if(in_dim == 0) {
+// 	int B = m_own_size[0];
+// 	if(in_dir == 0) {
+// 	    sx = B;
+// 	    nx = A;
+// 	}else {
+// 	    sx = A;
+// 	    nx = C;
+// 	}
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else if(in_dim == 1) { 
-	int B = m_own_size[1];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else if(in_dim == 1) { 
+// 	int B = m_own_size[1];
 
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	if(in_dir == 0) {
-	    sy = B;
-	    ny = A;
-	}else {
-	    sy = A;
-	    ny = C;
-	}
+// 	if(in_dir == 0) {
+// 	    sy = B;
+// 	    ny = A;
+// 	}else {
+// 	    sy = A;
+// 	    ny = C;
+// 	}
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else {  
-	int B = m_own_size[2];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else {  
+// 	int B = m_own_size[2];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	if(in_dir == 0) {
-	    sz = B;
-	    nz = A;
-	}else {
-	    sz = A;
-	    nz = C;
-	}
-    }
+// 	if(in_dir == 0) {
+// 	    sz = B;
+// 	    nz = A;
+// 	}else {
+// 	    sz = A;
+// 	    nz = C;
+// 	}
+//     }
 
-    ex = sx + nx;
-    ey = sy + ny;
-    ez = sz + nz;
+//     ex = sx + nx;
+//     ey = sy + ny;
+//     ez = sz + nz;
 
-    size_t size = 3*nx*ny*nz*sizeof(iris_real);
-    *out_sendbuf = (iris_real *)memory::wmalloc(size); 
-    int n = 0;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		(*out_sendbuf)[n++] = m_Ex_plus[i][j][k];
-		(*out_sendbuf)[n++] = m_Ey_plus[i][j][k];
-		(*out_sendbuf)[n++] = m_Ez_plus[i][j][k];
-	    }
-	}
-    }
-    m_iris->send_event(m_local_comm->m_comm,
-		       m_proc_grid->m_hood[in_dim][in_dir],
-		       IRIS_TAG_EX_HALO + in_dim*2 + in_dir, size,
-		       *out_sendbuf, out_req, NULL);
-}
+//     size_t size = 3*nx*ny*nz*sizeof(iris_real);
+//     *out_sendbuf = (iris_real *)memory::wmalloc(size); 
+//     int n = 0;
+//     for(int i=sx;i<ex;i++) {
+// 	for(int j=sy;j<ey;j++) {
+// 	    for(int k=sz;k<ez;k++) {
+// 		(*out_sendbuf)[n++] = m_Ex_plus[i][j][k];
+// 		(*out_sendbuf)[n++] = m_Ey_plus[i][j][k];
+// 		(*out_sendbuf)[n++] = m_Ez_plus[i][j][k];
+// 	    }
+// 	}
+//     }
+//     m_iris->send_event(m_local_comm->m_comm,
+// 		       m_proc_grid->m_hood[in_dim][in_dir],
+// 		       IRIS_TAG_EX_HALO + in_dim*2 + in_dir, size,
+// 		       *out_sendbuf, out_req, NULL);
+// }
 
-void mesh_gpu::recv_field_halo(int in_dim, int in_dir)
-{
-	#warning "not ported yet"
-    event_t ev;
-	//#error "buffer manager not implemented"
-    m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
-			    IRIS_TAG_EX_HALO + in_dim*2 + in_dir, ev);
+// void mesh_gpu::recv_field_halo(int in_dim, int in_dir)
+// {
+// 	#warning "not ported yet"
+//     event_t ev;
+// 	//#error "buffer manager not implemented"
+//     m_local_comm->get_event(m_proc_grid->m_hood[in_dim][1-in_dir],
+// 			    IRIS_TAG_EX_HALO + in_dim*2 + in_dir, ev);
 
-    int A = -m_chass->m_ics_from;
-    int C = m_chass->m_ics_to;
-    if(m_chass->m_order % 2) {
-	C++;
-    }
+//     int A = -m_chass->m_ics_from;
+//     int C = m_chass->m_ics_to;
+//     if(m_chass->m_order % 2) {
+// 	C++;
+//     }
 
-    int sx, nx, ex;
-    int sy, ny, ey;
-    int sz, nz, ez;
+//     int sx, nx, ex;
+//     int sy, ny, ey;
+//     int sz, nz, ez;
 
-    if(in_dim == 0) {
-	int B = m_own_size[0];
+//     if(in_dim == 0) {
+// 	int B = m_own_size[0];
 
-	if(in_dir == 0) {   // comes from left
-	    sx = 0;
-	    nx = A;
-	}else {
-	    sx = A + B;
-	    nx = C;
-	}
+// 	if(in_dir == 0) {   // comes from left
+// 	    sx = 0;
+// 	    nx = A;
+// 	}else {
+// 	    sx = A + B;
+// 	    nx = C;
+// 	}
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else if(in_dim == 1) { 
-	int B = m_own_size[1];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else if(in_dim == 1) { 
+// 	int B = m_own_size[1];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	if(in_dir == 0) {
-	    sy = 0;
-	    ny = A;
-	}else {
-	    sy = A + B;
-	    ny = C;
-	}
+// 	if(in_dir == 0) {
+// 	    sy = 0;
+// 	    ny = A;
+// 	}else {
+// 	    sy = A + B;
+// 	    ny = C;
+// 	}
 
-	sz = 0;
-	nz = m_ext_size[2];
-    }else {  
-	int B = m_own_size[2];
-	sx = 0;
-	nx = m_ext_size[0];
+// 	sz = 0;
+// 	nz = m_ext_size[2];
+//     }else {  
+// 	int B = m_own_size[2];
+// 	sx = 0;
+// 	nx = m_ext_size[0];
 
-	sy = 0;
-	ny = m_ext_size[1];
+// 	sy = 0;
+// 	ny = m_ext_size[1];
 
-	if(in_dir == 0) {
-	    sz = 0;
-	    nz = A;
-	}else {
-	    sz = A + B;
-	    nz = C;
-	}
-    }
+// 	if(in_dir == 0) {
+// 	    sz = 0;
+// 	    nz = A;
+// 	}else {
+// 	    sz = A + B;
+// 	    nz = C;
+// 	}
+//     }
 
-    ex = sx + nx;
-    ey = sy + ny;
-    ez = sz + nz;
+//     ex = sx + nx;
+//     ey = sy + ny;
+//     ez = sz + nz;
     
-    int n = 0;
-    iris_real *data = (iris_real *)ev.data;
-    for(int i=sx;i<ex;i++) {
-	for(int j=sy;j<ey;j++) {
-	    for(int k=sz;k<ez;k++) {
-		m_Ex_plus[i][j][k] += data[n++];
-		m_Ey_plus[i][j][k] += data[n++];
-		m_Ez_plus[i][j][k] += data[n++];
-	    }
-	}
-    }
+//     int n = 0;
+//     iris_real *data = (iris_real *)ev.data;
+//     for(int i=sx;i<ex;i++) {
+// 	for(int j=sy;j<ey;j++) {
+// 	    for(int k=sz;k<ez;k++) {
+// 		m_Ex_plus[i][j][k] += data[n++];
+// 		m_Ey_plus[i][j][k] += data[n++];
+// 		m_Ez_plus[i][j][k] += data[n++];
+// 	    }
+// 	}
+//     }
     
-    memory::wfree(ev.data);
-}
+//     memory::wfree(ev.data);
+// }
 
 __global__
 void assign_energy_virial_data_kernel(iris_real* forces, iris_real Ek, iris_real* virial)

@@ -74,14 +74,14 @@ namespace ORG_NCSA_IRIS {
 	void assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 			       iris_real *out_forces);
 
-	void send_rho_halo(int in_dim, int in_dir,
-			   iris_real **out_sendbuf, MPI_Request *out_req);
-	void recv_rho_halo(int in_dim, int in_dir);
+	// void send_rho_halo(int in_dim, int in_dir,
+	// iris_real **out_sendbuf, MPI_Request *out_req);
+	// void recv_rho_halo(int in_dim, int in_dir);
 	void extract_rho();
 
-	void send_field_halo(int in_dim, int in_dir,
-			   iris_real **out_sendbuf, MPI_Request *out_req);
-	void recv_field_halo(int in_dim, int in_dir);
+	// void send_field_halo(int in_dim, int in_dir,
+	// 		   iris_real **out_sendbuf, MPI_Request *out_req);
+	// void recv_field_halo(int in_dim, int in_dir);
 	void imtract_field();
 	void imtract_phi();
 	void assign_energy_virial_data(iris_real *forces, bool include_energy_virial);
