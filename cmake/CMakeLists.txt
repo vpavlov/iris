@@ -32,7 +32,7 @@ cmake_minimum_required(VERSION 2.8)
 project(iris)
 set(SOVERSION 0)
 
-enable_language(CXX)
+enable_language(CXX CUDA)
 set(CMAKE_CXX_STANDARD 11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
@@ -40,8 +40,8 @@ set(IRIS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 set(IRIS_LINK_LIBS)
 set(INSTALLED_DEFINITIONS "")
 
-file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.cpp)
-file(GLOB IRIS_INCLUDES ${IRIS_SOURCE_DIR}/*.h)
+file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.c*)
+file(GLOB IRIS_INCLUDES ${IRIS_SOURCE_DIR}/*.*h)
 
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(IRIS_DOUBLE "Use double precision" OFF)
@@ -65,6 +65,12 @@ include(GNUInstallDirs)
 find_package(MPI REQUIRED)
 include_directories(${MPI_C_INCLUDE_PATH})
 list(APPEND IRIS_LINK_LIBS ${MPI_CXX_LIBRARIES})
+
+################################################################################
+# Find CUDA
+################################################################################
+find_package(CUDA REQUIRED)
+add_definitions(-DIRIS_CUDA)
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
 if(IRIS_OPENMP)
@@ -123,6 +129,8 @@ include_directories(${IRIS_SOURCE_DIR})
 add_library(iris ${IRIS_SOURCES})
 target_link_libraries(iris ${IRIS_LINK_LIBS})
 set_target_properties(iris PROPERTIES OUTPUT_NAME iris${IRIS_SUFFIX})
+set_property(TARGET iris PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET iris PROPERTY CUDA_ARCHITECTURES 35 50 72)
 
 if(BUILD_SHARED_LIBS)
   set_target_properties(iris PROPERTIES SOVERSION ${SOVERSION})
