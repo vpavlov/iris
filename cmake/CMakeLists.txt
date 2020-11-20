@@ -141,8 +141,10 @@ endif()
 
 add_executable(bob ${IRIS_SOURCE_DIR}/../examples/bob.cpp)
 add_executable(bob_gpu ${IRIS_SOURCE_DIR}/../examples/bob_gpu.cpp)
+add_executable(test_create_Nd ${IRIS_SOURCE_DIR}/../tests/test_create_Nd.cu)
 target_link_libraries(bob iris)
 target_link_libraries(bob_gpu iris)
+target_link_libraries(test_create_Nd iris)
 
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
