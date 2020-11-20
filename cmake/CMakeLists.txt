@@ -140,7 +140,9 @@ endif()
 # target_link_libraries(nacl iris)
 
 add_executable(bob ${IRIS_SOURCE_DIR}/../examples/bob.cpp)
+add_executable(bob_gpu ${IRIS_SOURCE_DIR}/../examples/bob_gpu.cpp)
 target_link_libraries(bob iris)
+target_link_libraries(bob_gpu iris)
 
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
