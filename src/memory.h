@@ -209,8 +209,8 @@ namespace ORG_NCSA_IRIS {
 
     public:
 
-	static void *wmalloc(size_t nbytes);
-	static void *wrealloc(void *ptr, size_t nbytes, size_t old_size);
+	static void *wmalloc(int nbytes);
+	static void *wrealloc(void *ptr, int nbytes, int old_size);
 	static void wfree(void *ptr);
 	
 	//**********************************************************************

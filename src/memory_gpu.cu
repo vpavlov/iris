@@ -39,7 +39,7 @@
 
 using namespace ORG_NCSA_IRIS;
 
-void *memory_gpu::wmalloc(size_t nbytes)
+void *memory_gpu::wmalloc(int nbytes)
 {
     void *retval;
     cudaError_t res = cudaMalloc(&retval, nbytes);
@@ -50,7 +50,7 @@ void *memory_gpu::wmalloc(size_t nbytes)
     return retval;
 };
 
-void *memory_gpu::wrealloc(void *ptr, size_t nbytes, size_t old_size)
+void *memory_gpu::wrealloc(void *ptr, int nbytes, int old_size)
 {
     if(nbytes == 0) {
 	wfree(ptr);
@@ -70,12 +70,14 @@ void memory_gpu::wfree(void *ptr)
 
 
 __global__
-void memory_set_kernel(iris_real* ptr, size_t n, iris_real val)
+void memory_set_kernel(iris_real* ptr, int n, iris_real val)
 {
-    size_t ndx = IRIS_CUDA_INDEX(x);
+    int ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,n);
-    size_t from = ndx*chunk_size;
-    size_t to = MIN((ndx+1)*chunk_size,n);
+    int from = ndx*chunk_size;
+    int to = MIN((ndx+1)*chunk_size,n);
+
+    printf("ndx %d from %d to %d\n",ndx,from,to);
     
     for(ndx=from; ndx!=to; ++ndx) {
     ptr[ndx]=val;
@@ -113,10 +115,10 @@ __global__
 void assign_2d_indexing_kernel(iris_real** array,iris_real* tmp, int n1, int n2)
 {
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,n1);
-    size_t xfrom = xndx*xchunk_size;
-    size_t xto = MIN((xndx+1)*xchunk_size,n1);
+    int xfrom = xndx*xchunk_size;
+    int xto = MIN((xndx+1)*xchunk_size,n1);
 
     for (xndx=xfrom; xndx!=xto; ++xndx) {
         int m = xndx*n2;
@@ -131,7 +133,7 @@ void assign_2d_indexing_kernel(iris_real** array,iris_real* tmp, int n1, int n2)
 
 iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear)
 {
-    size_t nitems = n1 * n2;
+    int nitems = n1 * n2;
     array =  (iris_real **)wmalloc(sizeof(iris_real *) * n1);
     iris_real* data = (iris_real *)wmalloc(sizeof(iris_real) * nitems);
     if(clear) {
@@ -162,22 +164,22 @@ void memory_gpu::destroy_2d(iris_real **&array)
 __global__
 void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* data, int n1, int n2, int n3)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,n1);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,n2);
 
-    size_t xfrom = xndx*xchunk_size;
-    size_t xto = MIN((xndx+1)*xchunk_size,n1);
+    int xfrom = xndx*xchunk_size;
+    int xto = MIN((xndx+1)*xchunk_size,n1);
 
-    size_t yfrom = yndx*ychunk_size;
-    size_t yto = MIN((yndx+1)*ychunk_size,n2);
+    int yfrom = yndx*ychunk_size;
+    int yto = MIN((yndx+1)*ychunk_size,n2);
 
     for (xndx=xfrom; xndx!=xto; ++xndx) {
-        size_t m = xndx*n2;
+        int m = xndx*n2;
         array[xndx]=&tmp[m];
         for (yndx=yfrom; yndx!=yto; ++yndx) {
-            size_t n = xndx*yndx*n3;
+            int n = xndx*yndx*n3;
             tmp[xndx+yndx] = &data[n];
         }
     }
@@ -191,7 +193,7 @@ void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* d
 iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
 bool clear, iris_real init_val)
 {
-    size_t nitems = n1 * n2 * n3;
+    int nitems = n1 * n2 * n3;
     array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1);
     iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
     iris_real *data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
