@@ -57,7 +57,7 @@ void *memory_gpu::wrealloc(void *ptr, int nbytes, int old_size)
 	return NULL;
     }
 
-	void *tmp = wmalloc(nbytes);
+    void *tmp = wmalloc(nbytes);
     cudaMemcpy(tmp, ptr, MIN(nbytes,old_size),cudaMemcpyDeviceToDevice);
 	wfree(ptr);
 	return tmp;
@@ -76,10 +76,8 @@ void memory_set_kernel(iris_real* ptr, int n, iris_real val)
     int chunk_size = IRIS_CUDA_CHUNK(x,n);
     int from = ndx*chunk_size;
     int to = MIN((ndx+1)*chunk_size,n);
-
-    printf("ndx %d from %d to %d\n",ndx,from,to);
     
-    for(ndx=from; ndx!=to; ++ndx) {
+    for(ndx=from; ndx<to; ++ndx) {
     ptr[ndx]=val;
     }
 };
@@ -92,8 +90,10 @@ iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear)
 {
     array =  (iris_real *)wmalloc(sizeof(iris_real) * n1);
     if(clear) {
-        memory_set_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,n1,(iris_real)0);
-        cudaDeviceSynchronize();
+      int blocks = get_NBlocks(n1,IRIS_CUDA_NTHREADS);
+      int threads = MIN((n1+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
+      memory_set_kernel<<<blocks,threads>>>(array,n1,(iris_real)0);
+      cudaDeviceSynchronize();
     }
     return array;
 };
@@ -120,7 +120,7 @@ void assign_2d_indexing_kernel(iris_real** array,iris_real* tmp, int n1, int n2)
     int xfrom = xndx*xchunk_size;
     int xto = MIN((xndx+1)*xchunk_size,n1);
 
-    for (xndx=xfrom; xndx!=xto; ++xndx) {
+    for (xndx=xfrom; xndx<xto; ++xndx) {
         int m = xndx*n2;
         array[xndx]=&tmp[m];
     }
@@ -175,12 +175,12 @@ void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* d
     int yfrom = yndx*ychunk_size;
     int yto = MIN((yndx+1)*ychunk_size,n2);
 
-    for (xndx=xfrom; xndx!=xto; ++xndx) {
+    for (xndx=xfrom; xndx<xto; ++xndx) {
         int m = xndx*n2;
-        array[xndx]=&tmp[m];
-        for (yndx=yfrom; yndx!=yto; ++yndx) {
+	array[xndx]=&tmp[m];
+        for (yndx=yfrom; yndx<yto; ++yndx) {
             int n = xndx*yndx*n3;
-            tmp[xndx+yndx] = &data[n];
+	    tmp[m+yndx] = &data[n];
         }
     }
 }
@@ -198,16 +198,20 @@ bool clear, iris_real init_val)
     iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
     iris_real *data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
     if(clear) {
-        memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems, init_val);
+      int blocks = get_NBlocks(nitems,IRIS_CUDA_NTHREADS);
+      int threads = MIN((nitems+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
+      memory_set_kernel<<<blocks,threads>>>(data,nitems, init_val);
         cudaDeviceSynchronize();
     }
 
     int nblocks1 = get_NBlocks(n1,IRIS_CUDA_NTHREADS_2D);
     int nblocks2 = get_NBlocks(n2,IRIS_CUDA_NTHREADS_2D);
-    int nthreads = IRIS_CUDA_NTHREADS_2D;
+    int nthreads1 = MIN((n1+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_2D);
+    int nthreads2 = MIN((n2+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_2D);
     
-    assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads,nthreads)>>>(array, tmp, data, n1, n2, n3);
+    assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
     cudaDeviceSynchronize();
+
     return array;
 };
 
