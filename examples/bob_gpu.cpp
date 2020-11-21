@@ -61,7 +61,7 @@ struct input_t
     };
 };
 
-bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
+bool read_frame0(char *dirname, comm_rec_gpu *in_local_comm, input_t *out_input)
 {
     int in_client_size = in_local_comm->m_size;
     int in_client_rank = in_local_comm->m_rank;
@@ -127,7 +127,7 @@ bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
     return true;
 }
 
-bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_input)
+bool read_frameN(int N, char *dirname, comm_rec_gpu *in_local_comm, input_t *out_input)
 {
     int in_client_size = in_local_comm->m_size;
     int in_client_rank = in_local_comm->m_rank;
@@ -316,7 +316,7 @@ bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_inp
 // This implementation here is just an example and is not optimal. But this is
 // outside IRIS's responsibility and is provided here only as means to execute
 // the example.
-void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes)
+void send_charges(iris_gpu *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes)
 {
     iris_real *sendbuf = (iris_real *)memory::wmalloc(in_input->atoms.size() * sizeof(atom_t));
     for(int i=0;i<in_iris->m_server_size;i++) {
@@ -334,7 +334,7 @@ void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_b
 
 // Do whatever is needed with the forces that came back from IRIS
 // In this example we just sum them up to check if they come up as 0
-void handle_forces(iris *iris, int *nforces, iris_real *forces)
+void handle_forces(iris_gpu *iris, int *nforces, iris_real *forces)
 {
     iris_real fsum[3];
     iris_real tot_fsum[3];
@@ -403,7 +403,7 @@ main(int argc, char **argv)
     // MPI_Barrier(MPI_COMM_WORLD);
 
     int role;
-    iris *x;
+    iris_gpu *x;
     MPI_Comm local_comm;
     int client_size;
     int server_size;
@@ -416,7 +416,7 @@ main(int argc, char **argv)
 	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
-	x = new iris(MPI_COMM_WORLD);
+	x = new iris_gpu(MPI_COMM_WORLD);
 	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
     }else if(mode == 1) {
 	// split the world communicator in two groups:
