@@ -27,3 +27,4 @@ static void HandleError( cudaError_t err,
   }
 }
 #define HANDLE_LAST_CUDA_ERROR (HandleError(cudaGetLastError(), __FILE__, __LINE__ ))
+#define HANDLE_CUDA_ERROR( err ) (HandleError(err, __FILE__, __LINE__ ))

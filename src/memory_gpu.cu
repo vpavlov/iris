@@ -96,6 +96,7 @@ iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear)
       int threads = MIN((n1+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
       memory_set_kernel<<<blocks,threads>>>(array,n1,(iris_real)0);
       cudaDeviceSynchronize();
+      HANDLE_LAST_CUDA_ERROR();
     }
     return array;
 };
@@ -141,10 +142,12 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
     if(clear) {
         memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems,(iris_real)0);
         cudaDeviceSynchronize();
+        HANDLE_LAST_CUDA_ERROR();
     }
 
     assign_2d_indexing_kernel<<<get_NBlocks(n1,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,data,n1,n2);
     cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR();
 
     return array;
 };
@@ -204,6 +207,7 @@ bool clear, iris_real init_val)
       int threads = MIN((nitems+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
       memory_set_kernel<<<blocks,threads>>>(data,nitems, init_val);
         cudaDeviceSynchronize();
+        HANDLE_LAST_CUDA_ERROR();
     }
 
     int nblocks1 = get_NBlocks(n1,IRIS_CUDA_NTHREADS_2D);
@@ -213,6 +217,7 @@ bool clear, iris_real init_val)
     
     assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
     cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR();
 
     return array;
 };

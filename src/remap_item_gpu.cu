@@ -86,6 +86,8 @@ void remap_item_gpu::pack(iris_real *src, iris_real *dest)
 	
 	pack_kernel<<<blocks,threads>>>
 	(src, dest, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR();
 }
 
 __global__
@@ -134,4 +136,6 @@ void remap_item_gpu::unpack(iris_real *src, iris_real *dest)
 	
 	unpack_kernel<<<blocks,threads>>>
 	(src, dest, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR();
 }

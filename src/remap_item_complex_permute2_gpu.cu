@@ -88,4 +88,6 @@ void remap_item_complex_permute2_gpu::unpack(iris_real *src, iris_real *dest)
 	
 	unpack_kernel2<<<blocks,threads>>>
 	(src, dest, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR();
 }

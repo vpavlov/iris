@@ -177,7 +177,8 @@ void mesh_gpu::assign_charges_gpu(iris_real* sendbuff_gpu)
 	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(&(m_Ez_plus[0][0][0]), nitems, (iris_real)0.0);
 	memory_set_kernel<<<get_NBlocks(2,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(sendbuff_gpu, 2, (iris_real)0.0);
 	cudaDeviceSynchronize();
-	
+	HANDLE_LAST_CUDA_ERROR();
+
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 		int ncharges = it->second;
 		iris_real *charges = m_charges[it->first];
@@ -253,7 +254,8 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 	m_h[0], m_h[1], m_h[2], 
 	m_chass->m_ics_bump, m_chass->m_ics_center,
 	m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
-
+	cudaDeviceSynchronize();
+	HANDLE_LAST_CUDA_ERROR();
 }
 
 //
@@ -486,7 +488,8 @@ void mesh_gpu::extract_rho()
 	extract_kernel<<<blocks,threads>>>(m_rho, m_rho_plus,
 										   sx, sy, sz, ex, ey, ez);
 
-    cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
+	HANDLE_LAST_CUDA_ERROR();
 // port to gpu
     // for(int i=sx;i<ex;i++) {
 	// for(int j=sy;j<ey;j++) {
@@ -557,7 +560,7 @@ void mesh_gpu::imtract_field()
 	imtract_kernel<<<blocks,threads>>>(m_Ez_plus, m_Ez,
 									   sx, sy, sz, ex, ey, ez);
     cudaDeviceSynchronize();
-
+	HANDLE_LAST_CUDA_ERROR();
 
 	////
     // for(int i=sx;i<ex;i++) {
@@ -603,7 +606,7 @@ void mesh_gpu::imtract_phi()
 									   sx, sy, sz, ex, ey, ez);
 
     cudaDeviceSynchronize();
-	
+	HANDLE_LAST_CUDA_ERROR();
     // for(int i=sx;i<ex;i++) {
 	// for(int j=sy;j<ey;j++) {
 	//     for(int k=sz;k<ez;k++) {
@@ -815,6 +818,8 @@ void mesh_gpu::assign_energy_virial_data(iris_real *forces, bool include_energy_
 	}else {
 		memory_set_kernel<<<1,1>>>(forces,7, (iris_real)0.0);
 	}
+	cudaDeviceSynchronize();
+	HANDLE_LAST_CUDA_ERROR();
 	// cuda dev sync will happened after assing_forces1(_ad) 
 }
 
@@ -890,6 +895,7 @@ void mesh_gpu::assign_forces1(int in_ncharges, iris_real *in_charges,
 							m_chass->m_ics_bump, m_chass->m_ics_center,
 							m_chass->m_order, m_chass->get_coeff(), m_units->ecf);
 	cudaDeviceSynchronize();
+	HANDLE_LAST_CUDA_ERROR();
 }
 
 // I am writting here
@@ -980,4 +986,5 @@ void mesh_gpu::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 		m_chass->m_ics_bump, m_chass->m_ics_center,
 		m_chass->m_order, m_chass->get_coeff(), m_chass->get_dcoeff(), m_units->ecf);
 	cudaDeviceSynchronize();
+	HANDLE_LAST_CUDA_ERROR();
 }
