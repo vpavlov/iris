@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,41 +27,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FMM_H__
-#define __IRIS_FMM_H__
-#include <vector>
-#include "solver.h"
+#ifndef __IRIS_FMM_KERNELS_H__
+#define __IRIS_FMM_KERNELS_H__
+
 #include "real.h"
-#include "memory.h"
 
 namespace ORG_NCSA_IRIS {
-	
-    class fmm : public solver {
 
-    public:
-	fmm(class iris *obj);
-	~fmm();
+    //
+    // Indexing in a triangular array of mutipoles. It is "triangular", because
+    // we only need e.g. m>0, since for m<0 we have Y_l^m = (-1)^m Y_l^m*
+    // (* = complex conjugate)
+    //
+    // Each multipole entry is a complex number, this returns the index for real part
+    //
+    // Indexing goes like this:
+    //
+    // l = 0     : 
+    //   m = 0   : 0 = real, 1 = imag
+    // l = 1
+    //   m = 0   : 2 = real, 3 = imag
+    //   m = 1   : 4 = real, 5 = imag
+    // l = 2
+    //   m = 0   : 6 = real, 7 = imag
+    //   m = 1   : 8 = real, 9 = imag
+    //   m = 2   : 10 = real, 11 = imag
+    // ...etc.
+    //
+    inline int multipole_index(int l, int m) { return l*(l+1) + 2*m; }
+    
+    void p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_gamma);
+    void m2m(int order, iris_real x, iris_real y, iris_real z, iris_real *in_gamma, iris_real *out_gamma, iris_real *in_scratch);
 
-	void commit();
-	void solve();
-	void handle_box_resize();
-
-    private:
-
-	void free_cells();
-	void get_local_boxes();
-	
-	void p2m(iris_real in_x, iris_real in_y, iris_real in_z, iris_real in_q, iris_real *out_gamma);
-	void m2m(iris_real x, iris_real y, iris_real z, iris_real *in_gamma, iris_real *out_gamma);
-	
-	void print_multipoles(int cellID, iris_real *m);
-
-    private:
-	int         m_order;         // order of expansion (p)
-	iris_real  *m_m2m_scratch;   // M2M scratch space
-	box_t<iris_real> *m_local_boxes;  // Local boxes from all ranks
-	struct fmm_tree *m_local_tree;    // the local tree
-    };
 }
 
 #endif

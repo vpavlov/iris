@@ -42,6 +42,8 @@ namespace ORG_NCSA_IRIS {
 	~grid();
 
 	void set_pref(int x, int y, int z);
+	void set_pbc(bool x, bool y, bool z);
+	
 	virtual void commit();
 
     protected:
@@ -65,6 +67,7 @@ namespace ORG_NCSA_IRIS {
 	bool m_dirty;      // if we need to re-calculate upon commit
 	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 	int m_pref[3];   // User preference about procs in each dir
+	int m_pbc[3];   // Periodic Boundary Conditions in each dir
     };
 }
 

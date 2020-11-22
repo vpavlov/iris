@@ -27,41 +27,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_FMM_H__
-#define __IRIS_FMM_H__
-#include <vector>
-#include "solver.h"
-#include "real.h"
-#include "memory.h"
+#ifndef __IRIS_FMM_PARTICLE_H__
+#define __IRIS_FMM_PARTICLE_H__
 
 namespace ORG_NCSA_IRIS {
+
+    // When constructing the FMM tree, we start with atoms. Each processor has been
+    // assigned a spatial area of the global domain and sent information about all
+    // the atoms that reside in its local box. These atoms potentially may come from
+    // different client processors.
+    //
+    // In the FMM tree, the particles are the lowest form of life; they live in the
+    // dungeons -- one level below the lowest level of cells. That's why they need
+    // a special structure. In this structure we keep the reference to the original
+    // atom (rank of the sender and its # in that sender's array) and a reference
+    // to the cell (leaf) in which this particle resides.
+    struct particle_t {
+	int rank;    // from which rank this particle came ?
+	int index;   // # in m_charges{rank}
+	int cellID;  // in which leaf this resides
 	
-    class fmm : public solver {
+	particle_t(int dummy = 0) {}  // to satisfy the compiler (memory::create_1d)
 
-    public:
-	fmm(class iris *obj);
-	~fmm();
-
-	void commit();
-	void solve();
-	void handle_box_resize();
-
-    private:
-
-	void free_cells();
-	void get_local_boxes();
-	
-	void p2m(iris_real in_x, iris_real in_y, iris_real in_z, iris_real in_q, iris_real *out_gamma);
-	void m2m(iris_real x, iris_real y, iris_real z, iris_real *in_gamma, iris_real *out_gamma);
-	
-	void print_multipoles(int cellID, iris_real *m);
-
-    private:
-	int         m_order;         // order of expansion (p)
-	iris_real  *m_m2m_scratch;   // M2M scratch space
-	box_t<iris_real> *m_local_boxes;  // Local boxes from all ranks
-	struct fmm_tree *m_local_tree;    // the local tree
+	static void sort(particle_t *in_out_particles, int count, bool desc);
     };
+
 }
 
 #endif

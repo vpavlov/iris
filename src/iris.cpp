@@ -394,6 +394,13 @@ void iris::set_grid_pref(int x, int y, int z)
     }
 }
 
+void iris::set_pbc(bool x, bool y, bool z)
+{
+    if(is_server()) {
+	m_proc_grid->set_pbc(x, y, z);
+    }
+}
+
 void iris::perform_commit()
 {
     if(is_server()) {
@@ -1290,4 +1297,13 @@ bool iris::handle_get_global_energy(event_t *in_event)
 	MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
     }
     return false;
+}
+
+int iris::num_local_atoms()
+{
+    int retval = 0;
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	retval += it->second;
+    }
+    return retval;
 }

@@ -41,6 +41,8 @@ namespace ORG_NCSA_IRIS {
 	T xhi, yhi, zhi;
 	T xsize, ysize, zsize;
 
+	box_t(int dummy = 0) {}; // to satisfy the compiler for create_1d
+	
 	bool in(iris_real *charge)
 	{
 	    iris_real x = charge[0];

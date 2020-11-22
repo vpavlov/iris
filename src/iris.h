@@ -130,7 +130,10 @@ namespace ORG_NCSA_IRIS {
 
 	// Sets preferences about domain decomposition (e.g. 3x4x5 procs)
 	void set_grid_pref(int x, int y, int z);
-	
+
+	// Set periodicity in X, Y and Z direction
+	void set_pbc(bool pbcx, bool pbcy, bool pbcz);
+		     
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
 
@@ -187,6 +190,8 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real alpha() { return m_alpha; };
 
+	int num_local_atoms();
+	
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
