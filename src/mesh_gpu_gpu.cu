@@ -476,10 +476,12 @@ void mesh_gpu::extract_rho()
 	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
 	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
-    int nthreads = IRIS_CUDA_NTHREADS_3D;
+	int nthreads1 = MIN((nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
+    int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
+    int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-	auto threads = dim3(nthreads,nthreads,nthreads);
+	auto threads = dim3(nthreads1,nthreads2,nthreads3);
 	
 	extract_kernel<<<blocks,threads>>>(m_rho, m_rho_plus,
 										   sx, sy, sz, ex, ey, ez);
@@ -541,10 +543,12 @@ void mesh_gpu::imtract_field()
 	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
 	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
-    int nthreads = IRIS_CUDA_NTHREADS_3D;
+    int nthreads1 = MIN((nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
+    int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
+    int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-	auto threads = dim3(nthreads,nthreads,nthreads);
+	auto threads = dim3(nthreads1,nthreads2,nthreads3);
 	
 	imtract_kernel<<<blocks,threads>>>(m_Ex_plus, m_Ex,
 									   sx, sy, sz, ex, ey, ez);
@@ -588,10 +592,12 @@ void mesh_gpu::imtract_phi()
 	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
 	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
-    int nthreads = IRIS_CUDA_NTHREADS_3D;
+    int nthreads1 = MIN((nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
+    int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
+    int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-	auto threads = dim3(nthreads,nthreads,nthreads);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
 	
 	imtract_kernel<<<blocks,threads>>>(m_phi_plus, m_phi,
 									   sx, sy, sz, ex, ey, ez);

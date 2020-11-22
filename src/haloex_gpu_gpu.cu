@@ -45,10 +45,12 @@ void copy_to_sendbuf(iris_real *sendbuf,iris_real ***data,
 	int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
 	int nblocks3 = get_NBlocks(nz,IRIS_CUDA_NTHREADS_3D);
-    int nthreads = IRIS_CUDA_NTHREADS_3D;
+    int nthreads1 = MIN((nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
+    int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
+    int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-    auto threads = dim3(nthreads,nthreads,nthreads);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
     copy_to_sendbuf_kernel<<<blocks,threads>>>(sendbuf, data, sx, sy, sz, ex, ey, ez);
     cudaDeviceSynchronize();
 }
