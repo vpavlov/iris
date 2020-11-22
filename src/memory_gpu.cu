@@ -42,7 +42,9 @@ using namespace ORG_NCSA_IRIS;
 void *memory_gpu::wmalloc(int nbytes)
 {
     void *retval;
+    cudaDeviceSynchronize();
     cudaError_t res = cudaMalloc(&retval, nbytes);
+      cudaDeviceSynchronize();
     if(res != cudaSuccess) {
 	throw std::bad_alloc();
     }
@@ -154,7 +156,7 @@ void memory_gpu::destroy_2d(iris_real **&array)
     return;
     }
 
-    wfree(array[0]);  // free the data
+    //    wfree(array[0]);  // free the data
     wfree(array);     // free the array
     array = NULL;
 };
@@ -218,12 +220,22 @@ bool clear, iris_real init_val)
 
 void memory_gpu::destroy_3d(iris_real ***&array)
 {
+  #warning "not sure if it really free the allocated mamory"
     if(array == NULL) {
     return;
     }
+    //size_t free, total;
+
+    //printf("cudaMemGetInfo LAST CUDA EROOR: %s\n",cudaGetErrorString ( cudaGetLastError()  ));
+    //wfree((void*)&array[0][0][0]);
+    //printf("(void*)&array[0][0][0] LAST CUDA EROOR: %s\n",cudaGetErrorString ( cudaGetLastError()  ));
     
-    wfree(array[0][0]);
-    wfree(array[0]);
+    //wfree(array[0]); //gives error
     wfree(array);
+    
+    //printf("array LAST CUDA EROOR: %s\n",cudaGetErrorString ( cudaGetLastError()  ));
+    //cudaMemGetInfo(&free,&total);
+    //printf("free %d total %d\n");
+
     array = NULL;
 };
