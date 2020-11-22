@@ -69,8 +69,12 @@ list(APPEND IRIS_LINK_LIBS ${MPI_CXX_LIBRARIES})
 ################################################################################
 # Find CUDA
 ################################################################################
-find_package(CUDA REQUIRED)
-add_definitions(-DIRIS_CUDA)
+option(IRIS_GPU "Build GPU version" ON)
+if(IRIS_GPU)
+  find_package(CUDA REQUIRED)
+  add_definitions(-DIRIS_CUDA)
+  list(APPEND IRIS_LINK_LIBS -lcufftw)
+endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
 if(IRIS_OPENMP)
@@ -110,7 +114,9 @@ endif()
 
 add_definitions(-DFFT_${FFT})
 include_directories(${${FFT}_INCLUDE_DIRS})
-list(APPEND IRIS_LINK_LIBS ${${FFT}_LIBRARIES})
+if(NOT IRIS_GPU)
+  list(APPEND IRIS_LINK_LIBS ${${FFT}_LIBRARIES})
+endif()
 
 ###
 ### Needed standard libaries, etc.
