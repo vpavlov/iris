@@ -34,7 +34,7 @@
 #include "state_accessor_gpu.h"
 #include "timer.h"
 
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 
 #include "cufftw.h"
 
@@ -54,7 +54,7 @@ typedef fftw_complex complex_t;
 
 #endif  // IRIS_DOUBLE
 
-#endif  // FFT_FFTW
+#endif  // IRIS_CUDA
 
 
 namespace ORG_NCSA_IRIS {
@@ -98,7 +98,7 @@ namespace ORG_NCSA_IRIS {
 
 	timer tm1[4], tm2;
 
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 	FFTW_(plan) m_fw_plans[3];
 	FFTW_(plan) m_bk_plans[3];
 #endif

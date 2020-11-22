@@ -53,7 +53,7 @@ fft3d_gpu::fft3d_gpu(class iris_gpu *obj,
     m_name(in_name)
 {    
 #if defined _OPENMP
-#if defined FFT_FFTW
+#if defined IRIS_CUDA
     FFTW_(init_threads);
     FFTW_(plan_with_nthreads(m_iris->m_nthreads));
 #endif
@@ -115,7 +115,7 @@ fft3d_gpu::~fft3d_gpu()
 
     for(int i=0;i<3;i++) {
 	if(m_fw_plans[i] != NULL) {
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 	    FFTW_(destroy_plan)(m_fw_plans[i]);
 	    FFTW_(destroy_plan)(m_bk_plans[i]);
 #endif
@@ -123,7 +123,7 @@ fft3d_gpu::~fft3d_gpu()
 
     }
 
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 #ifdef _OPENMP
     FFTW_(cleanup_threads);
 #else
@@ -326,7 +326,7 @@ void fft3d_gpu::setup_plans(int in_which)
     int n = m_mesh->m_size[x];
     int howmany = m_own_size[in_which][y] * m_own_size[in_which][z];
     
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
     m_fw_plans[in_which] = 
 	FFTW_(plan_many_dft)(1,       // 1D
 			     &n,      // M elements
@@ -380,7 +380,7 @@ iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
 	// }
 
 	tm2.start();
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 	FFTW_(execute_dft)(m_fw_plans[i],
 			   (complex_t *)dest,
 			   (complex_t *)dest);
@@ -416,7 +416,7 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real *dest)
 	tm1[i].stop();
 
 	tm2.start();
-#ifdef FFT_FFTW
+#ifdef IRIS_CUDA
 	FFTW_(execute_dft)(m_bk_plans[i],
 			   (complex_t *)src,
 			   (complex_t *)src);
