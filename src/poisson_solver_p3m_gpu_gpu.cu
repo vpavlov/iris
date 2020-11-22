@@ -56,7 +56,7 @@ void poisson_solver_p3m_gpu::kspace_phi(iris_real *io_rho_phi)
 
     kspace_phi_kernel<<<blocks,threads>>>(io_rho_phi,m_greenfn,nx,ny,nz,scaleinv);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 
@@ -166,7 +166,7 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 
     kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_Ek_vir, nx, ny, nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 
@@ -216,7 +216,7 @@ void poisson_solver_p3m_gpu::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
 
     kspace_Ex_kernel<<<blocks,threads>>>(in_phi, out_Ex, m_kx, nx, ny, nz);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -265,7 +265,7 @@ void poisson_solver_p3m_gpu::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
 
     kspace_Ey_kernel<<<blocks,threads>>>(in_phi, out_Ey, m_ky, nx, ny, nz);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -314,7 +314,7 @@ void poisson_solver_p3m_gpu::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
 
     kspace_Ez_kernel<<<blocks,threads>>>(in_phi, out_Ez, m_kz, nx, ny, nz);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __device__
@@ -403,7 +403,7 @@ void poisson_solver_p3m_gpu::calculate_denominator()
     calculate_denominator_kernel<<<nblocks,nthreads>>>(m_denominator_z, sz, nz, zM, m_chass->m_order, m_chass->m_gfd_coeff);
 
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -518,7 +518,7 @@ void poisson_solver_p3m_gpu::calculate_gf_fact()
     calculate_gf_fact_1_kernel<<<nblocks,nthreads>>>(greenfn_z, m_denominator_z, sz, nz, zM, kzm, _2n, zL, alpha);
 
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 
     int nblocks1 = get_NBlocks(nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(ny,IRIS_CUDA_NTHREADS_3D);
@@ -537,7 +537,7 @@ void poisson_solver_p3m_gpu::calculate_gf_fact()
                 kxm, kym, kzm);
                 
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
     
     memory_gpu::destroy_1d(greenfn_x);
     memory_gpu::destroy_1d(greenfn_y);
@@ -668,7 +668,7 @@ void poisson_solver_p3m_gpu::calculate_gf_full()
                             nbx, nby, nbz,  alpha, _2n);
 
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -726,7 +726,7 @@ void poisson_solver_p3m_gpu::calculate_k()
     calculate_k_kernel<<<nblocks,nthreads>>>(m_kz, kzm, sz, ez, zM);
 
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 
@@ -805,5 +805,5 @@ void poisson_solver_p3m_gpu::calculate_virial_coeff()
 
     calculate_virial_coeff_kernel<<<blocks,threads>>>(m_vc, m_kx, m_ky, m_kz, sx, sy, sz, ex, ey, ez, alpha);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }

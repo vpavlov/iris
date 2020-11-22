@@ -53,7 +53,7 @@ void copy_to_sendbuf(iris_real *sendbuf,iris_real ***data,
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
     copy_to_sendbuf_kernel<<<blocks,threads>>>(sendbuf, data, sx, sy, sz, ex, ey, ez);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -110,5 +110,5 @@ void copy_from_recvbuf(iris_real *recvbuf,iris_real ***data, int mode,
     auto threads = dim3(nthreads,nthreads,nthreads);
     copy_to_recvbuf_kernel<<<blocks,threads>>>(recvbuf, data, mode, sx, sy, sz, ex, ey, ez);
     cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR();
+    HANDLE_LAST_CUDA_ERROR;
 }
