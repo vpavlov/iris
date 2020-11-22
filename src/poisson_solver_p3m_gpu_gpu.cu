@@ -441,7 +441,7 @@ void calculate_gf_fact_2_kernel(iris_real *greenfn,
 	int j_from = sy + yndx*ychunk_size, j_to = MIN(sy+(yndx+1)*ychunk_size,ey);
     int k_from = sz + zndx*zchunk_size, k_to = MIN(sz+(zndx+1)*zchunk_size,ez);
     
-    for (int x = i_from; x < sx + i_to; x++) {
+    for (int x = i_from; x < i_to; x++) {
 	    int xj = x - xM * (2 * x / xM);
 	    for (int y = j_from; y < j_to; y++) {
 		int yj = y - yM * (2 * y / yM);
@@ -561,7 +561,7 @@ void calculate_gf_full_kernel(iris_real *greenfn,
 	int j_from = sy + yndx*ychunk_size, j_to = MIN(sy+(yndx+1)*ychunk_size,ey);
     int k_from = sz + zndx*zchunk_size, k_to = MIN(sz+(zndx+1)*zchunk_size,ez);
     
-    for (int x = i_from; x < sx + i_to; x++) {
+    for (int x = i_from; x < i_to; x++) {
 	    int xj = x - xM * (2 * x / xM);
 	    for (int y = j_from; y < j_to; y++) {
             int yj = y - yM * (2 * y / yM);
