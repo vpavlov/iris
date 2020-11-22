@@ -76,7 +76,7 @@ bool read_frame0(char *dirname, comm_rec_gpu *in_local_comm, input_t *out_input)
     }
     
     char *line = NULL;
-    int sz = 0;
+    size_t sz = 0;
     char tmp[80];
     iris_real qtot = 0.0;
     iris_real qtot2 = 0.0;
@@ -142,7 +142,7 @@ bool read_frameN(int N, char *dirname, comm_rec_gpu *in_local_comm, input_t *out
     }
     
     char *line = NULL;
-    int sz = 0;
+    size_t sz = 0;
     char tmp[80];
     iris_real qtot = 0.0;
     iris_real qtot2 = 0.0;
