@@ -1,5 +1,6 @@
 #pragma once
 #include "utils.h"
+#include "stdio.h"
 #define IRIS_CUDA_NTHREADS 512
 #define IRIS_CUDA_NTHREADS_2D 32
 #define IRIS_CUDA_NTHREADS_3D 8
@@ -15,3 +16,14 @@ static int get_NBlocks(size_t ndata, int nthreads)
 {
     return MIN(static_cast<int>((ndata+nthreads-1)/nthreads),IRIS_CUDA_MAX_NBLOCKS);
 }
+
+static void HandleError( cudaError_t err,
+                         const char *file,
+                         int line ) {
+  if (err != cudaSuccess) {
+    printf( "%s in %s at line %d\n", cudaGetErrorString( err ),
+	    file, line );
+    exit( EXIT_FAILURE );
+  }
+}
+#define HANDLE_LAST_CUDA_ERROR (HandleError(cudaGetLastError(), __FILE__, __LINE__ ))
