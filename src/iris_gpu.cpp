@@ -855,7 +855,7 @@ iris_real *iris_gpu::receive_forces(int **out_counts, iris_real *out_Ek, iris_re
 	return NULL;
     }
 
-    size_t hwm = 0;  // high water mark (in bytes)
+    int hwm = 0;  // high water mark (in bytes)
     iris_real *retval = NULL;
 
     *out_counts = new int[m_server_size];

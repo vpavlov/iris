@@ -238,7 +238,7 @@ void haloex_gpu::send(int in_dim, int in_dir)
 
 	copy_to_sendbuf(sendbuf,m_data,sx,sy,sz,ex,ey,ez);
     
-    size_t size = nx*ny*nz*sizeof(iris_real);
+    int size = nx*ny*nz*sizeof(iris_real);
     MPI_Isend(sendbuf, size, MPI_BYTE, *(m_hood + idx),
 	      m_tag + idx, m_comm, &m_req[idx]);
 }
@@ -307,7 +307,7 @@ void haloex_gpu::recv(int in_dim, int in_dir)
     ez = sz + nz;
 
     int idx = in_dim*2 + in_dir;
-    size_t size = nx*ny*nz*sizeof(iris_real);
+    int size = nx*ny*nz*sizeof(iris_real);
     iris_real *recvbuf = m_recvbufs[idx];
 
     MPI_Recv(recvbuf, size, MPI_BYTE, *(m_hood + in_dim*2 + 1 - in_dir),

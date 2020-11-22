@@ -10,11 +10,11 @@ using namespace ORG_NCSA_IRIS;
 __global__
 void kspace_phi_kernel(iris_real *io_rho_phi, iris_real *m_greenfn, int nx, int ny, int nz, iris_real scinv)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
@@ -68,11 +68,11 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
     __shared__ iris_real virial_acc[6][BLOCK_SIZE];
     __shared__ iris_real Ek_acc[BLOCK_SIZE];
     
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
@@ -165,11 +165,11 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 __global__
 void kspace_Ex_kernel(iris_real *in_phi, iris_real *out_Ex, iris_real *kx, int nx, int ny, int nz)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
@@ -211,11 +211,11 @@ void poisson_solver_p3m_gpu::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
 __global__
 void kspace_Ey_kernel(iris_real *in_phi, iris_real *out_Ey, iris_real *ky, int nx, int ny, int nz)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
@@ -257,11 +257,11 @@ void poisson_solver_p3m_gpu::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
 __global__
 void kspace_Ez_kernel(iris_real *in_phi, iris_real *out_Ez, iris_real *kz, int nx, int ny, int nz)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
@@ -345,7 +345,7 @@ static inline iris_real pow_sinx_x_dev(const double &x, int n)
 __global__
 void calculate_denominator_kernel(iris_real *denominator_r, int sr, int nr, int rM, int order, iris_real *gfd_coeff)
 {
-    size_t rndx = IRIS_CUDA_INDEX(x);
+    int rndx = IRIS_CUDA_INDEX(x);
     int rchunk_size = IRIS_CUDA_CHUNK(x,nr);
 
     int r_from = rndx*rchunk_size, r_to = MIN((rndx+1)*rchunk_size,nr);
@@ -391,7 +391,7 @@ void poisson_solver_p3m_gpu::calculate_denominator()
 __global__
 void calculate_gf_fact_1_kernel(iris_real *greenfn_r, iris_real *denominator_r, int sr, int nr, int rM, int krm, int _2n, iris_real rL, iris_real alpha)
 {
-    size_t rndx = IRIS_CUDA_INDEX(x);
+    int rndx = IRIS_CUDA_INDEX(x);
     int rchunk_size = IRIS_CUDA_CHUNK(x,nr);
 
     int r_from = rndx*rchunk_size, r_to = MIN((rndx+1)*rchunk_size,nr);
@@ -418,11 +418,11 @@ void calculate_gf_fact_2_kernel(iris_real *greenfn,
     int ny = ey - sy;
     int nz = ez - sz;
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = sx + xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
@@ -536,11 +536,11 @@ void calculate_gf_full_kernel(iris_real *greenfn,
     int ny = ey - sy;
     int nz = ez - sz;
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = sx + xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
@@ -651,7 +651,7 @@ void calculate_k_kernel(iris_real *kr, iris_real krm, int sr, int er, int rM)
 {
     int nr = er - sr;
 
-    size_t rndx = IRIS_CUDA_INDEX(x);
+    int rndx = IRIS_CUDA_INDEX(x);
     int rchunk_size = IRIS_CUDA_CHUNK(x,nr);
 
     int r_from = sr + rndx*rchunk_size, r_to = MIN(sr+(rndx+1)*rchunk_size,er);
@@ -713,11 +713,11 @@ void calculate_virial_coeff_kernel(iris_real **m_vc,
     int ny = ey - sy;
     int nz = ez - sz;
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = sx + xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);

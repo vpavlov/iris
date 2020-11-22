@@ -177,10 +177,10 @@ void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* d
 
     for (xndx=xfrom; xndx<xto; ++xndx) {
         int m = xndx*n2;
-	array[xndx]=&tmp[m];
+        array[xndx]=&tmp[m];
         for (yndx=yfrom; yndx<yto; ++yndx) {
             int n = xndx*yndx*n3;
-	    tmp[m+yndx] = &data[n];
+        tmp[m+yndx] = &data[n];
         }
     }
 }

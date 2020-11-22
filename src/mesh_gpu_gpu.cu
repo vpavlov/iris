@@ -200,10 +200,10 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 	iris_real ics_bump, iris_real ics_center,
 	int order, iris_real *m_coeff, iris_real m_h3inv, iris_real *sendbuff_gpu)
 {
-	size_t ndx = IRIS_CUDA_INDEX(x);
+	int ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
-    size_t from = ndx*chunk_size;
-	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
+    int from = ndx*chunk_size;
+	int to = MIN((ndx+1)*chunk_size,in_ncharges);
 	
 	for(int n=from;n<to;n++) {
 		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
@@ -333,7 +333,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 //     ey = sy + ny;
 //     ez = sz + nz;
 
-//     size_t size = nx*ny*nz*sizeof(iris_real);
+//     int size = nx*ny*nz*sizeof(iris_real);
 //     *out_sendbuf = (iris_real *)memory_gpu::wmalloc(size); 
 //     int n = 0;
 //     for(int i=sx;i<ex;i++) {
@@ -436,11 +436,11 @@ __global__
 void extract_kernel(iris_real ***rho, iris_real ***rho_plus,
 						int sx, int sy,int sz, int ex,int ey, int ez)
 {
-	size_t xndx = IRIS_CUDA_INDEX(x);
+	int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,ex-sx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ey-sy);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
 
 	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
@@ -500,11 +500,11 @@ __global__
 void imtract_kernel(iris_real ***v3_plus, iris_real ***v3,
 						int sx, int sy,int sz, int ex,int ey, int ez)
 {
-	size_t xndx = IRIS_CUDA_INDEX(x);
+	int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,ex-sx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ey-sy);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,ez-sz);
 
 	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
@@ -688,7 +688,7 @@ void mesh_gpu::imtract_phi()
 //     ey = sy + ny;
 //     ez = sz + nz;
 
-//     size_t size = 3*nx*ny*nz*sizeof(iris_real);
+//     int size = 3*nx*ny*nz*sizeof(iris_real);
 //     *out_sendbuf = (iris_real *)memory::wmalloc(size); 
 //     int n = 0;
 //     for(int i=sx;i<ex;i++) {
@@ -821,10 +821,10 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 	iris_real ics_bump, iris_real ics_center,
 	int m_order, iris_real *m_coeff, iris_real m_units_ecf)
 {
-	size_t ndx = IRIS_CUDA_INDEX(x);
+	int ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
-    size_t from = ndx*chunk_size;
-	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
+    int from = ndx*chunk_size;
+	int to = MIN((ndx+1)*chunk_size,in_ncharges);
 	
 	for(int n=from;n<to;n++) {
 		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
@@ -897,10 +897,10 @@ void assign_forces1_ad_kernel(iris_real *in_charges, int in_ncharges,
 	iris_real ics_bump, iris_real ics_center,
 	int m_order, iris_real *m_coeff, iris_real *m_dcoeff, iris_real m_units_ecf)
 {
-	size_t ndx = IRIS_CUDA_INDEX(x);
+	int ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
-    size_t from = ndx*chunk_size;
-	size_t to = MIN((ndx+1)*chunk_size,in_ncharges);
+    int from = ndx*chunk_size;
+	int to = MIN((ndx+1)*chunk_size,in_ncharges);
 	
 	for(int n=from;n<to;n++) {
 		iris_real tx=(in_charges[n*5+0]-gbox_xlo)/m_h_0-m_own_offset_0;

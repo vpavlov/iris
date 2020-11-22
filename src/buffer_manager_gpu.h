@@ -39,21 +39,21 @@ namespace ORG_NCSA_IRIS {
     template<typename T>
     class buffer_manager_gpu {
         private:
-        size_t m_max_allocated_nbytes;
-        size_t m_max_nbuffers;
+        int m_max_allocated_nbytes;
+        int m_max_nbuffers;
         int m_nbytes_allocated;
         bool* m_buffer_in_use;
-        size_t* m_buffer_nbytes;
+        int* m_buffer_nbytes;
         T** m_buffers;
         public:
-        buffer_manager_gpu(size_t max_nbuffers, size_t max_allocated_nbytes):
+        buffer_manager_gpu(int max_nbuffers, int max_allocated_nbytes):
 						m_max_nbuffers(max_nbuffers), 
 						m_max_allocated_nbytes(max_allocated_nbytes),
 						m_nbytes_allocated(0) 
         {
         m_buffers = new T*[m_max_nbuffers];
         m_buffer_in_use = new bool[m_max_nbuffers];
-        m_buffer_nbytes = new size_t[m_max_nbuffers];
+        m_buffer_nbytes = new int[m_max_nbuffers];
         for(int ii=0;ii!=m_max_nbuffers;++ii) {
             m_buffers[ii] = nullptr;
             m_buffer_in_use[ii] = false;
@@ -64,25 +64,25 @@ namespace ORG_NCSA_IRIS {
         {
         delete []m_buffers;
         delete []m_buffer_in_use;
-        for(size_t ii=0;ii!=m_max_nbuffers;++ii) {
+        for(int ii=0;ii!=m_max_nbuffers;++ii) {
             memory_gpu::wfree(m_buffers[ii]);
         }
         };
         void release_buffer(T* buffer)
         {
-        for(size_t ii=0;ii!=m_max_nbuffers;++ii) {
+        for(int ii=0;ii!=m_max_nbuffers;++ii) {
             if (buffer==m_buffers[ii]) {
                 m_buffer_in_use[ii] = false;
                 return;
             }
         }
         };
-        T* take_buffer(size_t nbytes)
+        T* take_buffer(int nbytes)
         {
-        size_t the_smallest_buffer_index=0;
+        int the_smallest_buffer_index=0;
         int the_smallest_buffer_nbytes=std::numeric_limits<int>::max();
         int nbuffers_in_use=0;
-        for(size_t ii=0;ii!=m_max_nbuffers;++ii) {
+        for(int ii=0;ii!=m_max_nbuffers;++ii) {
             if (!m_buffer_in_use[ii]){
                 if (m_buffer_nbytes[ii]==0) {
                     m_buffers[ii] = static_cast<T*>(ORG_NCSA_IRIS::memory_gpu::wmalloc(nbytes));
@@ -121,7 +121,7 @@ namespace ORG_NCSA_IRIS {
         };
         void free_buffer(T* buffer)
         {
-        for(size_t ii=0;ii!=m_max_nbuffers;++ii) {
+        for(int ii=0;ii!=m_max_nbuffers;++ii) {
             if (buffer==m_buffers[ii]) {
                 m_buffer_in_use[ii] = false;
                 m_nbytes_allocated -= m_buffer_nbytes[ii];

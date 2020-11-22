@@ -9,11 +9,11 @@ void copy_to_sendbuf_kernel(iris_real *sendbuf, iris_real ***data,
     int ny=ey-sy;
     int nz=ez-sz;
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);
@@ -61,11 +61,11 @@ void copy_to_recvbuf_kernel(iris_real *recvbuf,iris_real ***data, int mode,
     int ny=ey-sy;
     int nz=ez-sz;
 
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
 
 	int i_from = sx+xndx*xchunk_size, i_to = MIN(sx+(xndx+1)*xchunk_size,ex);

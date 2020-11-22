@@ -46,11 +46,11 @@ void pack_kernel(iris_real *src, iris_real *dest,
 				int m_nx, int m_ny, int m_nz,
 				int m_stride_plane, int m_stride_line)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,m_nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,m_ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,m_nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,m_nx);
@@ -91,11 +91,11 @@ void unpack_kernel(iris_real *src, iris_real *dest,
 				int m_nx, int m_ny, int m_nz,
 				int m_stride_plane, int m_stride_line)
 {
-    size_t xndx = IRIS_CUDA_INDEX(x);
+    int xndx = IRIS_CUDA_INDEX(x);
     int xchunk_size = IRIS_CUDA_CHUNK(x,m_nx);
-    size_t yndx = IRIS_CUDA_INDEX(y);
+    int yndx = IRIS_CUDA_INDEX(y);
     int ychunk_size = IRIS_CUDA_CHUNK(y,m_ny);
-    size_t zndx = IRIS_CUDA_INDEX(z);
+    int zndx = IRIS_CUDA_INDEX(z);
     int zchunk_size = IRIS_CUDA_CHUNK(z,m_nz);
 
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,m_nx);
