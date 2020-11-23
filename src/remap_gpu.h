@@ -55,11 +55,23 @@ namespace ORG_NCSA_IRIS {
 		perform_p2p(in_src, in_dest, in_buf);
 	    }
 	}
+
+	void perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+	{
+	    if(m_use_collective) {
+		perform_collective(in_src, in_dest, in_buf);
+	    }else {
+		perform_p2p(in_src, in_dest, in_buf);
+	    }
+	}
 	
     private:
 
 	void perform_p2p(iris_real ***in_src, iris_real *in_desc, iris_real *in_buf);
 	void perform_collective(iris_real ***in_src, iris_real *in_desc, iris_real *in_buf);
+
+	void perform_p2p(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
+	void perform_collective(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
 	
 	char *m_name;
 	box_t<int> m_from;

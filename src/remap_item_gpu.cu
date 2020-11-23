@@ -95,6 +95,58 @@ void remap_item_gpu::pack(iris_real ***src, int src_offset, iris_real *dest, int
 }
 
 __global__
+void pack_src_1d_kernel(iris_real *src, int src_offset, iris_real *dest, int dest_offset,
+				int m_nx, int m_ny, int m_nz,
+				int m_stride_plane, int m_stride_line)
+{
+    int xndx = IRIS_CUDA_INDEX(x);
+    int xchunk_size = IRIS_CUDA_CHUNK(x,m_nx);
+    int yndx = IRIS_CUDA_INDEX(y);
+    int ychunk_size = IRIS_CUDA_CHUNK(y,m_ny);
+    int zndx = IRIS_CUDA_INDEX(z);
+    int zchunk_size = IRIS_CUDA_CHUNK(z,m_nz);
+
+	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,m_nx);
+	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,m_ny);
+	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,m_nz);
+
+	src += src_offset;
+	dest += dest_offset;
+
+    for(int i = i_from; i < i_to; i++) {
+	int plane = i * m_stride_plane;
+	int di_i = i*m_ny*m_nz;
+	for(int j = j_from; j < j_to; j++) {
+	    int si_j = plane + j * m_stride_line;
+		int di_j = di_i + j*m_nz;
+	    for(int k = k_from; k < k_to; k++) {
+			int di_k = di_j + k;
+			int si_k = si_j + k;
+			dest[di_k] = src[si_k];
+	    }
+	}
+    }
+}
+
+void remap_item_gpu::pack(iris_real *src, int src_offset, iris_real *dest, int dest_offset)
+{
+	int nblocks1 = get_NBlocks(m_nx,IRIS_CUDA_NTHREADS_3D);
+	int nblocks2 = get_NBlocks(m_ny,IRIS_CUDA_NTHREADS_3D);
+	int nblocks3 = get_NBlocks(m_nz,IRIS_CUDA_NTHREADS_3D);
+    int nthreads1 = MIN((m_nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
+    int nthreads2 = MIN((m_ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
+    int nthreads3 = MIN((m_nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
+	
+	pack_src_1d_kernel<<<blocks,threads>>>
+	(src, src_offset ,dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+}
+
+__global__
 void unpack_kernel(iris_real *src, int src_offset, iris_real *dest, int dest_offset,
 				int m_nx, int m_ny, int m_nz,
 				int m_stride_plane, int m_stride_line)

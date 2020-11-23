@@ -463,3 +463,121 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
     memory_gpu::wfree(send_buff);
     memory_gpu::wfree(recv_buff);
 }
+
+/// source pointer 1d ///
+
+void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+{
+    MPI_Request *req = new MPI_Request[m_nrecv];
+
+    m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
+    for(int i = 0; i < m_nrecv; i++) {
+	remap_item_gpu *xi = &m_recv_plans[i];
+	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
+		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
+    }
+
+    for(int i = 0; i < m_nsend; i++) {
+	remap_item_gpu *xi = &m_send_plans[i];
+	xi->pack(in_src,xi->m_offset, m_sendbuf,0);
+	MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
+		 IRIS_TAG_REMAP, m_local_comm->m_comm);
+    }
+
+    if(m_self) {
+	remap_item_gpu *si = &m_send_plans[m_nsend];
+	remap_item_gpu *ri = &m_recv_plans[m_nrecv];
+	si->pack(in_src,si->m_offset, in_buf,ri->m_bufloc);
+	ri->unpack(in_buf,ri->m_bufloc, in_dest, ri->m_offset);
+    }
+
+    for(int i = 0; i < m_nrecv; i++) {
+	int j;
+	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
+	remap_item_gpu *ri = &m_recv_plans[j];
+	ri->unpack(in_buf, ri->m_bufloc, in_dest, ri->m_offset);
+    }
+
+    delete req;
+}
+
+void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+{
+    if(m_comm_len <= 0) {
+	return;
+    }
+
+    int isend;
+    int irecv;
+    int send_buff_size = 0;
+    int recv_buff_size = 0;
+
+    for(int i=0;i<m_nsend;i++) {
+	send_buff_size += m_send_plans[i].m_size;
+    }
+    for(int i=0;i<m_nrecv;i++) {
+	recv_buff_size += m_recv_plans[i].m_size;
+    }
+
+    iris_real *send_buff = (iris_real *)memory_gpu::wmalloc(send_buff_size * sizeof(iris_real));
+    iris_real *recv_buff = (iris_real *)memory_gpu::wmalloc(recv_buff_size * sizeof(iris_real));
+    int *send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *send_offsets = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_offsets = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+    int *recv_map = (int *)memory::wmalloc(m_comm_len * sizeof(int));
+
+    int offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	send_counts[i] = 0;
+	send_offsets[i] = 0;
+	for(int j=0;j<m_nsend;j++) {
+	    remap_item_gpu *plan = &m_send_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		send_counts[i] = plan->m_size;
+		send_offsets[i] = offset;
+		plan->pack(in_src,plan->m_offset, send_buff,offset);
+		offset += plan->m_size;
+		break;
+	    }
+	}
+    }
+
+    offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	recv_counts[i] = 0;
+	recv_offsets[i] = 0;
+	recv_map[i] = -1;
+	for(int j=0;j<m_nrecv;j++) {
+	    remap_item_gpu *plan = &m_recv_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		recv_counts[i] = plan->m_size;
+		recv_offsets[i] = offset;
+		offset += plan->m_size;
+		recv_map[i] = j;
+		break;
+	    }
+	}
+    }
+
+    MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
+		  m_collective_comm);
+
+    offset = 0;
+    for(int i=0;i<m_comm_len;i++) {
+	if(recv_map[i] != -1) {
+	    remap_item_gpu *plan = &m_recv_plans[recv_map[i]];
+	    plan->unpack(recv_buff, offset, in_dest, plan->m_offset);
+	    offset += plan->m_size;
+	}
+    }
+
+    memory::wfree(send_counts);
+    memory::wfree(recv_counts);
+    memory::wfree(send_offsets);
+    memory::wfree(recv_offsets);
+    memory::wfree(recv_map);
+    memory_gpu::wfree(send_buff);
+    memory_gpu::wfree(recv_buff);
+}
