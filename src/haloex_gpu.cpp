@@ -244,7 +244,8 @@ void haloex_gpu::send(int in_dim, int in_dir)
     
 	if (dest_rank==m_rank)
 	{
-		size = 0;
+		MPI_Request_free(&m_req[idx]);
+		return;
 	}
 
     MPI_Isend(sendbuf, size, MPI_BYTE, dest_rank,
@@ -322,12 +323,10 @@ void haloex_gpu::recv(int in_dim, int in_dir)
 	if (src_rank==m_rank)
 	{
 		recvbuf = m_sendbufs[idx];
-		size = 0;
-	}
-
-    MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
+	} else {
+	    MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
 	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
-
+	}
 	copy_from_recvbuf(recvbuf, m_data, m_mode,
 					  sx, sy, sz, ex, ey, ez);
 }
