@@ -30,6 +30,8 @@
 #ifndef __IRIS_FMM_PARTICLE_H__
 #define __IRIS_FMM_PARTICLE_H__
 
+#include "real.h"
+
 namespace ORG_NCSA_IRIS {
 
     // When constructing the FMM tree, we start with atoms. Each processor has been
@@ -42,15 +44,38 @@ namespace ORG_NCSA_IRIS {
     // a special structure. In this structure we keep the reference to the original
     // atom (rank of the sender and its # in that sender's array) and a reference
     // to the cell (leaf) in which this particle resides.
-    struct particle_t {
-	int rank;    // from which rank this particle came ?
-	int index;   // # in m_charges{rank}
-	int cellID;  // in which leaf this resides
-	
-	particle_t(int dummy = 0) {}  // to satisfy the compiler (memory::create_1d)
+    
+    // for alien particles we don't have rank/index, so just the xyzq[4] and cellID
+    struct xparticle_t {
+	iris_real xyzq[4];
+	int cellID;
 
-	static void sort(particle_t *in_out_particles, int count, bool desc);
+	xparticle_t(int dummy = 0) {}   // to satisfy the compiler (memory::create_1d)
+
     };
+
+    struct particle_t : public xparticle_t {
+	int rank;           // from which rank this particle came ?
+	int index;          // # in m_charges{rank}
+	
+	particle_t(int dummy = 0): xparticle_t(0) {}
+
+    };
+
+    int __xcompar_desc(const void *aptr, const void *bptr);
+    int __xcompar_asc(const void *aptr, const void *bptr);
+    
+    template <typename T>
+    void sort_particles(T *in_out_particles, int count, bool desc)
+    {
+	int (*fn)(const void *, const void *);
+	if(desc) {
+	    fn = __xcompar_desc;
+	}else {
+	    fn = __xcompar_asc;
+	}
+	qsort(in_out_particles, count, sizeof(T), fn);
+    }
 
 }
 

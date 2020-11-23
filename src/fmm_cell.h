@@ -42,15 +42,21 @@ namespace ORG_NCSA_IRIS {
     // the number of children. If this is a cell on the lowest level, the first_child and
     // num_children are references to the array of particles instead.
     // Along with this, the cell also knows its center and the multipole and local expansions
+    //
+    // An alien leaf cell references particles coming from other processors. They are only
+    // used for P2P calculation and first_child/num_children refers to m_alien_paricles array
+    // of the tree...
     struct cell_t {
 	int       cellID;
 	int       first_child;
 	int       num_children;
 	iris_real center[3];
+	iris_real radius;
 	iris_real *m;
 	iris_real *l;
+	bool      alien_leaf;
 
-	cell_t(int dummy = 0) : m(NULL), l(NULL) {};  // dummy is needed for memory::create_1d
+	cell_t(int dummy = 0) : m(NULL), l(NULL), alien_leaf(false) {};  // dummy is needed for memory::create_1d
 
 	~cell_t() {
 	    memory::destroy_1d(m);
@@ -97,7 +103,12 @@ namespace ORG_NCSA_IRIS {
 
 
 	void set_center(const box_t<iris_real> *in_gbox, iris_real *in_leaf_size);
+	void set_radius(iris_real *in_leaf_size, int in_max_level);
+
+	static void sort(cell_t *in_out_data, int count, bool desc);
     };
+
+
 }
 
 #endif

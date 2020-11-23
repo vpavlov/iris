@@ -195,7 +195,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     m_quit = false;
 
-    m_logger->trace("Node initialized as %s %d %s",
+    m_logger->info("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
 		   is_leader()?"(leader)":"");
@@ -207,7 +207,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	MPI_Send(&m_local_comm->m_rank, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
 		 m_uber_comm->m_comm);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	m_logger->trace("This node is a leader; other leader's local rank = %d", m_other_leader);
+	m_logger->info("This node is a leader; other leader's local rank = %d", m_other_leader);
     }
 
     // default value for P3M FFT3D remap -- use collective comm
@@ -218,6 +218,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     // default value for FMM NCRIT - 64
     def_param.i = 64;
     set_solver_param(IRIS_SOLVER_FMM_NCRIT, def_param);
+
+    // default value for FMM MAC (θ) - 0.5
+    def_param.r = 0.5;
+    set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
 }
 
 iris::~iris()

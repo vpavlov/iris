@@ -46,12 +46,15 @@ namespace ORG_NCSA_IRIS {
 	
 	virtual void commit();
 
+	bool is_neighbour(int rank);
+
     protected:
 	void select_grid_size();
 	int select_best_factor(int n, int **factors, int *out_best);
 	void setup_grid_details();
 	void setup_splits();
 
+	
     public:
 
 	char *m_name;      // Name of the grid (used in logging)
@@ -67,6 +70,8 @@ namespace ORG_NCSA_IRIS {
 	bool m_dirty;      // if we need to re-calculate upon commit
 	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 	int m_pref[3];   // User preference about procs in each dir
+
+    public:
 	int m_pbc[3];   // Periodic Boundary Conditions in each dir
     };
 }

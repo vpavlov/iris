@@ -32,14 +32,13 @@
 #include "logger.h"
 #include "domain.h"
 #include "comm_rec.h"
-#include "timer.h"
 
 using namespace ORG_NCSA_IRIS;
 
 fmm::fmm(iris *obj):
     solver(obj), m_order(0),
     m_m2m_scratch(NULL), m_local_boxes(NULL),
-    m_local_tree(NULL)
+    m_local_tree(NULL), m_LET(NULL)
 {
 }
 
@@ -47,6 +46,9 @@ fmm::~fmm()
 {
     if(m_local_tree != NULL) {
 	delete m_local_tree;
+    }
+    if(m_LET != NULL) {
+	delete m_LET;
     }
     memory::destroy_1d(m_m2m_scratch);
     memory::destroy_1d(m_local_boxes);
@@ -89,11 +91,11 @@ void fmm::commit()
 void fmm::get_local_boxes()
 {
     memory::destroy_1d(m_local_boxes);
-    memory::create_1d(m_local_boxes, m_local_comm->m_size);
+    memory::create_1d(m_local_boxes, m_iris->m_local_comm->m_size);
     
     MPI_Allgather(&m_domain->m_local_box, sizeof(box_t<iris_real>), MPI_BYTE,
 		  m_local_boxes, sizeof(box_t<iris_real>), MPI_BYTE,
-		  m_local_comm->m_comm);
+		  m_iris->m_local_comm->m_comm);
 }
 
 
@@ -113,26 +115,13 @@ void fmm::handle_box_resize()
 void fmm::solve()
 {
     m_logger->trace("fmm::solve()");
+
+    if(m_LET != NULL) {
+	delete m_LET;
+    }
     
-    timer tm;
-    tm.start();
-
-    m_local_tree->charges2particles();
-    m_local_tree->particles2leafs();
-				  
-    m_local_tree->eval_p2m();                                  // evaluate P2M for all the leafs
-
-    // NOTE: this bottom up tree construction creates the cells up the tree. It does not
-    // depend on the p2m finished or not, so for the GPU impl this can be done on the CPU
-    // while the GPU performs P2M
-    m_local_tree->bottom_up();  // construct tree bottom up;
-
-    // NOTE: for the GPU impl, bottom_up and eval_p2m has to be finished before this
-    // can commence.
-    m_local_tree->eval_m2m(m_m2m_scratch);  // evaluate M2M for all the cells that we have
-
-    tm.stop();
-    m_logger->info("FMM solve wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    m_local_tree->compute_local(m_m2m_scratch);
+    m_LET = m_local_tree->compute_LET(m_local_boxes);
     
     MPI_Barrier(m_iris->server_comm());
     exit(-1);

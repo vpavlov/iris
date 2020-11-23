@@ -393,14 +393,15 @@ int main(int argc, char **argv)
     proc_name[name_len] = 0;
     
     // debugging facility
+    
     bool ready = false;
-    // if(rank == 0) {
-    // 	printf("Rank %d is PID %d\n", rank, getpid());
-    // 	while (!ready) {
-    // 	    sleep(5);
-    // 	}
-    // }
-    // MPI_Barrier(MPI_COMM_WORLD);
+    if(rank == 4) {
+    	printf("Rank %d is PID %d\n", rank, getpid());
+    	while (!ready) {
+    	    sleep(5);
+    	}
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
 
     int role;
     iris *x;
@@ -453,8 +454,9 @@ int main(int argc, char **argv)
 	exit(-1);
     }
 
+    x->set_pbc(true, true, true);
     x->set_units(md);
-    x->m_logger->info("Node name = %s", proc_name);
+    x->m_logger->info("Node name = %s; PID = %d", proc_name, getpid());
 
     input_t input;
     if(x->is_client()) {

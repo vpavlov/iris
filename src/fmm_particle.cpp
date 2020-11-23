@@ -33,12 +33,12 @@
 using namespace ORG_NCSA_IRIS;
 
 //
-// A comparator function used to sort the array of particles by cellID ascending
+// A comparator function used to sort the array of xparticles by cellID ascending
 //
-static int __compar_asc(const void *aptr, const void *bptr)
+int ORG_NCSA_IRIS::__xcompar_asc(const void *aptr, const void *bptr)
 {
-    particle_t *a = (particle_t *)aptr;
-    particle_t *b = (particle_t *)bptr;
+    xparticle_t *a = (xparticle_t *)aptr;
+    xparticle_t *b = (xparticle_t *)bptr;
     
     if(a->cellID > b->cellID) {
 	return 1;
@@ -52,10 +52,10 @@ static int __compar_asc(const void *aptr, const void *bptr)
 //
 // A comparator function used to sort the array of particles by cellID descending
 //
-static int __compar_desc(const void *aptr, const void *bptr)
+int ORG_NCSA_IRIS::__xcompar_desc(const void *aptr, const void *bptr)
 {
-    particle_t *a = (particle_t *)aptr;
-    particle_t *b = (particle_t *)bptr;
+    xparticle_t *a = (xparticle_t *)aptr;
+    xparticle_t *b = (xparticle_t *)bptr;
     
     if(a->cellID < b->cellID) {
 	return 1;
@@ -65,19 +65,3 @@ static int __compar_desc(const void *aptr, const void *bptr)
 	return 0;
     }
 }
-
-
-//
-// Sort particles, ascending/descending
-//
-void particle_t::sort(particle_t *in_out_particles, int count, bool desc)
-{
-    int (*fn)(const void *, const void *);
-    if(desc) {
-	fn = __compar_desc;
-    }else {
-	fn = __compar_asc;
-    }
-    qsort(in_out_particles, count, sizeof(particle_t), fn);
-}
-    

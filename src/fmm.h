@@ -61,6 +61,7 @@ namespace ORG_NCSA_IRIS {
 	iris_real  *m_m2m_scratch;   // M2M scratch space
 	box_t<iris_real> *m_local_boxes;  // Local boxes from all ranks
 	struct fmm_tree *m_local_tree;    // the local tree
+	struct fmm_tree *m_LET;           // the local essential tree (includes contributions from other procs)
     };
 }
 

@@ -202,3 +202,15 @@ void grid::setup_splits()
 
     m_xsplit[m_size[0]] = m_ysplit[m_size[1]] = m_zsplit[m_size[2]] = 1.0;
 }
+
+bool grid::is_neighbour(int rank)
+{
+    for(int i=0;i<3;i++) {
+	for(int j=0;j<2;j++) {
+	    if(m_hood[i][j] == rank) {
+		return true;
+	    }
+	}
+    }
+    return false;
+}
