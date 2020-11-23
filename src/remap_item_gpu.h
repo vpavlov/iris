@@ -41,8 +41,8 @@ namespace ORG_NCSA_IRIS {
 	remap_item_gpu();
 	~remap_item_gpu();
 
-	void pack(iris_real *src, iris_real *dest);
-	virtual void unpack(iris_real *src, iris_real *dest);
+	void pack(iris_real ***src, int src_offset, iris_real *dest, int dest_offset);
+	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset);
 
     public:
 	int m_peer;            // processor to send to/recv from

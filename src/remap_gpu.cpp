@@ -348,7 +348,7 @@ remap_gpu::~remap_gpu()
     }
 }
 
-void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+void remap_gpu::perform_p2p(iris_real ***in_src, iris_real *in_dest, iris_real *in_buf)
 {
     MPI_Request *req = new MPI_Request[m_nrecv];
 
@@ -361,7 +361,7 @@ void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in
 
     for(int i = 0; i < m_nsend; i++) {
 	remap_item_gpu *xi = &m_send_plans[i];
-	xi->pack(&in_src[xi->m_offset], m_sendbuf);
+	xi->pack(in_src,xi->m_offset, m_sendbuf,0);
 	MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
 		 IRIS_TAG_REMAP, m_local_comm->m_comm);
     }
@@ -369,21 +369,21 @@ void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in
     if(m_self) {
 	remap_item_gpu *si = &m_send_plans[m_nsend];
 	remap_item_gpu *ri = &m_recv_plans[m_nrecv];
-	si->pack(&in_src[si->m_offset], &in_buf[ri->m_bufloc]);
-	ri->unpack(&in_buf[ri->m_bufloc], &in_dest[ri->m_offset]);
+	si->pack(in_src,si->m_offset, in_buf,ri->m_bufloc);
+	ri->unpack(in_buf,ri->m_bufloc, in_dest, ri->m_offset);
     }
 
     for(int i = 0; i < m_nrecv; i++) {
 	int j;
 	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
 	remap_item_gpu *ri = &m_recv_plans[j];
-	ri->unpack(&in_buf[ri->m_bufloc], &in_dest[ri->m_offset]);
+	ri->unpack(in_buf, ri->m_bufloc, in_dest, ri->m_offset);
     }
 
     delete req;
 }
 
-void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris_real *in_buf)
 {
     if(m_comm_len <= 0) {
 	return;
@@ -418,7 +418,7 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	    if(plan->m_peer == m_comm_list[i]) {
 		send_counts[i] = plan->m_size;
 		send_offsets[i] = offset;
-		plan->pack(&in_src[plan->m_offset], &send_buff[offset]);
+		plan->pack(in_src,plan->m_offset, send_buff,offset);
 		offset += plan->m_size;
 		break;
 	    }
@@ -450,7 +450,7 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
     for(int i=0;i<m_comm_len;i++) {
 	if(recv_map[i] != -1) {
 	    remap_item_gpu *plan = &m_recv_plans[recv_map[i]];
-	    plan->unpack(&recv_buff[offset], &in_dest[plan->m_offset]);
+	    plan->unpack(recv_buff, offset, in_dest, plan->m_offset);
 	    offset += plan->m_size;
 	}
     }

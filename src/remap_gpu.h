@@ -47,7 +47,7 @@ namespace ORG_NCSA_IRIS {
 	      bool in_use_collective);
 	~remap_gpu();
 
-	void perform(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
+	void perform(iris_real ***in_src, iris_real *in_dest, iris_real *in_buf)
 	{
 	    if(m_use_collective) {
 		perform_collective(in_src, in_dest, in_buf);
@@ -58,8 +58,8 @@ namespace ORG_NCSA_IRIS {
 	
     private:
 
-	void perform_p2p(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
-	void perform_collective(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
+	void perform_p2p(iris_real ***in_src, iris_real *in_desc, iris_real *in_buf);
+	void perform_collective(iris_real ***in_src, iris_real *in_desc, iris_real *in_buf);
 	
 	char *m_name;
 	box_t<int> m_from;
