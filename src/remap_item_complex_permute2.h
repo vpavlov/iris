@@ -41,7 +41,7 @@ namespace ORG_NCSA_IRIS {
 	remap_item_complex_permute2();
 	~remap_item_complex_permute2();
 
-	virtual void unpack(iris_real *src, iris_real *dest);
+	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset);
     };
 
 }

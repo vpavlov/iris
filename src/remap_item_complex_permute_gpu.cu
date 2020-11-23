@@ -42,7 +42,7 @@ remap_item_complex_permute_gpu::~remap_item_complex_permute_gpu()
 }
 
 __global__
-void unpack_kernel1(iris_real *src, iris_real *dest,
+void unpack_kernel1(iris_real *src, int src_offset, iris_real *dest, int dest_offset,
 				int m_nx, int m_ny, int m_nz,
 				int m_stride_plane, int m_stride_line)
 {
@@ -56,6 +56,9 @@ void unpack_kernel1(iris_real *src, iris_real *dest,
 	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,m_nx);
 	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,m_ny);
 	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,m_nz);
+
+	src += src_offset;
+	dest += dest_offset;
 
     for(int i = i_from; i < i_to; i++) {
 	int plane = i * m_stride_line;
@@ -75,7 +78,7 @@ void unpack_kernel1(iris_real *src, iris_real *dest,
 	}
 }
 
-void remap_item_complex_permute_gpu::unpack(iris_real *src, iris_real *dest)
+void remap_item_complex_permute_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset)
 {
 	int nblocks1 = get_NBlocks(m_nx,IRIS_CUDA_NTHREADS_3D);
 	int nblocks2 = get_NBlocks(m_ny,IRIS_CUDA_NTHREADS_3D);
@@ -88,7 +91,7 @@ void remap_item_complex_permute_gpu::unpack(iris_real *src, iris_real *dest)
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
 	
 	unpack_kernel1<<<blocks,threads>>>
-	(src, dest, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
 	cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
 }
