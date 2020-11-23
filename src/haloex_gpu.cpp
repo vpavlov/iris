@@ -29,6 +29,7 @@
 //==============================================================================
 #include "haloex_gpu.h"
 #include "memory.h"
+#include <mpi.h>
 
 using namespace ORG_NCSA_IRIS;
 
@@ -43,6 +44,7 @@ haloex_gpu::haloex_gpu(MPI_Comm in_comm, int *in_hood,
       m_data_size(in_data_size), m_left_size(in_left_size),
       m_right_size(in_right_size), m_tag(in_tag)
 {
+	MPI_Comm_rank(m_comm,&m_rank);
     if(in_mode == 0) {
 	m_sendbufs[0] = (iris_real *)  // buffer for sending to the right X
 	    memory_gpu::wmalloc(in_right_size * m_data_size[1] * m_data_size[2] *
@@ -235,11 +237,17 @@ void haloex_gpu::send(int in_dim, int in_dir)
 
     int idx = in_dim*2 + in_dir;
     iris_real *sendbuf = m_sendbufs[idx];
+	int dest_rank = *(m_hood + idx);
+    int size = nx*ny*nz*sizeof(iris_real);
 
 	copy_to_sendbuf(sendbuf,m_data,sx,sy,sz,ex,ey,ez);
     
-    int size = nx*ny*nz*sizeof(iris_real);
-    MPI_Isend(sendbuf, size, MPI_BYTE, *(m_hood + idx),
+	if (dest_rank==m_rank)
+	{
+		size = 0;
+	}
+
+    MPI_Isend(sendbuf, size, MPI_BYTE, dest_rank,
 	      m_tag + idx, m_comm, &m_req[idx]);
 }
 
@@ -308,9 +316,16 @@ void haloex_gpu::recv(int in_dim, int in_dir)
 
     int idx = in_dim*2 + in_dir;
     int size = nx*ny*nz*sizeof(iris_real);
-    iris_real *recvbuf = m_recvbufs[idx];
+	int src_rank = *(m_hood + in_dim*2 + 1 - in_dir);
+	iris_real *recvbuf = m_recvbufs[idx];
 
-    MPI_Recv(recvbuf, size, MPI_BYTE, *(m_hood + in_dim*2 + 1 - in_dir),
+	if (src_rank==m_rank)
+	{
+		recvbuf = m_sendbufs[idx];
+		size = 0;
+	}
+
+    MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
 	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
 
 	copy_from_recvbuf(recvbuf, m_data, m_mode,

@@ -10,7 +10,7 @@ int main(int argc, char **argv)
   MPI_Init(&argc, &argv);
   MPI_Comm cart_comm;
   int pbc[] = { 1, 1, 1 };
-  int m_size[] = {2, 2, 2};
+  int m_size[] = {2, 1, 1};
   int m_hood[3][2];
   int n[3] = {32,32,32};
   MPI_Cart_create(MPI_COMM_WORLD, 3, m_size, pbc, 0, &cart_comm);

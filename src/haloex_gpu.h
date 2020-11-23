@@ -59,6 +59,7 @@ namespace ORG_NCSA_IRIS {
 	void recv(int in_dim, int in_dir);
 	void exch(int in_dim);
 	MPI_Comm m_comm;
+	int m_rank;
 	int *m_hood;
 	int m_mode;
 	iris_real ***m_data;
