@@ -244,7 +244,7 @@ void haloex_gpu::send(int in_dim, int in_dir)
     
 	if (dest_rank==m_rank)
 	{
-		MPI_Request_free(&m_req[idx]);
+		m_req[idx]=MPI_REQUEST_NULL;
 		return;
 	}
 
