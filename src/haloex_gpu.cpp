@@ -340,6 +340,7 @@ void haloex_gpu::exch(int dim)
 	if (m_req[dim*2]!=MPI_REQUEST_NULL){
     MPI_Wait(&(m_req[dim*2]), MPI_STATUS_IGNORE);
 	}
+	if (m_req[dim*2+1]!=MPI_REQUEST_NULL){
     MPI_Wait(&(m_req[dim*2+1]), MPI_STATUS_IGNORE);
 	}
 }
