@@ -34,6 +34,8 @@
 #include "proc_grid.h"
 #include "mesh.h"
 #include "solver.h"
+#include "comm_rec.h"
+#include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -92,32 +94,36 @@ void domain::commit()
     }
 
     if(m_dirty) {
-	iris_real *xsplit = m_proc_grid->m_xsplit;
-	iris_real *ysplit = m_proc_grid->m_ysplit;
-	iris_real *zsplit = m_proc_grid->m_zsplit;
-	int *c = m_proc_grid->m_coords;
-	int *size = m_proc_grid->m_size;
-	
-	// OAOO helper
+	if(m_iris->m_which_solver != IRIS_SOLVER_FMM) {
+	    iris_real *xsplit = m_proc_grid->m_xsplit;
+	    iris_real *ysplit = m_proc_grid->m_ysplit;
+	    iris_real *zsplit = m_proc_grid->m_zsplit;
+	    int *c = m_proc_grid->m_coords;
+	    int *size = m_proc_grid->m_size;
+	    
+	    // OAOO helper
 #define CALC_LOCAL(ILO, IHI, ISIZE, ISPLIT, I)				\
-	m_local_box.ILO = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I]]; \
-	if(c[I] < size[I] - 1) {					\
-	    m_local_box.IHI = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I] + 1]; \
-	}else {								\
-	    m_local_box.IHI = m_global_box.IHI;				\
-	}
-	
-	CALC_LOCAL(xlo, xhi, xsize, xsplit, 0);
-	CALC_LOCAL(ylo, yhi, ysize, ysplit, 1);
-	CALC_LOCAL(zlo, zhi, zsize, zsplit, 2);
-
+	    m_local_box.ILO = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I]]; \
+	    if(c[I] < size[I] - 1) {					\
+		m_local_box.IHI = m_global_box.ILO + m_global_box.ISIZE * ISPLIT[c[I] + 1]; \
+	    }else {							\
+		m_local_box.IHI = m_global_box.IHI;			\
+	    }
+	    
+	    CALC_LOCAL(xlo, xhi, xsize, xsplit, 0);
+	    CALC_LOCAL(ylo, yhi, ysize, ysplit, 1);
+	    CALC_LOCAL(zlo, zhi, zsize, zsplit, 2);
+	    
 #undef CALC_LOCAL
-	
-	m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
-	m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
-	m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
+	    
+	    m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
+	    m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
+	    m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
 
-	m_logger->trace("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+	}else {
+	    dd_octsection();
+	}
+	m_logger->info("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
 			m_local_box.xsize, m_local_box.ysize,
 			m_local_box.zsize,
 			m_local_box.xlo, m_local_box.xhi,
@@ -125,4 +131,52 @@ void domain::commit()
 			m_local_box.zlo, m_local_box.zhi);
 	m_dirty = false;
     }
+}
+
+void domain::dd_octsection()
+{
+    int sz = m_local_comm->m_size;
+    if(!is_power_of_2(sz)) {
+	throw std::domain_error("FMM implementation only supports server MPISIZEs which are power of 2!");
+    }
+    int bits = int(log(sz)/M_LN2);
+    
+    iris_real prev_min[3], curr_min[3];
+    iris_real prev_max[3], curr_max[3];
+    
+    prev_min[0] = m_global_box.xlo;
+    prev_min[1] = m_global_box.ylo;
+    prev_min[2] = m_global_box.zlo;
+
+    prev_max[0] = m_global_box.xhi;
+    prev_max[1] = m_global_box.yhi;
+    prev_max[2] = m_global_box.zhi;
+
+    for(int i=0;i<bits;i++) {
+	int d = i % 3;  // which dimension are we dividing ?
+	for(int j=0;j<3;j++) {
+	    curr_min[j] = prev_min[j];
+	    curr_max[j] = prev_max[j];
+	}
+	if (m_local_comm->m_rank & (1 << (bits-1-i))) {
+	    curr_min[d] = (prev_min[d] + prev_max[d]) / 2;
+	}else {
+	    curr_max[d] = (prev_min[d] + prev_max[d]) / 2;
+	}
+	for(int j=0;j<3;j++) {
+	    prev_min[j] = curr_min[j];
+	    prev_max[j] = curr_max[j];
+	}
+    }
+    m_local_box.xlo = curr_min[0];
+    m_local_box.ylo = curr_min[1];
+    m_local_box.zlo = curr_min[2];
+
+    m_local_box.xhi = curr_max[0];
+    m_local_box.yhi = curr_max[1];
+    m_local_box.zhi = curr_max[2];
+
+    m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
+    m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
+    m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
 }

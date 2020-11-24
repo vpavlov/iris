@@ -51,6 +51,8 @@ namespace ORG_NCSA_IRIS {
     iris_real root_of(simple_fn fn, iris_real x0, void *obj);  // using secant method
 
     void qsort_int(int *in_data, size_t in_num);
+
+    inline bool is_power_of_2(int x) { return (x & (x - 1)) == 0; };
 }
 
 #endif

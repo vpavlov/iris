@@ -47,6 +47,9 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 
+    private:
+	void dd_octsection();
+	
     public:
 	bool m_dirty;
 	bool m_initialized;
