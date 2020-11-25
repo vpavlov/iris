@@ -72,6 +72,7 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real *compute_fw(iris_real *src, iris_real *dest);
 	void compute_bk(iris_real *src, iris_real *dest);
+	void compute_bk(iris_real *src, iris_real ***dest);
 
 	void dump_workspace();
 

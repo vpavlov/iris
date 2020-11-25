@@ -222,13 +222,13 @@ void poisson_solver_p3m_gpu::solve()
     kspace_phi(m_work1);
 
     kspace_Ex(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ex[0][0][0]));
+    m_fft2->compute_bk(m_work2, m_mesh->m_Ex);
     
     kspace_Ey(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ey[0][0][0]));
+    m_fft2->compute_bk(m_work2, m_mesh->m_Ey);
     
     kspace_Ez(m_work1, m_work2);
-    m_fft2->compute_bk(m_work2, &(m_mesh->m_Ez[0][0][0]));
+    m_fft2->compute_bk(m_work2, m_mesh->m_Ez);
 
     //////////////// we do not need this ////////////////////////
     // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
