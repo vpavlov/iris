@@ -212,7 +212,7 @@ void poisson_solver_p3m_gpu::solve()
 {
     m_logger->trace("Solving Poisson's Equation now");
 
-    m_remap->perform(&(m_mesh->m_rho[0][0][0]), m_work2, m_work1);
+    m_remap->perform(m_mesh->m_rho, m_work2, m_work1);
     m_fft1->compute_fw(m_work2, m_work1);
 
     if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {
