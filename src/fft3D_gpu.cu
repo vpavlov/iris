@@ -33,9 +33,11 @@
 #include "mesh_gpu.h"
 #include "logger_gpu.h"
 #include "grid_gpu.h"
+#include "real.h"
 #include "remap_gpu.h"
 #include "comm_rec_gpu.h"
 #include "memory.h"
+#include "cuda_parameters.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -359,14 +361,36 @@ void fft3d_gpu::setup_plans(int in_which)
 
 }
 
+__global__
+void get_data_from_mesh_kernel(iris_real* src, int count, iris_real* dest)
+{
+	int rndx = IRIS_CUDA_INDEX(x);
+    int rchunk_size = IRIS_CUDA_CHUNK(x,count);
+
+	int i_from = rndx*rchunk_size, i_to = MIN((rndx+1)*rchunk_size,count);
+	
+	for(int i=i_from;i<i_to;i++) {
+		int j = 2*i;
+		dest[j] = src[i];
+		dest[j+1] = 0.0;
+	}
+}
+
 iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
 {
     // get data from the mesh
-    int j = 0;
-    for(int i=0;i<m_count;i++) {
-	dest[j++] = src[i];
-	dest[j++] = 0.0;
-    }
+    //int j = 0;
+    // for(int i=0;i<m_count;i++) {
+	// dest[j++] = src[i];
+	// dest[j++] = 0.0;
+    // }
+
+	int nthreads = MIN(m_count,IRIS_CUDA_NTHREADS);
+    int nblocks = get_NBlocks(m_count,nthreads);
+
+	get_data_from_mesh_kernel<<<nblocks,nthreads>>>(src, m_count, dest);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
 
     for(int i=0;i<3;i++) {
       tm1[i].start();
@@ -408,6 +432,20 @@ iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
     return dest;
 }
 
+__global__
+void send_data_to_mesh_kernel(iris_real* src, int count, iris_real* dest)
+{
+	int rndx = IRIS_CUDA_INDEX(x);
+    int rchunk_size = IRIS_CUDA_CHUNK(x,count);
+
+	int i_from = rndx*rchunk_size, i_to = MIN((rndx+1)*rchunk_size,count);
+	
+	for(int i=i_from;i<i_to;i++) {
+		int j = 2*i;
+		dest[i] = src[j];
+	}
+}
+
 void fft3d_gpu::compute_bk(iris_real *src, iris_real *dest)
 {
     for(int i=0;i<3;i++) {
@@ -429,9 +467,16 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real *dest)
     	tm1[3].stop();
 
     // send data to the mesh
-    int j = 0;
-    for(int i=0;i<m_count;i++) {
-	dest[i] = src[j];
-	j += 2;
-    }
+    // int j = 0;
+    // for(int i=0;i<m_count;i++) {
+	// dest[i] = src[j];
+	// j += 2;
+	// }
+	
+	int nthreads = MIN(m_count,IRIS_CUDA_NTHREADS);
+    int nblocks = get_NBlocks(m_count,nthreads);
+
+	send_data_to_mesh_kernel<<<nblocks,nthreads>>>(src, m_count, dest);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
 }
