@@ -88,48 +88,54 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
     }
     Ek_acc[iacc] = 0.0;
 
-    if(compute_global_virial) {
-        for(int i=i_from;i<i_to;i++) {
-            int ni = i*ny*nz;
-            for(int j=j_from;j<j_to;j++) {
-                int nj = ni + j*nz;
-                for(int k=k_from;k<k_to;k++) {
-                int n = nj + k;
-                iris_real ener = s2 * m_greenfn[n] *
-                (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
-                 in_rho_phi[2*n+1] * in_rho_phi[2*n+1]);
-                for(int m = 0;m<6;m++) {
-                    virial_acc[m][iacc] += ener * vc[2*n/2][m];
+    if (xndx<nx || yndx<ny || zndx < nz)
+    {
+
+        if(compute_global_virial) {
+            for(int i=i_from;i<i_to;i++) {
+                int ni = i*ny*nz;
+                for(int j=j_from;j<j_to;j++) {
+                    int nj = ni + j*nz;
+                    for(int k=k_from;k<k_to;k++) {
+                    int n = nj + k;
+                    iris_real ener = s2 * m_greenfn[n] *
+                    (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
+                    in_rho_phi[2*n+1] * in_rho_phi[2*n+1]);
+                    for(int m = 0;m<6;m++) {
+                        virial_acc[m][iacc] += ener * vc[2*n/2][m];
+                    }
+                    if(compute_global_energy) {
+                        Ek_acc[iacc] += ener;
+                    }
+                    }
                 }
-                if(compute_global_energy) {
-                    Ek_acc[iacc] += ener;
-                }
+            }
+        }else {
+            for(int i=i_from;i<i_to;i++) {
+                int ni = i*ny*nz;
+                for(int j=j_from;j<j_to;j++) {
+                    int nj = ni + j*nz;
+                    for(int k=k_from;k<k_to;k++) {
+                    int n = nj + k;
+                    Ek_acc[iacc] += s2 * m_greenfn[n] *
+                    (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
+                    in_rho_phi[2+n+1] * in_rho_phi[2*n+1]);
+                    }
                 }
             }
         }
-    }else {
-        for(int i=i_from;i<i_to;i++) {
-            int ni = i*ny*nz;
-            for(int j=j_from;j<j_to;j++) {
-                int nj = ni + j*nz;
-                for(int k=k_from;k<k_to;k++) {
-                int n = nj + k;
-                Ek_acc[iacc] += s2 * m_greenfn[n] *
-                (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
-                 in_rho_phi[2+n+1] * in_rho_phi[2*n+1]);
-                }
-            }
-        }
+
     }
 
     __syncthreads();
     
     for(int i = BLOCK_SIZE-1; i > 0; i/=2 ) {
-        if (iacc<i && iacc%2==0) {
+        int stride = BLOCK_SIZE/i;
+        if (iacc < (BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
             for(int m = 0;m<6;m++) {
-            virial_acc[m][iacc] += virial_acc[m][iacc+1];
+                virial_acc[m][iacc] += virial_acc[m][iacc+stride];
             }
-            Ek_acc[iacc] += Ek_acc[iacc+1];
+            Ek_acc[iacc] += Ek_acc[iacc+stride];
         }
         __syncthreads();
     }
@@ -157,9 +163,9 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
     int nblocks2=static_cast<int>((ny+nthreads-1)/nthreads);
     int nblocks3=static_cast<int>((nz+nthreads-1)/nthreads);
 
-    int nthreads1 = MIN((nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
-    int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
-    int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
+    int nthreads1 = IRIS_CUDA_NTHREADS_3D; //
+    int nthreads2 = IRIS_CUDA_NTHREADS_3D; // sets the shared memory buffer summing up correctly
+    int nthreads3 = IRIS_CUDA_NTHREADS_3D; //
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
