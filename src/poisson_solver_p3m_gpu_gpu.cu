@@ -159,9 +159,11 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 
     int nthreads=IRIS_CUDA_NTHREADS_3D;
 
-    int nblocks1=static_cast<int>((nx+nthreads-1)/nthreads);
-    int nblocks2=static_cast<int>((ny+nthreads-1)/nthreads);
-    int nblocks3=static_cast<int>((nz+nthreads-1)/nthreads);
+    // the kernel has to be rewritten in move convenient way
+
+    int nblocks1=1;//static_cast<int>((nx+nthreads-1)/nthreads);
+    int nblocks2=1;//static_cast<int>((ny+nthreads-1)/nthreads);
+    int nblocks3=1;//static_cast<int>((nz+nthreads-1)/nthreads);
 
     int nthreads1 = IRIS_CUDA_NTHREADS_3D; //
     int nthreads2 = IRIS_CUDA_NTHREADS_3D; // sets the shared memory buffer summing up correctly
