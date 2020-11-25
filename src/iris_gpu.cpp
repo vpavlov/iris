@@ -140,6 +140,7 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_compute_global_energy = true;
     m_compute_global_virial = true;
     m_units = new units(real);
+    memory_gpu::create_1d(m_virial_gpu,6);
 
     m_wff = NULL;
 
@@ -219,6 +220,8 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris_gpu::~iris_gpu()
 {
+    memory_gpu::destroy_1d(m_virial_gpu);
+
     if(m_wff != NULL) {
 	delete [] m_wff;
     }
@@ -764,6 +767,8 @@ void iris_gpu::solve()
 	m_domain->m_global_box.zsize *
 	m_units->ecf;
     
+    #warning "post_corr not applied to the gpu data before sending"
+
     if(m_compute_global_energy) {
 	m_Ek *= post_corr;
     }

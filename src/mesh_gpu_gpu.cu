@@ -814,7 +814,7 @@ void assign_energy_virial_data_kernel(iris_real* forces, iris_real Ek, iris_real
 
 void mesh_gpu::assign_energy_virial_data(iris_real *forces, bool include_energy_virial){
 	if(include_energy_virial) {
-		assign_energy_virial_data_kernel<<<1,1>>>(forces,m_iris->m_Ek,m_iris->m_virial);
+		assign_energy_virial_data_kernel<<<1,1>>>(forces,m_iris->m_Ek,m_iris->m_virial_gpu);
 	}else {
 		memory_set_kernel<<<1,1>>>(forces,7, (iris_real)0.0);
 	}
