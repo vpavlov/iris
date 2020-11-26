@@ -82,7 +82,7 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
 	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ny);
 	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,nz);
 
-    int iacc = xndx*IRIS_CUDA_NTHREADS_3D*IRIS_CUDA_NTHREADS_3D + yndx*IRIS_CUDA_NTHREADS_3D + zndx;
+    int iacc = (xndx-blockIdx.x*blockDim.x)*IRIS_CUDA_NTHREADS_3D*IRIS_CUDA_NTHREADS_3D + (yndx-blockIdx.y*blockDim.y)*IRIS_CUDA_NTHREADS_3D + zndx -blockIdx.z*blockDim.z;
     for(int m = 0;m<6;m++) {
     virial_acc[m][iacc] = 0.0;
     }
@@ -161,9 +161,9 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 
     // the kernel has to be rewritten in move convenient way
 
-    int nblocks1=1;//static_cast<int>((nx+nthreads-1)/nthreads);
-    int nblocks2=1;//static_cast<int>((ny+nthreads-1)/nthreads);
-    int nblocks3=1;//static_cast<int>((nz+nthreads-1)/nthreads);
+    int nblocks1=static_cast<int>((nx+nthreads-1)/nthreads);
+    int nblocks2=static_cast<int>((ny+nthreads-1)/nthreads);
+    int nblocks3=static_cast<int>((nz+nthreads-1)/nthreads);
 
     int nthreads1 = IRIS_CUDA_NTHREADS_3D; //
     int nthreads2 = IRIS_CUDA_NTHREADS_3D; // sets the shared memory buffer summing up correctly
