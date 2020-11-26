@@ -136,18 +136,94 @@ int grid_gpu::select_best_factor(int n, int **factors, int *out_best)
 // this->m_coords (e.g. rank X is at coords I, J, K)
 // this->m_ranks (e.g. coords I, J, K has rank X)
 // this->m_hood (e.g. rank X has ranks Y and Z to left and right, etc.)
+// void grid_gpu::setup_grid_details()
+// {
+//     MPI_Comm cart_comm;
+//     int pbc[] = { 1, 1, 1 };
+//     MPI_Cart_create(m_local_comm->m_comm, 3, m_size, pbc, 0, &cart_comm);
+
+//     // This call fills m_coords with the coordinates of the calling
+//     // process inside the grid (e.g. this proc is 3,1,0)
+//     MPI_Cart_get(cart_comm, 3, m_size, pbc, m_coords);
+//     MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
+//     MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
+//     MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
+
+//     memory::destroy_3d(m_ranks);
+//     memory::create_3d(m_ranks, m_size[0], m_size[1], m_size[2]);
+
+//     for (int i = 0; i < m_size[0]; i++) {
+// 	for (int j = 0; j < m_size[1]; j++) {
+// 	    for (int k = 0; k < m_size[2]; k++) {
+// 		int coords[] = {i, j, k};
+// 		MPI_Cart_rank(cart_comm, coords, &m_ranks[i][j][k]);
+// 	    }
+// 	}
+//     }
+
+//     MPI_Comm_free(&cart_comm);
+// }
+
+// for some reasons MPI_Cart_* give errors when CUDA aw MPI is used 
+// here is the temporary solution
+
+void get_rank(int *dims, int ndims, int *coords, int *rank) {
+    int factor =1;
+    *rank = 0;
+    for (int i = ndims - 1; i >= 0; i--) {
+
+        int coord = coords[i];
+        int size =  dims[i];
+
+        coord = coord % size;
+        if (coord < 0) {
+        coord += size;
+        }
+
+
+        *rank += coord * factor;
+        factor *= size;
+    }
+};
+
+void cart_shift(int *mycoords, int *dims, int ndims, int dir, int disp, int *left, int *right) {
+    int newcoords[3];
+    newcoords[0] = mycoords[0]; newcoords[1] = mycoords[1]; newcoords[2] = mycoords[2];
+    newcoords[dir] -= disp;
+    get_rank(dims,ndims,newcoords,left);
+    newcoords[0] = mycoords[0]; newcoords[1] = mycoords[1]; newcoords[2] = mycoords[2];
+    newcoords[dir] += disp;
+    get_rank(dims,ndims,newcoords,right);
+};
+
 void grid_gpu::setup_grid_details()
 {
-    MPI_Comm cart_comm;
     int pbc[] = { 1, 1, 1 };
-    MPI_Cart_create(m_local_comm->m_comm, 3, m_size, pbc, 0, &cart_comm);
+   // MPI_Cart_create(m_local_comm->m_comm, 3, m_size, pbc, 0, &cart_comm);
 
+    int myrank;
+    MPI_Comm_rank(m_local_comm->m_comm, &myrank);
+    int nnodes = 1;
+    for (int i = 0; i < 3 ; i++) {
+	    nnodes *= m_size[i];
+    }
+
+    for (int i = 0; i < 3 ; i++) {
+        nnodes = nnodes/m_size[i];
+        m_coords[i] = myrank/nnodes;
+        myrank = myrank%nnodes;
+    }
     // This call fills m_coords with the coordinates of the calling
     // process inside the grid (e.g. this proc is 3,1,0)
-    MPI_Cart_get(cart_comm, 3, m_size, pbc, m_coords);
-    MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
-    MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
-    MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
+   // MPI_Cart_get(cart_comm, 3, m_size, pbc, m_coords);
+
+    // MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
+    // MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
+    // MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
+
+    cart_shift(m_coords, m_size, 3, 0, -1, &m_hood[0][0], &m_hood[0][1]);
+    cart_shift(m_coords, m_size, 3, 1, -1, &m_hood[1][0], &m_hood[1][1]);
+    cart_shift(m_coords, m_size, 3, 2, -1, &m_hood[2][0], &m_hood[2][1]);
 
     memory::destroy_3d(m_ranks);
     memory::create_3d(m_ranks, m_size[0], m_size[1], m_size[2]);
@@ -156,12 +232,10 @@ void grid_gpu::setup_grid_details()
 	for (int j = 0; j < m_size[1]; j++) {
 	    for (int k = 0; k < m_size[2]; k++) {
 		int coords[] = {i, j, k};
-		MPI_Cart_rank(cart_comm, coords, &m_ranks[i][j][k]);
+		get_rank(m_size,3, coords, &m_ranks[i][j][k]);
 	    }
 	}
     }
-
-    MPI_Comm_free(&cart_comm);
 }
 
 // Setup the range of the global box that each proc is responsible for
