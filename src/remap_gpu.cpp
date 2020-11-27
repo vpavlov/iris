@@ -591,7 +591,7 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
     for(int i=0;i<m_comm_len;i++) {
 	if(recv_map[i] != -1) {
 	    remap_item_gpu *plan = &m_recv_plans[recv_map[i]];
-	    plan->unpack(recv_buff, offset, in_dest, plan->m_offset);
+	    plan->unpack(recv_buff_gpu, offset, in_dest, plan->m_offset);
 	    offset += plan->m_size;
 	}
     }
