@@ -152,14 +152,14 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	// For the intercomm to be created, the two groups must be disjoint, and
 	// this is not the case when nodes are client/server.
 	MPI_Comm inter_comm;
-	MPI_Intercomm_create(m_local_comm->m_comm,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Intercomm_create(m_local_comm->m_comm,
 			     m_local_leader,
 			     m_uber_comm->m_comm,
 			     m_remote_leader,
 			     IRIS_TAG_INTERCOMM_CREATE,
 			     &inter_comm);
 	m_inter_comm = new comm_rec_gpu(this, inter_comm);
-	MPI_Comm_free(&inter_comm);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_free(&inter_comm);
 
     }else {
 	m_client_size = m_server_size = m_local_comm->m_size;
@@ -204,11 +204,11 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     if(is_leader()) {
 	MPI_Request req;
-	MPI_Irecv(&m_other_leader, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Irecv(&m_other_leader, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
 		  m_uber_comm->m_comm, &req);
-	MPI_Send(&m_local_comm->m_rank, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(&m_local_comm->m_rank, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
 		 m_uber_comm->m_comm);
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
 	m_logger->trace("This node is a leader; other leader's local rank = %d", m_other_leader);
     }
 
@@ -366,10 +366,10 @@ void iris_gpu::set_global_box(box_t<iris_real> *in_box)
     if(is_leader()) {
 	// the client leader sends to the server leader the global box
 	MPI_Comm comm = server_comm();
-	MPI_Request req = MPI_REQUEST_NULL;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req = MPI_REQUEST_NULL;
 	send_event(comm, m_other_leader, IRIS_TAG_SET_GBOX_FANOUT, sizeof(box_t<iris_real>), in_box, &req, NULL);
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, comm, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, comm, MPI_STATUS_IGNORE);
     }
 
     MPI_Barrier(m_local_comm->m_comm);
@@ -423,7 +423,7 @@ box_t<iris_real> *iris_gpu::get_local_boxes()
     
     if(is_both()) {
 	// clients are also servers; an allgather will do
-	MPI_Allgather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Allgather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
 		      local_boxes, sizeof(box_t<iris_real>), MPI_BYTE, m_local_comm->m_comm);
 	return local_boxes;
     }
@@ -431,10 +431,10 @@ box_t<iris_real> *iris_gpu::get_local_boxes()
     if(is_leader()) {
 	// the client leader sends to the server leader request to get the local boxes
 	MPI_Comm comm = server_comm();
-	MPI_Request req = MPI_REQUEST_NULL;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req = MPI_REQUEST_NULL;
 	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, NULL);
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
     }
 
     MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
@@ -454,16 +454,16 @@ void iris_gpu::commit()
 
     if(is_leader()) {
 	MPI_Comm comm = server_comm();
-	MPI_Request req = MPI_REQUEST_NULL;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req = MPI_REQUEST_NULL;
         m_logger->trace("sending event");
 	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, NULL);
         m_logger->trace("commit MPI_Wait");
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
         m_logger->trace("commit MPI_Recv");
-	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, comm, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, comm, MPI_STATUS_IGNORE);
     }
 
-    MPI_Barrier(m_local_comm->m_comm);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Barrier(m_local_comm->m_comm);
 }
 
 void iris_gpu::quit()
@@ -477,10 +477,10 @@ void iris_gpu::quit()
 
     if(is_leader()) {
 	MPI_Comm comm = server_comm();
-	MPI_Request req = MPI_REQUEST_NULL;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req = MPI_REQUEST_NULL;
 	send_event(comm, m_other_leader, IRIS_TAG_QUIT_FANOUT, 0, NULL, &req, NULL);
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, comm, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, comm, MPI_STATUS_IGNORE);
     }
 
     MPI_Barrier(m_local_comm->m_comm);
@@ -615,7 +615,7 @@ void iris_gpu::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_tag, in_comm, req);
     if(is_server() && in_pending_win) {
 	int one = 1;
-	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
 		in_pending_win);
     }
 }
@@ -663,7 +663,7 @@ void iris_gpu::commit_charges()
 	    MPI_Request req;
 	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
 	    if(req != MPI_REQUEST_NULL) {
-		MPI_Request_free(&req);
+	m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request_free(&req);
 	    }
 	}
     }
@@ -685,10 +685,10 @@ bool iris_gpu::handle_charges(event_t *event)
     m_mesh->m_charges[event->peer] = (iris_real *)event->data;
 
     if(!is_client()) {
-	MPI_Request req;
-	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
 		  event->comm, &req);
-	MPI_Request_free(&req);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request_free(&req);
     }
 
     return true;  // hold on to dear life; we need the charges for later
@@ -945,10 +945,10 @@ void iris_gpu::get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real
     iris_real tmp[3];
     if(is_leader()) {  // client leader asks server leader to do whatever needs to be done
 	MPI_Comm comm = server_comm();
-	MPI_Request req = MPI_REQUEST_NULL;
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req = MPI_REQUEST_NULL;
 	send_event(comm, m_other_leader, IRIS_TAG_GGE_FANOUT, 0, NULL, &req, NULL);
-	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, comm, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Wait(&req, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, comm, MPI_STATUS_IGNORE);
     }
 
     // client leader broadcasts to the other clients the result
@@ -1212,7 +1212,7 @@ bool iris_gpu::handle_set_gbox(struct event_t *event)
     m_domain->set_global_box(box->xlo, box->ylo, box->zlo,
 			     box->xhi, box->yhi, box->zhi);
     if(is_leader()) {
-	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, client_comm());
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_SET_GBOX_DONE, client_comm());
     }
     return false;
 }
@@ -1232,7 +1232,7 @@ bool iris_gpu::handle_get_lboxes(event_t *in_event)
 	       m_local_comm->m_comm);
 
     if(is_leader()) {
-	MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
     }
     return false;
 }
@@ -1241,7 +1241,7 @@ bool iris_gpu::handle_commit(event_t *in_event)
 {
     perform_commit();
     if(is_leader()) {
-	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, client_comm());
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, client_comm());
     }
     return false;
 }
@@ -1250,7 +1250,7 @@ bool iris_gpu::handle_quit(event_t *in_event)
 {
     m_quit = true;
     if(is_leader()) {
-	MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, client_comm());
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_QUIT_DONE, client_comm());
     }
     return false;
 }
@@ -1261,7 +1261,7 @@ bool iris_gpu::handle_get_global_energy(event_t *in_event)
     perform_get_global_energy(tmp, tmp+1, tmp+2);
     
     if(is_leader()) {
-	MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
     }
     return false;
 }

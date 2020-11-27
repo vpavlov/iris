@@ -86,7 +86,7 @@ remap_gpu::remap_gpu(class iris_gpu *obj,
 
     box_t<int> *to = (box_t<int> *)memory::wmalloc(m_local_comm->m_size * sizeof(box_t<int>));
     box_t<int> *from = (box_t<int> *)memory::wmalloc(m_local_comm->m_size * sizeof(box_t<int>));
-    MPI_Allgather(&m_from, sizeof(box_t<int>), MPI_BYTE,
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Allgather(&m_from, sizeof(box_t<int>), MPI_BYTE,
 		  from, sizeof(box_t<int>), MPI_BYTE, m_local_comm->m_comm);
 
     MPI_Allgather(&m_to, sizeof(box_t<int>), MPI_BYTE,
@@ -306,13 +306,13 @@ remap_gpu::remap_gpu(class iris_gpu *obj,
 	    qsort_int(m_comm_list, m_comm_len);
 	    m_comm_list = (int *)memory::wrealloc(m_comm_list, m_comm_len*sizeof(int));
 	    MPI_Group local_group, collective_group;
-	    MPI_Comm_group(m_local_comm->m_comm, &local_group);
-	    MPI_Group_incl(local_group, m_comm_len, m_comm_list, &collective_group);
-	    MPI_Comm_create(m_local_comm->m_comm, collective_group, &m_collective_comm);
-	    MPI_Group_free(&local_group);
-	    MPI_Group_free(&collective_group);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_group(m_local_comm->m_comm, &local_group);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Group_incl(local_group, m_comm_len, m_comm_list, &collective_group);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_create(m_local_comm->m_comm, collective_group, &m_collective_comm);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Group_free(&local_group);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Group_free(&collective_group);
 	}else {
-	    MPI_Comm_create(m_local_comm->m_comm, MPI_GROUP_EMPTY, &m_collective_comm);
+	   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_create(m_local_comm->m_comm, MPI_GROUP_EMPTY, &m_collective_comm);
 	}
     }
     
@@ -344,7 +344,7 @@ remap_gpu::~remap_gpu()
     memory::wfree(m_sendbuf);
     memory::wfree(m_comm_list);
     if(m_collective_comm != MPI_COMM_NULL) {
-	MPI_Comm_free(&m_collective_comm);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_free(&m_collective_comm);
     }
 }
 
@@ -355,14 +355,14 @@ void remap_gpu::perform_p2p(iris_real ***in_src, iris_real *in_dest, iris_real *
     m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
     for(int i = 0; i < m_nrecv; i++) {
 	remap_item_gpu *xi = &m_recv_plans[i];
-	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
 		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
     for(int i = 0; i < m_nsend; i++) {
 	remap_item_gpu *xi = &m_send_plans[i];
 	xi->pack(in_src,xi->m_offset, m_sendbuf,0);
-	MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
 		 IRIS_TAG_REMAP, m_local_comm->m_comm);
     }
 
@@ -375,7 +375,7 @@ void remap_gpu::perform_p2p(iris_real ***in_src, iris_real *in_dest, iris_real *
 
     for(int i = 0; i < m_nrecv; i++) {
 	int j;
-	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
 	remap_item_gpu *ri = &m_recv_plans[j];
 	ri->unpack(in_buf, ri->m_bufloc, in_dest, ri->m_offset);
     }
@@ -442,7 +442,7 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 	}
     }
 
-    MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
 		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
 		  m_collective_comm);
 
@@ -468,19 +468,19 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 
 void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in_buf)
 {
-    MPI_Request *req = new MPI_Request[m_nrecv];
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request *req = new MPI_Request[m_nrecv];
 
     m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
     for(int i = 0; i < m_nrecv; i++) {
 	remap_item_gpu *xi = &m_recv_plans[i];
-	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
 		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
     for(int i = 0; i < m_nsend; i++) {
 	remap_item_gpu *xi = &m_send_plans[i];
 	xi->pack(in_src,xi->m_offset, m_sendbuf,0);
-	MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Send(m_sendbuf, xi->m_size, IRIS_REAL, xi->m_peer,
 		 IRIS_TAG_REMAP, m_local_comm->m_comm);
     }
 
@@ -493,7 +493,7 @@ void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in
 
     for(int i = 0; i < m_nrecv; i++) {
 	int j;
-	MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Waitany(m_nrecv, req, &j, MPI_STATUS_IGNORE);
 	remap_item_gpu *ri = &m_recv_plans[j];
 	ri->unpack(in_buf, ri->m_bufloc, in_dest, ri->m_offset);
     }
@@ -560,7 +560,7 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	}
     }
 
-    MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
 		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
 		  m_collective_comm);
 

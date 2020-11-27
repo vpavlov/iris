@@ -413,7 +413,7 @@ main(int argc, char **argv)
 	// Thus client_size  = size and local_comm is just MPI_COMM_WORLD
 	client_size = size;
 	server_size = size;
-	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
+x->m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris_gpu(MPI_COMM_WORLD);
@@ -436,7 +436,7 @@ main(int argc, char **argv)
 	client_size = size/2;
 	server_size = size - client_size;
 	role = (rank < client_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
-	MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
+     x->m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
 
 
 	// figure out the remote leader

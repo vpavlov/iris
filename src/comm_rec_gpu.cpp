@@ -41,27 +41,26 @@ using namespace ORG_NCSA_IRIS;
 comm_rec_gpu::comm_rec_gpu(iris_gpu *in_obj, MPI_Comm in_comm)
     : state_accessor_gpu(in_obj), m_comm(in_comm)
 {
-    MPI_Comm_dup(in_comm, &m_comm);
-    MPI_Comm_rank(m_comm, &m_rank);
-    MPI_Comm_size(m_comm, &m_size);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_dup(in_comm, &m_comm);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_rank(m_comm, &m_rank);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_size(m_comm, &m_size);
 }
 
 comm_rec_gpu::~comm_rec_gpu()
 {
-    MPI_Comm_free(&m_comm);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Comm_free(&m_comm);
 }
 
 bool comm_rec_gpu::peek_event(event_t &out_event)
 {
     int has_event;
     MPI_Status status;
-    
-    MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
+    m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, m_comm, &has_event, &status);
     if(has_event) {
 	out_event.comm = m_comm;
 	out_event.peer = status.MPI_SOURCE;
 	out_event.tag = status.MPI_TAG;
-	MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
 	if(out_event.size != 0) {
         if (out_event.tag==IRIS_TAG_CHARGES) {
             out_event.data = memory_gpu::wmalloc(out_event.size);
@@ -71,7 +70,7 @@ bool comm_rec_gpu::peek_event(event_t &out_event)
 	} else {
 	    out_event.data = NULL;
 	}
-	MPI_Recv(out_event.data, out_event.size, MPI_BYTE,
+m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(out_event.data, out_event.size, MPI_BYTE,
 		 out_event.peer, out_event.tag,
 		 out_event.comm, MPI_STATUS_IGNORE);
 	return true;
@@ -88,17 +87,17 @@ void comm_rec_gpu::get_event(int in_peer, int in_tag, event_t &out_event)
 {
     MPI_Status status;
     
-    MPI_Probe(in_peer, in_tag, m_comm, &status);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Probe(in_peer, in_tag, m_comm, &status);
     out_event.comm = m_comm;
     out_event.peer = status.MPI_SOURCE;
     out_event.tag = status.MPI_TAG;
-    MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
     if(out_event.size != 0) {
 	out_event.data = memory::wmalloc(out_event.size);
     }else {
 	out_event.data = NULL;
     }
-    MPI_Recv(out_event.data, out_event.size, MPI_BYTE,
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Recv(out_event.data, out_event.size, MPI_BYTE,
 	     out_event.peer, out_event.tag,
 	     out_event.comm, MPI_STATUS_IGNORE);
 }

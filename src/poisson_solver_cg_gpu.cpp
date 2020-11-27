@@ -585,7 +585,7 @@ iris_real poisson_solver_cg_gpu::dot(iris_real ***v1, iris_real ***v2, bool v1_h
 	}
     }
 
-    MPI_Allreduce(&sum, &retval, 1, IRIS_REAL, MPI_SUM, m_local_comm->m_comm);
+   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Allreduce(&sum, &retval, 1, IRIS_REAL, MPI_SUM, m_local_comm->m_comm);
     return retval;
 }
 
