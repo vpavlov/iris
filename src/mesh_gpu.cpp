@@ -142,11 +142,11 @@ void mesh_gpu::commit()
     }
 
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	memory::wfree(it->second);
+	memory_gpu::wfree(it->second);
     }
 
     for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
-	memory::wfree(it->second);
+	memory_gpu::wfree(it->second);
     }
 
     m_ncharges.clear();
