@@ -156,7 +156,7 @@ int grid_gpu::select_best_factor(int n, int **factors, int *out_best)
 // 	for (int j = 0; j < m_size[1]; j++) {
 // 	    for (int k = 0; k < m_size[2]; k++) {
 // 		int coords[] = {i, j, k};
-// 	m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Cart_rank(cart_comm, coords, &m_ranks[i][j][k]);
+// 	m_logger->trace("%s %d",__FILE__,__LINE__); MPI_Cart_rank(cart_comm, coords, &m_ranks[i][j][k]);
 // 	    }
 // 	}
 //     }

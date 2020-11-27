@@ -335,7 +335,7 @@ void mesh_gpu::assign_charges()
     }
 
     m_logger->trace("assign_charge calling MPI_Allreduce");
-   m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Allreduce(sendbuf_gpu, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+   m_logger->trace("%s %d",__FILE__,__LINE__); MPI_Allreduce(sendbuf_gpu, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
     m_logger->trace("assign_charge called MPI_Allreduce");
     m_qtot = recvbuf[0];
     m_q2tot = recvbuf[1];
@@ -398,9 +398,9 @@ void mesh_gpu::assign_forces(bool ad)
 	    assign_forces1(ncharges, m_charges[it->first], forces);
 	}
 
-m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request req;
+m_logger->trace("%s %d",__FILE__,__LINE__); MPI_Request req;
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
-m_logger->trace("%s %d",__FUNCTION__,__LINE__); MPI_Request_free(&req);
+m_logger->trace("%s %d",__FILE__,__LINE__); MPI_Request_free(&req);
 	include_energy_virial = false;
     }
 }
