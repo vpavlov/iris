@@ -56,32 +56,29 @@ void fmm::exchange_p2p_halo()
     int alien_index = 0;
     int alien_flag = IRIS_FMM_CELL_ALIEN1;
     for(int i=0;i<3;i++) {
-    	MPI_Request cnt_req[2];
-    	MPI_Request data_req[2];
+    	MPI_Request cnt_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
+    	MPI_Request data_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
 	int part_count[2];
     	for(int j=0;j<2;j++) {
-    	    cnt_req[j] = MPI_REQUEST_NULL;
-    	    data_req[j] = MPI_REQUEST_NULL;
-    	}
-    	for(int j=0;j<2;j++) {
     	    int rank = m_proc_grid->m_hood[i][j];
-    	    if(rank < 0 || rank > m_local_comm->m_size ||      // no pbc and no neighbour in this dir
+    	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
     	       rank == m_local_comm->m_rank ||                 // not same rank
     	       (j == 1 && rank == m_proc_grid->m_hood[i][0]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
     	    {
     		continue;
     	    }
-    	    send_particles_to_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT + i*2+j, IRIS_TAG_FMM_P2P_HALO + i*2+j, part_count+j, m_border_parts[j], cnt_req+j, data_req+j);
+    	    send_particles_to_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT, IRIS_TAG_FMM_P2P_HALO, part_count+j, m_border_parts[j], cnt_req+j, data_req+j);
     	}
+
     	for(int j=0;j<2;j++) {
-    	    int rank = m_proc_grid->m_hood[i][j];
-    	    if(rank < 0 || rank > m_local_comm->m_size ||      // no pbc and no neighbour in this dir
+    	    int rank = m_proc_grid->m_hood[i][1-j];
+    	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
     	       rank == m_local_comm->m_rank ||                 // not same rank
-    	       (j == 1 && rank == m_proc_grid->m_hood[i][0]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
-    	    {
-    		continue;
-    	    }
-	    recv_particles_from_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT + i*2+(1-j), IRIS_TAG_FMM_P2P_HALO + i*2+(1-j), alien_index, alien_flag);
+    	       (j == 1 && rank == m_proc_grid->m_hood[i][1]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
+	    {
+		continue;
+	    }
+	    recv_particles_from_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT, IRIS_TAG_FMM_P2P_HALO, alien_index, alien_flag);
 	    alien_index++;
 	    alien_flag *= 2;
     	}
@@ -103,7 +100,7 @@ void fmm::send_particles_to_neighbour(int rank, int count_tag, int data_tag,
 	*out_part_count += m_xcells[m_border_leafs[i]].num_children;
     }
 
-    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d", *out_part_count, bl_count, rank);
+    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d tags = %d %d", *out_part_count, bl_count, rank, count_tag, data_tag);
     
     MPI_Isend(out_part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, out_cnt_req);
 
@@ -191,7 +188,7 @@ void fmm::recv_particles_from_neighbour(int rank, int count_tag, int data_tag, i
     int part_count;
     MPI_Recv(&part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, MPI_STATUS_IGNORE);
 
-    m_logger->info("Will be receiving %d paricles from neighbour %d", part_count, rank);
+    m_logger->info("Will be receiving %d paricles from neighbour %d, tags = %d %d", part_count, rank, count_tag, data_tag);
     
     memory::destroy_1d(m_xparticles[alien_index]);
     memory::create_1d(m_xparticles[alien_index], part_count);

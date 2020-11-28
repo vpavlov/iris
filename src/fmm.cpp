@@ -358,7 +358,7 @@ void fmm::exchange_LET()
     
     // exchange_rest_of_LET();
     // recalculate_LET();
-    relink_parents(m_xcells);
+    //relink_parents(m_xcells);
 
     //print_tree("Xcell", m_xcells, 0);
 

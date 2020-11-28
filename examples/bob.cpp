@@ -395,7 +395,7 @@ int main(int argc, char **argv)
     // debugging facility
     
     // bool ready = false;
-    // if(rank == 4) {
+    // if(rank == 2) {
     // 	printf("Rank %d is PID %d\n", rank, getpid());
     // 	while (!ready) {
     // 	    sleep(5);
