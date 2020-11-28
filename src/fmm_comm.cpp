@@ -45,6 +45,8 @@ using namespace ORG_NCSA_IRIS;
 void fmm::exchange_p2p_halo()
 {
     // worst case scenario - allocate memory for sending all the particles
+    // NOTE: this cannot be in commit since we don't know the number of local particles at that point...
+    // NOTE GPU: would benefit from some kind of buffer manager to not allocate this every time (if all this happens on the GPU)
     memory::destroy_1d(m_border_parts[0]);
     memory::create_1d(m_border_parts[0], m_nparticles);
     

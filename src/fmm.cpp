@@ -210,8 +210,6 @@ void fmm::upward_pass_in_local_tree()
     
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    
-    print_tree("Cell", m_cells, 0);
 }
 
 void fmm::load_particles()

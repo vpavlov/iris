@@ -36,6 +36,7 @@
 #include "solver.h"
 #include "comm_rec.h"
 #include "utils.h"
+#include "memory.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -120,7 +121,8 @@ void domain::commit()
 	    m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
 	    m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
 	}else {
-	    dd_octsection();
+	    octsect_dd();
+	    octsect_update_hood();
 	}
 	m_logger->info("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
 		       m_local_box.xsize, m_local_box.ysize,
@@ -133,9 +135,8 @@ void domain::commit()
     }
 }
 
-// This is all too well, but won't serve our purposes, so for now
-// it just sits here, unused...
-void domain::dd_octsection()
+// TODO: move this in grid, were it belongs...
+void domain::octsect_dd()
 {
     int sz = m_local_comm->m_size;
     if(!is_power_of_2(sz)) {
@@ -181,4 +182,107 @@ void domain::dd_octsection()
     m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
     m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
     m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
+}
+
+
+// TODO: move this in grid, where it belons
+void domain::octsect_update_hood()
+{
+    int sz = m_local_comm->m_size;
+    int bits = int(log(sz)/M_LN2);
+
+    int max[3];
+    max[0] = 0;
+    max[1] = 0;
+    max[2] = 0;
+    for(int p=0;p<sz;p++) {
+	int coords[3];
+	coords[0] = 0;
+	coords[1] = 0;
+	coords[2] = 0;
+	for(int i=0;i<bits;i++) {
+	    int d = 2 - i % 3;  // which dimension are we dividing ?
+	    if (p & (1 << (bits-1-i))) {
+		coords[d] += (1 << (bits-1-i)/3);
+	    }
+	}
+	max[0] = MAX(max[0], coords[0]);
+	max[1] = MAX(max[1], coords[1]);
+	max[2] = MAX(max[2], coords[2]);
+    }
+
+    memory::destroy_3d(m_proc_grid->m_ranks);
+    memory::create_3d(m_proc_grid->m_ranks, max[0]+1, max[1]+1, max[2]+1);
+    for(int p=0;p<sz;p++) {
+	int coords[3];
+	coords[0] = 0;
+	coords[1] = 0;
+	coords[2] = 0;
+	for(int i=0;i<bits;i++) {
+	    int d = 2 - i % 3;  // which dimension are we dividing ?
+	    if (p & (1 << (bits-1-i))) {
+		coords[d] += (1 << (bits-1-i)/3);
+	    }
+	}
+	m_proc_grid->m_ranks[coords[0]][coords[1]][coords[2]] = p;
+	if(p == m_local_comm->m_rank) {
+	    m_proc_grid->m_coords[0] = coords[0];
+	    m_proc_grid->m_coords[1] = coords[1];
+	    m_proc_grid->m_coords[2] = coords[2];
+	}
+    }
+
+    // right
+    if(m_proc_grid->m_coords[0] + 1 <= max[0]) {
+	m_proc_grid->m_hood[0][0] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0] + 1][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]];
+    }else if (m_proc_grid->m_pbc[0] != 0) {
+	m_proc_grid->m_hood[0][0] = m_proc_grid->m_ranks[0][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]];
+    }else {
+	m_proc_grid->m_hood[0][0] = -1;
+    }
+
+    // left
+    if(m_proc_grid->m_coords[0] - 1 >= 0) {
+	m_proc_grid->m_hood[0][1] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0] - 1][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]];
+    }else if (m_proc_grid->m_pbc[0] != 0) {
+	m_proc_grid->m_hood[0][1] = m_proc_grid->m_ranks[max[0]][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]];
+    }else {
+	m_proc_grid->m_hood[0][1] = -1;
+    }
+
+    // up
+    if(m_proc_grid->m_coords[1] + 1 <= max[1]) {
+	m_proc_grid->m_hood[1][0] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]+1][m_proc_grid->m_coords[2]];
+    }else if (m_proc_grid->m_pbc[1] != 0) {
+	m_proc_grid->m_hood[1][0] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][0][m_proc_grid->m_coords[2]];
+    }else {
+	m_proc_grid->m_hood[1][0] = -1;
+    }
+
+    // down
+    if(m_proc_grid->m_coords[1] - 1 >= 0) {
+	m_proc_grid->m_hood[1][1] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]-1][m_proc_grid->m_coords[2]];
+    }else if (m_proc_grid->m_pbc[1] != 0) {
+	m_proc_grid->m_hood[1][1] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][max[1]][m_proc_grid->m_coords[2]];
+    }else {
+	m_proc_grid->m_hood[1][1] = -1;
+    }
+
+    // back
+    if(m_proc_grid->m_coords[2] + 1 <= max[2]) {
+	m_proc_grid->m_hood[2][0] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]+1];
+    }else if (m_proc_grid->m_pbc[2] != 0) {
+	m_proc_grid->m_hood[2][0] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]][0];
+    }else {
+	m_proc_grid->m_hood[2][0] = -1;
+    }
+
+    // front
+    if(m_proc_grid->m_coords[2] - 1 >= 0) {
+	m_proc_grid->m_hood[2][1] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]][m_proc_grid->m_coords[2]-1];
+    }else if (m_proc_grid->m_pbc[2] != 0) {
+	m_proc_grid->m_hood[2][1] = m_proc_grid->m_ranks[m_proc_grid->m_coords[0]][m_proc_grid->m_coords[1]][max[2]];
+    }else {
+	m_proc_grid->m_hood[2][1] = -1;
+    }
 }

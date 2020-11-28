@@ -61,6 +61,7 @@ namespace ORG_NCSA_IRIS {
 	int m_size[3];     // MxNxK procs in each direction
 	int m_coords[3];   // This process' coords in the grid
 	int m_hood[3][2];  // for each of the 3 directions, top/bottom neighbour
+	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 
 	iris_real *m_xsplit;    // M ranges (rel 0 - 1) for each proc in X dir
 	iris_real *m_ysplit;    // N ranges (rel 0 - 1) for each proc in Y dir
@@ -68,7 +69,6 @@ namespace ORG_NCSA_IRIS {
 
     protected:
 	bool m_dirty;      // if we need to re-calculate upon commit
-	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 	int m_pref[3];   // User preference about procs in each dir
 
     public:
