@@ -53,6 +53,7 @@ void fmm::exchange_p2p_halo()
     memory::destroy_1d(m_border_parts[1]);
     memory::create_1d(m_border_parts[1], m_nparticles);
 
+    int alien_index = 0;
     int alien_flag = IRIS_FMM_CELL_ALIEN1;
     for(int i=0;i<3;i++) {
     	MPI_Request cnt_req[2];
@@ -70,10 +71,7 @@ void fmm::exchange_p2p_halo()
     	    {
     		continue;
     	    }
-    	    send_particles_to_neighbour(rank, 
-					IRIS_TAG_FMM_P2P_HALO_CNT+i*j, IRIS_TAG_FMM_P2P_HALO+i*j,
-					part_count + j, m_border_parts[j],
-					cnt_req + j, data_req + j);
+    	    send_particles_to_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT + i*2+j, IRIS_TAG_FMM_P2P_HALO + i*2+j, part_count+j, m_border_parts[j], cnt_req+j, data_req+j);
     	}
     	for(int j=0;j<2;j++) {
     	    int rank = m_proc_grid->m_hood[i][j];
@@ -83,7 +81,8 @@ void fmm::exchange_p2p_halo()
     	    {
     		continue;
     	    }
-	    recv_particles_from_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT+i*j, IRIS_TAG_FMM_P2P_HALO+i*j, i*j, alien_flag);
+	    recv_particles_from_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT + i*2+(1-j), IRIS_TAG_FMM_P2P_HALO + i*2+(1-j), alien_index, alien_flag);
+	    alien_index++;
 	    alien_flag *= 2;
     	}
     	for(int j=0;j<2;j++) {
@@ -104,6 +103,8 @@ void fmm::send_particles_to_neighbour(int rank, int count_tag, int data_tag,
 	*out_part_count += m_xcells[m_border_leafs[i]].num_children;
     }
 
+    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d", *out_part_count, bl_count, rank);
+    
     MPI_Isend(out_part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, out_cnt_req);
 
     int n = 0;
@@ -111,13 +112,7 @@ void fmm::send_particles_to_neighbour(int rank, int count_tag, int data_tag,
 	cell_t *leaf = &m_xcells[m_border_leafs[i]];
 	for(int j=0;j<leaf->num_children;j++) {
 	    xparticle_t *ptr;
-	    if(leaf->flags & IRIS_FMM_CELL_ALIEN1 ||
-	       leaf->flags & IRIS_FMM_CELL_ALIEN2 ||
-	       leaf->flags & IRIS_FMM_CELL_ALIEN3 ||
-	       leaf->flags & IRIS_FMM_CELL_ALIEN4 ||
-	       leaf->flags & IRIS_FMM_CELL_ALIEN5 ||
-	       leaf->flags & IRIS_FMM_CELL_ALIEN6)
-	    {
+	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
 		if(leaf->flags & IRIS_FMM_CELL_ALIEN1) {
 		    ptr = m_xparticles[0];
 		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN2) {
@@ -154,8 +149,8 @@ int fmm::border_leafs(int rank)
     int send_count = 0;
     int start = cell_meta_t::offset_for_level(max_level());
     int end = m_tree_size;
-    for(int n = start; n<end; n++) {
-	if(m_xcells[n].num_children == 0) {
+    for(int n = start; n<end; n++) {  // iterate through all the leafs
+	if(m_xcells[n].num_children == 0) {  // only full cells
 	    continue;
 	}
 	bool send = false;
@@ -163,7 +158,7 @@ int fmm::border_leafs(int rank)
 	iris_real cx = m_cell_meta[n].center[0];
 	iris_real cy = m_cell_meta[n].center[1];
 	iris_real cz = m_cell_meta[n].center[2];
-
+	
 	for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 	    if(send) { break; }
 	    for(int iy = -m_proc_grid->m_pbc[1]; iy <= m_proc_grid->m_pbc[1]; iy++) {
@@ -196,6 +191,8 @@ void fmm::recv_particles_from_neighbour(int rank, int count_tag, int data_tag, i
     int part_count;
     MPI_Recv(&part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, MPI_STATUS_IGNORE);
 
+    m_logger->info("Will be receiving %d paricles from neighbour %d", part_count, rank);
+    
     memory::destroy_1d(m_xparticles[alien_index]);
     memory::create_1d(m_xparticles[alien_index], part_count);
     

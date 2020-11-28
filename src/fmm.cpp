@@ -157,7 +157,7 @@ void fmm::generate_cell_meta()
     memory::destroy_1d(m_cell_meta);
     memory::create_1d(m_cell_meta, m_tree_size);
     for(int i=0;i<m_tree_size;i++) {
-	m_cell_meta[i].set(i, &m_domain->m_global_box, m_leaf_size, max_level());
+	m_cell_meta[i].set(m_cell_meta, i, &m_domain->m_global_box, m_leaf_size, max_level());
     }
 }
 
@@ -190,7 +190,7 @@ void fmm::handle_box_resize()
 void fmm::solve()
 {
     upward_pass_in_local_tree();
-    //exchange_LET();
+    exchange_LET();
     //dual_tree_traversal();
     
     MPI_Barrier(m_iris->server_comm());
@@ -210,6 +210,7 @@ void fmm::upward_pass_in_local_tree()
     
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    //print_tree("Cell", m_cells, 0);
 }
 
 void fmm::load_particles()
@@ -241,7 +242,7 @@ void fmm::load_particles()
 	    int id = 0;
 	    for(int l=0;l<max_level(); l++) {
 		for(int d=0;d<3;d++) {
-		    id += (lc[d] % 2) << (3*l + d);
+		    id += (lc[d] & 1) << (3*l + d);
 		    lc[d] >>= 1;
 		}
 	    }
@@ -264,7 +265,7 @@ void fmm::relink_parents(cell_t *io_cells)
     // first, clear the num_children of all non-leaf cells
     int end = cell_meta_t::offset_for_level(max_level());
     for(int i=0;i<end;i++) {
-	io_cells[i].num_children = 0;
+	io_cells[i].flags & ~IRIS_FMM_CELL_HAS_CHILDREN;
     }
 
     // now, link all leafs upwards
@@ -354,11 +355,12 @@ void fmm::exchange_LET()
     
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     exchange_p2p_halo();
-    exchange_rest_of_LET();
-    recalculate_LET();
+    
+    // exchange_rest_of_LET();
+    // recalculate_LET();
     relink_parents(m_xcells);
 
-    print_tree("Xcell", m_xcells, 0);
+    //print_tree("Xcell", m_xcells, 0);
 
     tm.stop();
     m_logger->info("FMM: Exchange LET  wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
