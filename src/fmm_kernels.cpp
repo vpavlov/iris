@@ -114,8 +114,8 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    }
 	    
 	    int idx=multipole_index(n, m);
-	    out_gamma[idx] = re;
-	    out_gamma[idx+1] = im;
+	    out_gamma[idx] += re;
+	    out_gamma[idx+1] += im;
 	}
     }
 }

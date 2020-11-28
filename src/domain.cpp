@@ -119,20 +119,22 @@ void domain::commit()
 	    m_local_box.xsize = m_local_box.xhi - m_local_box.xlo;
 	    m_local_box.ysize = m_local_box.yhi - m_local_box.ylo;
 	    m_local_box.zsize = m_local_box.zhi - m_local_box.zlo;
-
 	}else {
 	    dd_octsection();
 	}
 	m_logger->info("Local box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
-			m_local_box.xsize, m_local_box.ysize,
-			m_local_box.zsize,
-			m_local_box.xlo, m_local_box.xhi,
-			m_local_box.ylo, m_local_box.yhi,
-			m_local_box.zlo, m_local_box.zhi);
+		       m_local_box.xsize, m_local_box.ysize,
+		       m_local_box.zsize,
+		       m_local_box.xlo, m_local_box.xhi,
+		       m_local_box.ylo, m_local_box.yhi,
+		       m_local_box.zlo, m_local_box.zhi);
+	    
 	m_dirty = false;
     }
 }
 
+// This is all too well, but won't serve our purposes, so for now
+// it just sits here, unused...
 void domain::dd_octsection()
 {
     int sz = m_local_comm->m_size;
@@ -153,7 +155,7 @@ void domain::dd_octsection()
     prev_max[2] = m_global_box.zhi;
 
     for(int i=0;i<bits;i++) {
-	int d = i % 3;  // which dimension are we dividing ?
+	int d = 2 - i % 3;  // which dimension are we dividing ?
 	for(int j=0;j<3;j++) {
 	    curr_min[j] = prev_min[j];
 	    curr_max[j] = prev_max[j];

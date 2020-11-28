@@ -51,6 +51,8 @@ namespace ORG_NCSA_IRIS {
 	int max_level() { return m_depth - 1; }
 	int depth() { return m_depth; }
 	int nterms() { return m_nterms; }
+	int local_root_level() { return m_local_root_level; }
+	
 	void set_leaf_size();
 
 	void compute_local(iris_real *in_scratch);
@@ -59,6 +61,9 @@ namespace ORG_NCSA_IRIS {
     private:
 
 	void debug(int i, int j, char *msg);
+	void exchange_p2p_halo(box_t<iris_real> *in_local_boxes);
+	void exchange_rest_of_LET(box_t<iris_real> *in_local_boxes);
+	void get_LET(int rank, box_t<iris_real> *in_local_boxes, struct cell_t *start_from, int level, unsigned char *sendbuf, int unit_size, int *out_cits);
 	
 	void free_cells();
 	void determine_depth();
@@ -70,6 +75,7 @@ namespace ORG_NCSA_IRIS {
 	struct cell_t *create_leafs(T *in_particles, int in_nparticles, int *out_nleafs);
 	    
 	void children2parent(int level);
+	cell_t *xchildren2parent(int level);
 	void eval_p2m(cell_t *leafs, int nleafs);
 	void eval_m2m(iris_real *in_scratch);
 	void bottom_up();
@@ -77,39 +83,19 @@ namespace ORG_NCSA_IRIS {
 	int *border_leafs(int rank, box_t<iris_real> *in_local_boxes, int *out_send_count, bool alien);
 	void inhale_xparticles(struct xparticle_t *in_xparticles, int in_count);
 	void inhale_xleafs(struct cell_t *in_xleafs, int in_count);
-
+	void inhale_xcells(unsigned char *recvbuf, int in_count);
+	
 	void compute_leafs_to_send(box_t<iris_real> *in_local_boxes, int *&send_to_ranks, int *&send_cnt, int *&leafs_to_send, int *out_rank_count, int *out_hwm);
 	void compute_particle_send_size(int *send_to_ranks, int *send_cell_count, int *leafs_to_send, int rank_size,
 					struct pit_t *&send_buf, int *&send_body_count, int *&send_body_disp, int *&recv_body_count);
 	
 	
-	void send_particles_to_neighbour(int rank, box_t<iris_real> *in_local_boxes,
-					 int count_tag, int data_tag,
-					 int *out_part_count, xparticle_t *&out_sendbuf,
-					 MPI_Request *out_cnt_req, MPI_Request *out_data_req);
 	
 	void recv_particles_from_neighbour(int rank, int count_tag, int data_tag);
 	struct particle_t *alien_charges2particles(iris_real *in_data, int in_count);
 
 	
-	int                m_depth;       // # of items in arrays belowo
-	iris_real          m_mac;         // Multipole acceptance criteria
-	int                m_nterms;      // number of items in the multipole expansions
-	iris_real          m_leaf_size[3];  // size of leaf cells
 
-	// THE "TREE"
-	
-	int               *m_ncells;      // number of cells on each level
-	struct cell_t    **m_cells;       // arrays of cells, one for each level
-
-	int               *m_nxcells;     // number of alien cells on each level
-	struct cell_t    **m_xcells;      // array of alien cells, one for each level
-	
-	int                m_nparticles;  // number of particle
-	struct particle_t *m_particles;   // array of particles themselves
-
-	int                 m_nxparticles;  // number of alien particles
-	struct xparticle_t *m_xparticles;   // alien particles
 	
     };
 }
