@@ -173,10 +173,10 @@ void mesh_gpu::assign_charges_gpu(iris_real* sendbuff_gpu)
 {
 	int nitems = m_ext_size[0]*m_ext_size[1]*m_ext_size[2];
 	// it might be optimized using cudaMemset ....
-	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(&(m_rho_plus[0][0][0]), nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(&(m_Ex_plus[0][0][0]), nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(&(m_Ey_plus[0][0][0]), nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(&(m_Ez_plus[0][0][0]), nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_rho_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_Ex_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_Ey_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_Ez_plus, nitems, (iris_real)0.0);
 	memory_set_kernel<<<get_NBlocks(2,IRIS_CUDA_NTHREADS),2>>>(sendbuff_gpu, 2, (iris_real)0.0);
 	cudaDeviceSynchronize();
 	HANDLE_LAST_CUDA_ERROR;

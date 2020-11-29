@@ -347,13 +347,16 @@ void mesh_gpu::assign_charges()
 	#warning "use gpu buffer manager here..."
 	memory_gpu::create_1d(sendbuf_gpu,2,true);
 
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
-		int ncharges = it->second;
-		iris_real *charges = m_charges[it->first];
+	assign_charges_gpu(sendbuf_gpu);
+	
+	// implemented in assign_charges_gpu
+    // for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	// 	int ncharges = it->second;
+	// 	iris_real *charges = m_charges[it->first];
 
-		m_logger->trace("assign_charge called assign_charges_gpu");
-		assign_charges1(ncharges, charges,sendbuf_gpu);
-    }
+	// 	m_logger->trace("assign_charge called assign_charges_gpu");
+	// 	assign_charges1(ncharges, charges,sendbuf_gpu);
+    // }
 
     m_logger->trace("assign_charge calling MPI_Allreduce");
 	if(memory_gpu::m_env_psp_cuda!=0)

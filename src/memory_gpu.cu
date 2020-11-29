@@ -84,6 +84,20 @@ void memory_set_kernel(iris_real* ptr, int n, iris_real val)
     }
 };
 
+__global__
+void memory_set_kernel(iris_real*** ptr3d, int n, iris_real val)
+{
+    iris_real *ptr = &(ptr3d[0][0][0]);
+    int ndx = IRIS_CUDA_INDEX(x);
+    int chunk_size = IRIS_CUDA_CHUNK(x,n);
+    int from = ndx*chunk_size;
+    int to = MIN((ndx+1)*chunk_size,n);
+    
+    for(ndx=from; ndx<to; ++ndx) {
+    ptr[ndx]=val;
+    }
+};
+
 //**********************************************************************
 // 1D Arrays
 //**********************************************************************
