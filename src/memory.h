@@ -203,7 +203,6 @@ namespace ORG_NCSA_IRIS {
 	}
     };
 
-#define IRIS_CUDA
 #ifdef IRIS_CUDA
     class memory_gpu {
 

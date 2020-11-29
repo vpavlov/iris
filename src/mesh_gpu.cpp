@@ -436,7 +436,7 @@ void mesh_gpu::assign_forces(bool ad)
 	if(memory_gpu::m_env_psp_cuda!=0) {
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
 	} else {
-	memory_gpu::sync_cpu_buffer(forces_cpu,forces);
+	memory_gpu::sync_cpu_buffer(forces_cpu, forces, size);
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces_cpu, &req, NULL);
 	}
 	MPI_Request_free(&req);

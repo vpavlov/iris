@@ -438,7 +438,7 @@ void haloex_gpu::recv(int in_dim, int in_dir)
 		} else {
 		iris_real *recvbuf_cpu =  m_recvbufs_cpu[idx];
 
-		MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
+		MPI_Recv(recvbuf_cpu, size, MPI_BYTE, src_rank,
 	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
 
 		memory_gpu::sync_gpu_buffer(recvbuf,recvbuf_cpu,size);

@@ -113,9 +113,10 @@ iris_gpu::iris_gpu(int in_client_size, int in_server_size,
 
 void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-
-    memory_gpu::m_env_psp_cuda = atoi(getenv("PSP_CUDA"));
-
+    char * psp_cuda_env = getenv("PSP_CUDA");
+    if(psp_cuda_env!=NULL){
+    memory_gpu::m_env_psp_cuda = atoi(psp_cuda_env);
+    }
 #if defined _OPENMP
 #pragma omp parallel default(none)
     m_nthreads = omp_get_num_threads();
@@ -688,7 +689,7 @@ bool iris_gpu::handle_charges(event_t *event)
     if(memory_gpu::m_env_psp_cuda!=0) {
     m_mesh->m_charges[event->peer] = (iris_real *)event->data;
     } else {
-    m_mesh->m_charges[event->peer] = memory_gpu::wmalloc(ncharges*unit);
+    m_mesh->m_charges[event->peer] = (iris_real *)memory_gpu::wmalloc(ncharges*unit);
     m_mesh->m_charges_cpu[event->peer] = (iris_real *)event->data;
     memory_gpu::sync_gpu_buffer(m_mesh->m_charges[event->peer],m_mesh->m_charges_cpu[event->peer],ncharges*unit);
     }

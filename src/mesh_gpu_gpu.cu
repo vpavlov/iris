@@ -51,6 +51,8 @@
 
 using namespace ORG_NCSA_IRIS;
 
+int memory_gpu::m_env_psp_cuda;
+
 void mesh_gpu::dump_bov(const char *fname, iris_real ***data)
 {
     char values_fname[256];
