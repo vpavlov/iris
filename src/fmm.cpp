@@ -257,7 +257,7 @@ void fmm::load_particles()
     }
 
     // sort the final list by cellID
-    sort_particles(m_particles, m_nparticles, true);
+    sort_particles(m_particles, m_nparticles, false);
 }
 
 void fmm::relink_parents(cell_t *io_cells)
@@ -358,8 +358,7 @@ void fmm::exchange_LET()
     
     // exchange_rest_of_LET();
     // recalculate_LET();
-    //relink_parents(m_xcells);
-
+    relink_parents(m_xcells);
     //print_tree("Xcell", m_xcells, 0);
 
     tm.stop();
@@ -376,7 +375,16 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
     if(level == max_level()) {
 	m_logger->info("%*s%s %d (L%d) has %d particles starting from %d and flags 0x%x; M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].num_children, in_cells[cellID].first_child, in_cells[cellID].flags, m_M[cellID][0]);
     }else {
-	m_logger->info("%*s%s %d (L%d) flags 0x%x; M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].flags, m_M[cellID][0]);
+	int num_children = 0;
+	int mask = IRIS_FMM_CELL_HAS_CHILD1;
+	for(int i=0;i<8;i++) {
+	    if(in_cells[cellID].flags & mask) {
+		num_children++;
+	    }
+	    mask <<= 1;
+	}
+	
+	m_logger->info("%*s%s %d (L%d) has %d children and flags 0x%x; M[0] = %f", level+1, " ", label, cellID, level, num_children, in_cells[cellID].flags, m_M[cellID][0]);
     }
     if(level < max_level()) {
 	int this_offset = cell_meta_t::offset_for_level(level);

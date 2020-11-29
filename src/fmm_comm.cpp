@@ -44,21 +44,22 @@ using namespace ORG_NCSA_IRIS;
 //
 void fmm::exchange_p2p_halo()
 {
-    // worst case scenario - allocate memory for sending all the particles
+    // worst case scenario - allocate memory for sending all the particles.
+    // NOTE: This is probably not wise to do, since the system could be quite large. 
     // NOTE: this cannot be in commit since we don't know the number of local particles at that point...
     // NOTE GPU: would benefit from some kind of buffer manager to not allocate this every time (if all this happens on the GPU)
     memory::destroy_1d(m_border_parts[0]);
-    memory::create_1d(m_border_parts[0], m_nparticles);
+    memory::create_1d(m_border_parts[0], m_iris->m_natoms);
     
     memory::destroy_1d(m_border_parts[1]);
-    memory::create_1d(m_border_parts[1], m_nparticles);
+    memory::create_1d(m_border_parts[1], m_iris->m_natoms);
 
     int alien_index = 0;
     int alien_flag = IRIS_FMM_CELL_ALIEN1;
     for(int i=0;i<3;i++) {
     	MPI_Request cnt_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
     	MPI_Request data_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
-	int part_count[2];
+
     	for(int j=0;j<2;j++) {
     	    int rank = m_proc_grid->m_hood[i][j];
     	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
@@ -67,7 +68,7 @@ void fmm::exchange_p2p_halo()
     	    {
     		continue;
     	    }
-    	    send_particles_to_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT, IRIS_TAG_FMM_P2P_HALO, part_count+j, m_border_parts[j], cnt_req+j, data_req+j);
+    	    send_particles_to_neighbour(rank, m_border_parts[j], cnt_req+j, data_req+j);
     	}
 
     	for(int j=0;j<2;j++) {
@@ -76,9 +77,11 @@ void fmm::exchange_p2p_halo()
     	       rank == m_local_comm->m_rank ||                 // not same rank
     	       (j == 1 && rank == m_proc_grid->m_hood[i][1]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
 	    {
+		alien_index++;
+		alien_flag *= 2;
 		continue;
 	    }
-	    recv_particles_from_neighbour(rank, IRIS_TAG_FMM_P2P_HALO_CNT, IRIS_TAG_FMM_P2P_HALO, alien_index, alien_flag);
+	    recv_particles_from_neighbour(rank, alien_index, alien_flag);
 	    alien_index++;
 	    alien_flag *= 2;
     	}
@@ -89,20 +92,18 @@ void fmm::exchange_p2p_halo()
     }
 }
 
-void fmm::send_particles_to_neighbour(int rank, int count_tag, int data_tag,
-				      int *out_part_count, xparticle_t *&out_sendbuf,
-				      MPI_Request *out_cnt_req, MPI_Request *out_data_req)
+void fmm::send_particles_to_neighbour(int rank, xparticle_t *&out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
 {
     int bl_count = border_leafs(rank);
     
-    *out_part_count = 0;
+    int part_count = 0;
     for(int i=0;i<bl_count;i++) {
-	*out_part_count += m_xcells[m_border_leafs[i]].num_children;
+	part_count += m_xcells[m_border_leafs[i]].num_children;
     }
 
-    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d tags = %d %d", *out_part_count, bl_count, rank, count_tag, data_tag);
+    m_logger->trace("Will be sending %d particles (from %d border leafs) to neighbour %d", part_count, bl_count, rank);
     
-    MPI_Isend(out_part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, out_cnt_req);
+    MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
 
     int n = 0;
     for(int i=0;i<bl_count;i++) {
@@ -138,7 +139,7 @@ void fmm::send_particles_to_neighbour(int rank, int count_tag, int data_tag,
 	}
     }
     
-    MPI_Isend(out_sendbuf, (*out_part_count)*sizeof(xparticle_t), MPI_BYTE, rank, data_tag, m_local_comm->m_comm, out_data_req);
+    MPI_Isend(out_sendbuf, part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
 }
 
 int fmm::border_leafs(int rank)
@@ -183,17 +184,17 @@ int fmm::border_leafs(int rank)
     return send_count;
 }
 
-void fmm::recv_particles_from_neighbour(int rank, int count_tag, int data_tag, int alien_index, int alien_flag)
+void fmm::recv_particles_from_neighbour(int rank, int alien_index, int alien_flag)
 {
     int part_count;
-    MPI_Recv(&part_count, 1, MPI_INT, rank, count_tag, m_local_comm->m_comm, MPI_STATUS_IGNORE);
+    MPI_Recv(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, MPI_STATUS_IGNORE);
 
-    m_logger->info("Will be receiving %d paricles from neighbour %d, tags = %d %d", part_count, rank, count_tag, data_tag);
+    m_logger->trace("Will be receiving %d paricles from neighbour %d", part_count, rank);
     
     memory::destroy_1d(m_xparticles[alien_index]);
     memory::create_1d(m_xparticles[alien_index], part_count);
     
-    MPI_Recv(m_xparticles[alien_index], part_count*sizeof(xparticle_t), MPI_BYTE, rank, data_tag, m_local_comm->m_comm, MPI_STATUS_IGNORE);
+    MPI_Recv(m_xparticles[alien_index], part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, MPI_STATUS_IGNORE);
 
     distribute_particles(m_xparticles[alien_index], part_count, alien_flag, m_xcells);
 }

@@ -69,7 +69,7 @@
 #define IRIS_TAG_GGE                76
 #define IRIS_TAG_GGE_DONE           77
 
-#define IRIS_TAG_FMM_P2P_HALO_CNT   78 // leave room for 6 halo msgs
-#define IRIS_TAG_FMM_P2P_HALO       84 // leave room for 6 halo msgs
+#define IRIS_TAG_FMM_P2P_HALO_CNT   78
+#define IRIS_TAG_FMM_P2P_HALO       79
 
 #endif
