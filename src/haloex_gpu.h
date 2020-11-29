@@ -71,6 +71,9 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_sendbufs[6];
 	iris_real *m_recvbufs[6];
 
+	iris_real *m_sendbufs_cpu[6];
+	iris_real *m_recvbufs_cpu[6];
+
 	MPI_Request m_req[6];
     };
 }

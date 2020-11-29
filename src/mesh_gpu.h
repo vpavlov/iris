@@ -114,6 +114,10 @@ namespace ORG_NCSA_IRIS {
 	std::map<int, iris_real *> m_charges;    // per sending rank
 	std::map<int, iris_real *> m_forces;     // per recv rank
 
+	// cpu buffers when cuda aware mpi is disabled
+		std::map<int, iris_real *> m_charges_cpu;    // per sending rank
+		std::map<int, iris_real *> m_forces_cpu;     // per recv rank
+
 	iris_real ***m_rho;  // own charge density (ρ), part of RHS
 	iris_real ***m_rho_plus;  // ρ, own + halo items
 

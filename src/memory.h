@@ -203,7 +203,7 @@ namespace ORG_NCSA_IRIS {
 	}
     };
 
-
+#define IRIS_CUDA
 #ifdef IRIS_CUDA
     class memory_gpu {
 
@@ -212,7 +212,11 @@ namespace ORG_NCSA_IRIS {
 	static void *wmalloc(int nbytes);
 	static void *wrealloc(void *ptr, int nbytes, int old_size);
 	static void wfree(void *ptr);
-	
+	static int sync_gpu_buffer(void* dst_gpu, const void* src, size_t count);
+	static int sync_cpu_buffer(void* dst, const void* src_gpu, size_t count);
+
+	static int m_env_psp_cuda;
+
 	//**********************************************************************
 	// 1D Arrays
 	//**********************************************************************

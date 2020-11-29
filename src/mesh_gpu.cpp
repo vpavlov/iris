@@ -73,6 +73,12 @@ mesh_gpu::~mesh_gpu()
 	memory_gpu::wfree(it->second);
     }
 
+	if(memory_gpu::m_env_psp_cuda==0) {
+	for(auto it = m_charges_cpu.begin(); it != m_charges_cpu.end(); it++) {
+	memory::wfree(it->second);
+    }
+	}
+
     for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
 	memory_gpu::wfree(it->second);
     }
@@ -149,10 +155,24 @@ void mesh_gpu::commit()
 	memory_gpu::wfree(it->second);
     }
 
+	if (memory_gpu::m_env_psp_cuda==0)
+	{
+    for(auto it = m_charges_cpu.begin(); it != m_charges_cpu.end(); it++) {
+	memory::wfree(it->second);
+    }
+    for(auto it = m_forces_cpu.begin(); it != m_forces_cpu.end(); it++) {
+	memory::wfree(it->second);
+    }
+	}
+
     m_ncharges.clear();
     m_charges.clear();
     m_forces.clear();	
 
+	if(memory_gpu::m_env_psp_cuda==0) {
+	m_charges_cpu.clear();
+	m_forces_cpu.clear();
+	}
 
     if(m_dirty) {
 	m_h[0] = m_domain->m_global_box.xsize / m_size[0];
@@ -322,6 +342,7 @@ void mesh_gpu::commit()
 void mesh_gpu::assign_charges()
 {
     iris_real *sendbuf_gpu;
+	iris_real sendbuf[2];
     iris_real recvbuf[2];
 	#warning "use gpu buffer manager here..."
 	memory_gpu::create_1d(sendbuf_gpu,2,true);
@@ -335,7 +356,13 @@ void mesh_gpu::assign_charges()
     }
 
     m_logger->trace("assign_charge calling MPI_Allreduce");
+	if(memory_gpu::m_env_psp_cuda!=0)
+	{
     MPI_Allreduce(sendbuf_gpu, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+	} else {
+	memory_gpu::sync_cpu_buffer(sendbuf,sendbuf_gpu,2);
+	MPI_Allreduce(sendbuf, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
+	}
     m_logger->trace("assign_charge called MPI_Allreduce");
     m_qtot = recvbuf[0];
     m_q2tot = recvbuf[1];
@@ -388,10 +415,17 @@ void mesh_gpu::assign_forces(bool ad)
 	    ncharges * 4 * sizeof(iris_real);        // 4 reals for each charge: id, Fx, Fy, Fz
 	#warning "buffer manager???"
 	iris_real *forces = (iris_real *)memory_gpu::wmalloc(size);
+	iris_real *forces_cpu;
 
 	assign_energy_virial_data(forces,include_energy_virial);
 	
 	m_forces[peer] = forces;
+
+	if(memory_gpu::m_env_psp_cuda==0) {
+	forces_cpu = (iris_real *)memory::wmalloc(size);
+	m_forces_cpu[peer] = forces_cpu;
+	}
+
 	if(ad) {
 	    assign_forces1_ad(ncharges, m_charges[it->first], forces);
 	}else {
@@ -399,7 +433,12 @@ void mesh_gpu::assign_forces(bool ad)
 	}
 
 	MPI_Request req;
+	if(memory_gpu::m_env_psp_cuda!=0) {
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
+	} else {
+	memory_gpu::sync_cpu_buffer(forces_cpu,forces);
+	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces_cpu, &req, NULL);
+	}
 	MPI_Request_free(&req);
 	include_energy_virial = false;
     }

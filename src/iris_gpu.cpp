@@ -29,6 +29,7 @@
 //==============================================================================
 #include <stdexcept>
 #include <cmath>
+#include <cstdlib>
 #include <unistd.h>
 #include <mpi.h>
 #include <omp.h>
@@ -112,6 +113,8 @@ iris_gpu::iris_gpu(int in_client_size, int in_server_size,
 
 void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+
+    memory_gpu::m_env_psp_cuda = atoi(getenv("PSP_CUDA"));
 
 #if defined _OPENMP
 #pragma omp parallel default(none)
@@ -682,7 +685,13 @@ bool iris_gpu::handle_charges(event_t *event)
     m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
 
     m_mesh->m_ncharges[event->peer] = ncharges;
+    if(memory_gpu::m_env_psp_cuda!=0) {
     m_mesh->m_charges[event->peer] = (iris_real *)event->data;
+    } else {
+    m_mesh->m_charges[event->peer] = memory_gpu::wmalloc(ncharges*unit);
+    m_mesh->m_charges_cpu[event->peer] = (iris_real *)event->data;
+    memory_gpu::sync_gpu_buffer(m_mesh->m_charges[event->peer],m_mesh->m_charges_cpu[event->peer],ncharges*unit);
+    }
 
     if(!is_client()) {
 	MPI_Request req;

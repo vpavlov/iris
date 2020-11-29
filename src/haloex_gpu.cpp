@@ -127,6 +127,92 @@ haloex_gpu::haloex_gpu(MPI_Comm in_comm, int *in_hood,
 	    memory_gpu::wmalloc(in_right_size * m_data_size[1] * m_data_size[0] *
 			    sizeof(iris_real));
     }
+
+	if (memory_gpu::m_env_psp_cuda==0)
+	{
+    if(in_mode == 0) {
+	m_sendbufs_cpu[0] = (iris_real *)  // buffer for sending to the right X
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[1] = (iris_real *)  // buffer for sending to the left X
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+
+	m_sendbufs_cpu[2] = (iris_real *)  // buffer for sending to the top Y
+	    memory::wmalloc(in_right_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[3] = (iris_real *)  // buffer for sending to the bottom Y
+	    memory::wmalloc(in_left_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	
+	m_sendbufs_cpu[4] = (iris_real *)  // buffer for sending to the front Z
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[5] = (iris_real *)  // buffer for sending to the back Z
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+
+
+	m_recvbufs_cpu[0] = (iris_real *)  // buffer for recving from the left X
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[1] = (iris_real *)  // buffer for recving from the right X
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+
+	m_recvbufs_cpu[2] = (iris_real *)  // buffer for recving from the bottom Y
+	    memory::wmalloc(in_right_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[3] = (iris_real *)  // buffer for recving from the top Y
+	    memory::wmalloc(in_left_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	
+	m_recvbufs_cpu[4] = (iris_real *)  // buffer for recving from the back Z
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[5] = (iris_real *)  // buffer for recving from the front Z
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+    }else {
+	m_sendbufs_cpu[0] = (iris_real *)  // buffer for sending to the right X
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[1] = (iris_real *)  // buffer for sending to the left X
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[2] = (iris_real *)  // buffer for sending to the top Y
+	    memory::wmalloc(in_left_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[3] = (iris_real *)  // buffer for sending to the bottom Y
+	    memory::wmalloc(in_right_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));	
+	m_sendbufs_cpu[4] = (iris_real *)  // buffer for sending to the front Z
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+	m_sendbufs_cpu[5] = (iris_real *)  // buffer for sending to the back Z
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+
+	m_recvbufs_cpu[0] = (iris_real *)  // buffer for recving from the left X
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[1] = (iris_real *)  // buffer for recving from the right X
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[2] = (iris_real *)  // buffer for recving from the bottom Y
+	    memory::wmalloc(in_left_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[3] = (iris_real *)  // buffer for recving from the top Y
+	    memory::wmalloc(in_right_size * m_data_size[0] * m_data_size[2] *
+			    sizeof(iris_real));	
+	m_recvbufs_cpu[4] = (iris_real *)  // buffer for recving from the back Z
+	    memory::wmalloc(in_left_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+	m_recvbufs_cpu[5] = (iris_real *)  // buffer for recving from the front Z
+	    memory::wmalloc(in_right_size * m_data_size[1] * m_data_size[0] *
+			    sizeof(iris_real));
+    }
+	}
 }
     
 haloex_gpu::~haloex_gpu()
@@ -135,6 +221,14 @@ haloex_gpu::~haloex_gpu()
 	memory_gpu::wfree(m_sendbufs[i]);
 	memory_gpu::wfree(m_recvbufs[i]);
     }
+
+	if(memory_gpu::m_env_psp_cuda==0)
+	{
+	for(int i=0;i<6;i++) {
+	memory::wfree(m_sendbufs_cpu[i]);
+	memory::wfree(m_recvbufs_cpu[i]);
+	}
+	}
 }
 
 //
@@ -248,8 +342,19 @@ void haloex_gpu::send(int in_dim, int in_dir)
 		return;
 	}
 
-    MPI_Isend(sendbuf, size, MPI_BYTE, dest_rank,
+	if (memory_gpu::m_env_psp_cuda!=0)
+	{
+    
+	MPI_Isend(sendbuf, size, MPI_BYTE, dest_rank,
 	      m_tag + idx, m_comm, &m_req[idx]);
+	
+	} else {
+	iris_real *sendbuf_cpu = m_sendbufs_cpu[idx];
+	memory_gpu::sync_cpu_buffer(sendbuf_cpu,sendbuf,size);
+
+	MPI_Isend(sendbuf_cpu, size, MPI_BYTE, dest_rank,
+	      m_tag + idx, m_comm, &m_req[idx]);
+	}
 }
 
 void haloex_gpu::recv(int in_dim, int in_dir)
@@ -324,8 +429,20 @@ void haloex_gpu::recv(int in_dim, int in_dir)
 	{
 		recvbuf = m_sendbufs[idx];
 	} else {
+		if(memory_gpu::m_env_psp_cuda!=0)
+		{
+		
 	    MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
 	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
+
+		} else {
+		iris_real *recvbuf_cpu =  m_recvbufs_cpu[idx];
+
+		MPI_Recv(recvbuf, size, MPI_BYTE, src_rank,
+	     m_tag + idx, m_comm, MPI_STATUS_IGNORE);
+
+		memory_gpu::sync_gpu_buffer(recvbuf,recvbuf_cpu,size);
+		}
 	}
 	copy_from_recvbuf(recvbuf, m_data, m_mode,
 					  sx, sy, sz, ex, ey, ez);

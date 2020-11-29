@@ -383,10 +383,6 @@ void remap_gpu::perform_p2p(iris_real ***in_src, iris_real *in_dest, iris_real *
     delete req;
 }
 
-void sync_gpu_buffer(void* dst, const void* src, size_t count);
-
-void sync_cpu_buffer(void* dst, const void* src, size_t count);
-
 void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris_real *in_buf)
 {
     if(m_comm_len <= 0) {
@@ -451,13 +447,13 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 
 	#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
-	sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size);
+	memory_gpu::sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size);
 
     MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
 		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
 		  m_collective_comm);
 
-	sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size);
+	memory_gpu::sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size);
 
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {
@@ -579,13 +575,13 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 
 	#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
-	sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size);
+	memory_gpu::sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size);
 
     MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
 		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
 		  m_collective_comm);
 
-	sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size);
+	memory_gpu::sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size);
 
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {

@@ -63,7 +63,7 @@ bool comm_rec_gpu::peek_event(event_t &out_event)
 	out_event.tag = status.MPI_TAG;
 	MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
 	if(out_event.size != 0) {
-        if (out_event.tag==IRIS_TAG_CHARGES) {
+        if (out_event.tag==IRIS_TAG_CHARGES && memory_gpu::m_env_psp_cuda!=0) {
             out_event.data = memory_gpu::wmalloc(out_event.size);
         } else {
     	    out_event.data = memory::wmalloc(out_event.size);
@@ -94,7 +94,11 @@ void comm_rec_gpu::get_event(int in_peer, int in_tag, event_t &out_event)
     out_event.tag = status.MPI_TAG;
     MPI_Get_count(&status, MPI_BYTE, &(out_event.size));
     if(out_event.size != 0) {
-	out_event.data = memory::wmalloc(out_event.size);
+        if (out_event.tag==IRIS_TAG_CHARGES && memory_gpu::m_env_psp_cuda!=0) {
+            out_event.data = memory_gpu::wmalloc(out_event.size);
+        } else {
+	        out_event.data = memory::wmalloc(out_event.size);
+        }
     }else {
 	out_event.data = NULL;
     }

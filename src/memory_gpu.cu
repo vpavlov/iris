@@ -244,3 +244,13 @@ void memory_gpu::destroy_3d(iris_real ***&array)
 
     array = NULL;
 };
+
+int memory_gpu::sync_gpu_buffer(void* dst_gpu, const void* src, size_t count)
+{
+	return cudaMemcpy ( dst_gpu, src, count, cudaMemcpyHostToDevice);
+}
+
+int memory_gpu::sync_cpu_buffer(void* dst, const void* src_gpu, size_t count)
+{
+	return cudaMemcpy ( dst, src_gpu, count, cudaMemcpyDeviceToHost);
+}
