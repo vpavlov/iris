@@ -42,6 +42,7 @@ union solver_param_t
 #define IRIS_SOLVER_P3M_USE_COLLECTIVE 3  // whether to use collective calls for the FFT3D remap
 #define IRIS_SOLVER_FMM_NCRIT          4  // avg. number of particles in cell (determines max level)
 #define IRIS_SOLVER_FMM_MAC            5  // FMM: Multipole Acceptance Criteria θ
-#define IRIS_SOLVER_PARAM_CNT          6  // number of different parameters
+#define IRIS_SOLVER_FMM_MAC_CORR       6  // FMM: Correction to θ for estimating distance for LET
+#define IRIS_SOLVER_PARAM_CNT          7  // number of different parameters
 
 #endif

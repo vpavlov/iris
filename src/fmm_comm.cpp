@@ -166,7 +166,7 @@ int fmm::border_leafs(int rank)
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
 		    iris_real rn = m_local_boxes[rank].distance_to(x, y, z);
-		    if (dn/rn < m_mac) {
+		    if (m_mac_let_corr * dn/rn < m_mac) {
 			continue;
 		    }
 		    // D(n)/r(n) >= θ - this means that this cell is too close to the border
@@ -224,20 +224,20 @@ void fmm::exchange_rest_of_LET()
 	get_LET(rank, 0, sendbuf + hwm, unit_size, &num_cits);
 	m_sendcnt[rank] = num_cits;
 	m_senddisp[rank] = hwm;
-	sendbuf = (unsigned char *)memory::wrealloc(sendbuf, hwm + (num_cits + m_tree_size) * unit_size);
 	hwm += num_cits * unit_size;
+	sendbuf = (unsigned char *)memory::wrealloc(sendbuf, hwm + m_tree_size * unit_size);
     }
 
     sendbuf = (unsigned char *)memory::wrealloc(sendbuf, hwm);  // final size of the sendbuf
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->info("sendcnt to rank %d = %d", i, m_sendcnt[i]);
+	m_logger->trace("sendcnt to rank %d = %d", i, m_sendcnt[i]);
     }
     
     MPI_Alltoall(m_sendcnt, 1 , MPI_INT, m_recvcnt, 1, MPI_INT, m_local_comm->m_comm);
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->info("recvcnt from rank %d = %d", i, m_recvcnt[i]);
+	m_logger->trace("recvcnt from rank %d = %d", i, m_recvcnt[i]);
     }
     
     for(int i=0;i<m_local_comm->m_size;i++) {
@@ -255,8 +255,8 @@ void fmm::exchange_rest_of_LET()
     memory::create_1d(recvbuf, rsize);
 
     MPI_Alltoallv(sendbuf, m_sendcnt, m_senddisp, MPI_BYTE,
-		  recvbuf, m_recvcnt, m_recvdisp, MPI_BYTE,
-		  m_local_comm->m_comm);
+    		  recvbuf, m_recvcnt, m_recvdisp, MPI_BYTE,
+    		  m_local_comm->m_comm);
 
     inhale_xcells(recvbuf, rsize / unit_size);
     
@@ -275,12 +275,15 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 
     int this_offset = cell_meta_t::offset_for_level(level);
     int children_offset = cell_meta_t::offset_for_level(level+1);
-    
+
+    int mask = IRIS_FMM_CELL_HAS_CHILD1;
     for(int i=0;i<8;i++) {
-	int childID = children_offset + (cellID-this_offset)*8 + i;
-	if(m_cells[childID].num_children == 0) {
+	if(!(m_cells[cellID].flags & mask)) {
+	    mask <<= 1;
 	    continue;
 	}
+	mask <<= 1;
+	int childID = children_offset + (cellID-this_offset)*8 + i;
 	
 	bool is_close = (level < m_local_root_level);  // all cells above local root level are to be drilled-down
 	
@@ -298,7 +301,8 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
 		    iris_real rn = m_local_boxes[rank].distance_to(x, y, z);
-		    if (dn/rn < m_mac) {
+
+		    if (m_mac_let_corr * dn/rn < m_mac) {
 			continue;
 		    }
 		    // D(n)/r(n) >= θ - this means that this cell is too close to the border
@@ -329,6 +333,6 @@ void fmm::inhale_xcells(unsigned char *recvbuf, int in_count)
     	int cellID = *(int *)(recvbuf + unit_size * i);
 	memcpy(m_M[cellID], recvbuf + unit_size * i + sizeof(int), 2*m_nterms*sizeof(iris_real));
 	assert(m_xcells[cellID].flags == 0);
-	m_xcells[cellID].flags = IRIS_FMM_CELL_ALIEN0;
+	m_xcells[cellID].flags = IRIS_FMM_CELL_ALIEN0 | IRIS_FMM_CELL_VALID_M;
     }
 }

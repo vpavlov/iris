@@ -36,22 +36,24 @@
 
 namespace ORG_NCSA_IRIS {
 
-#define IRIS_FMM_CELL_LOCAL      0x0001
-#define IRIS_FMM_CELL_ALIEN0     0x0002  // non-leaf alien cell
-#define IRIS_FMM_CELL_ALIEN1     0x0004  // leaf alien cell coming from left
-#define IRIS_FMM_CELL_ALIEN2     0x0008  // leaf alien cell coming from right
-#define IRIS_FMM_CELL_ALIEN3     0x0010  // ...
-#define IRIS_FMM_CELL_ALIEN4     0x0020
-#define IRIS_FMM_CELL_ALIEN5     0x0040
-#define IRIS_FMM_CELL_ALIEN6     0x0080
-#define IRIS_FMM_CELL_HAS_CHILD1 0x0100  // child slot 1 is occupied
-#define IRIS_FMM_CELL_HAS_CHILD2 0x0200  // child slot 2 is occupied
-#define IRIS_FMM_CELL_HAS_CHILD3 0x0400  // ...
-#define IRIS_FMM_CELL_HAS_CHILD4 0x0800
-#define IRIS_FMM_CELL_HAS_CHILD5 0x1000
-#define IRIS_FMM_CELL_HAS_CHILD6 0x2000
-#define IRIS_FMM_CELL_HAS_CHILD7 0x4000
-#define IRIS_FMM_CELL_HAS_CHILD8 0x8000
+#define IRIS_FMM_CELL_LOCAL      0x00001
+#define IRIS_FMM_CELL_ALIEN0     0x00002  // non-leaf alien cell
+#define IRIS_FMM_CELL_ALIEN1     0x00004  // leaf alien cell coming from left
+#define IRIS_FMM_CELL_ALIEN2     0x00008  // leaf alien cell coming from right
+#define IRIS_FMM_CELL_ALIEN3     0x00010  // ...
+#define IRIS_FMM_CELL_ALIEN4     0x00020
+#define IRIS_FMM_CELL_ALIEN5     0x00040
+#define IRIS_FMM_CELL_ALIEN6     0x00080
+#define IRIS_FMM_CELL_HAS_CHILD1 0x00100  // child slot 1 is occupied
+#define IRIS_FMM_CELL_HAS_CHILD2 0x00200  // child slot 2 is occupied
+#define IRIS_FMM_CELL_HAS_CHILD3 0x00400  // ...
+#define IRIS_FMM_CELL_HAS_CHILD4 0x00800
+#define IRIS_FMM_CELL_HAS_CHILD5 0x01000
+#define IRIS_FMM_CELL_HAS_CHILD6 0x02000
+#define IRIS_FMM_CELL_HAS_CHILD7 0x04000
+#define IRIS_FMM_CELL_HAS_CHILD8 0x08000
+#define IRIS_FMM_CELL_VALID_M    0x10000  // cell has valid multipole expansion
+#define IRIS_FMM_CELL_VALID_L    0x20000  // cell has valid local expansion
     
 #define IRIS_FMM_CELL_ALIEN_LEAF (IRIS_FMM_CELL_ALIEN1 | IRIS_FMM_CELL_ALIEN2 | IRIS_FMM_CELL_ALIEN3 | IRIS_FMM_CELL_ALIEN4 | IRIS_FMM_CELL_ALIEN5 | IRIS_FMM_CELL_ALIEN6)
 #define IRIS_FMM_CELL_ALIEN (IRIS_FMM_CELL_ALIEN_LEAF | IRIS_FMM_CELL_ALIEN0)

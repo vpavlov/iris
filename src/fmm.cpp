@@ -49,7 +49,7 @@ using namespace ORG_NCSA_IRIS;
 #define MAX_DEPTH 16  // more than enough (e.g. 18 quadrillion particles)
 
 fmm::fmm(iris *obj):
-    solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_nterms(0),
+    solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
     m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), m_local_boxes(NULL),
     m_scratch(NULL), m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
     m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_particles(NULL),
@@ -100,6 +100,9 @@ void fmm::commit()
 	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_MAC);
 	m_mac = t.r;
 
+	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_MAC_CORR);
+	m_mac_let_corr = t.r;
+	
 	m_nterms = (m_order + 1) * (m_order + 2) / 2;
 
 	m_local_root_level = int(log(m_local_comm->m_size-1) / _LN8) + 1;
@@ -191,7 +194,7 @@ void fmm::solve()
 {
     upward_pass_in_local_tree();
     exchange_LET();
-    //dual_tree_traversal();
+    dual_tree_traversal();
     
     MPI_Barrier(m_iris->server_comm());
     exit(-1);
@@ -210,7 +213,7 @@ void fmm::upward_pass_in_local_tree()
     
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    //print_tree("Cell", m_cells, 0);
+    print_tree("Cell", m_cells, 0);
 }
 
 void fmm::load_particles()
@@ -293,44 +296,71 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
     int offset = cell_meta_t::offset_for_level(max_level());
     int count = 0;
     for(int i=offset;i<m_tree_size;i++) {
-	if(in_cells[i].num_children == 0) {
+	cell_t *leaf = &in_cells[i];
+	if(leaf->num_children == 0) {
 	    continue;
 	}
-	if(alien_only && !(in_cells[i].flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+	if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
 	    continue;
 	}
-	for(int j=0;j<in_cells[i].num_children;j++) {
-	    int rank = m_particles[in_cells[i].first_child+j].rank;
-	    int index = m_particles[in_cells[i].first_child+j].index;
-	    iris_real x = m_particles[in_cells[i].first_child+j].xyzq[0] - m_cell_meta[i].center[0];
-	    iris_real y = m_particles[in_cells[i].first_child+j].xyzq[1] - m_cell_meta[i].center[1];
-	    iris_real z = m_particles[in_cells[i].first_child+j].xyzq[2] - m_cell_meta[i].center[2];
-	    iris_real q = m_particles[in_cells[i].first_child+j].xyzq[3];
+	for(int j=0;j<leaf->num_children;j++) {
+	    xparticle_t *ptr;
+	    iris_real x, y, z, q;
+	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+		if(leaf->flags & IRIS_FMM_CELL_ALIEN1) {
+		    ptr = m_xparticles[0];
+		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN2) {
+		    ptr = m_xparticles[1];
+		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN3) {
+		    ptr = m_xparticles[2];
+		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN4) {
+		    ptr = m_xparticles[3];
+		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN5) {
+		    ptr = m_xparticles[4];
+		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN6) {
+		    ptr = m_xparticles[5];
+		}
+		x = ptr[leaf->first_child+j].xyzq[0] - m_cell_meta[i].center[0];
+		y = ptr[leaf->first_child+j].xyzq[1] - m_cell_meta[i].center[1];
+		z = ptr[leaf->first_child+j].xyzq[2] - m_cell_meta[i].center[2];
+		q = ptr[leaf->first_child+j].xyzq[3];
+	    }else {
+		x = m_particles[leaf->first_child+j].xyzq[0] - m_cell_meta[i].center[0];
+		y = m_particles[leaf->first_child+j].xyzq[1] - m_cell_meta[i].center[1];
+		z = m_particles[leaf->first_child+j].xyzq[2] - m_cell_meta[i].center[2];
+		q = m_particles[leaf->first_child+j].xyzq[3];
+	    }
 	    p2m(m_order, x, y, z, q, m_M[i]);
+	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    count++;
 	}
     }
     m_logger->info("P2M count: %d", count);
 }
 
-void fmm::eval_m2m(cell_t *in_cells, bool alien_only)
+void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 {
     int count = 0;
-    for(int level = max_level()-1;level>=0;level--) {
+    int last_level = invalid_only ? 0 : m_local_root_level;
+    for(int level = max_level()-1;level>=last_level;level--) {
 	int tcellID = cell_meta_t::offset_for_level(level);
 	int scellID = cell_meta_t::offset_for_level(level+1);
 	int ntcells = scellID - tcellID;
 	for(int i = 0;i<ntcells;i++) {
+	    if(invalid_only && (in_cells[tcellID].flags & IRIS_FMM_CELL_VALID_M)) {
+		tcellID++;
+		scellID+=8;
+		continue;
+	    }
+	    
 	    iris_real cx = m_cell_meta[tcellID].center[0];
 	    iris_real cy = m_cell_meta[tcellID].center[1];
 	    iris_real cz = m_cell_meta[tcellID].center[2];
+
+	    bool valid_m = false;
 	    for(int j=0;j<8;j++) {
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
 		if(!(in_cells[tcellID].flags & mask)) {
-		    scellID++;
-		    continue;
-		}
-		if(alien_only && !(in_cells[scellID].flags & IRIS_FMM_CELL_ALIEN)) {
 		    scellID++;
 		    continue;
 		}
@@ -339,8 +369,12 @@ void fmm::eval_m2m(cell_t *in_cells, bool alien_only)
 		iris_real z = m_cell_meta[scellID].center[2] - cz;
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 		m2m(m_order, x, y, z, m_M[scellID], m_M[tcellID], m_scratch);
+		valid_m = true;
 		scellID++;
 		count++;
+	    }
+	    if(valid_m) {
+		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
 	    }
 	    tcellID++;
 	}
@@ -355,18 +389,19 @@ void fmm::exchange_LET()
     
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     exchange_p2p_halo();
+    exchange_rest_of_LET();
+    recalculate_LET();
+    print_tree("Xcell", m_xcells, 0);
     
-    // exchange_rest_of_LET();
-    // recalculate_LET();
-    relink_parents(m_xcells);
-    //print_tree("Xcell", m_xcells, 0);
-
     tm.stop();
     m_logger->info("FMM: Exchange LET  wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::recalculate_LET()
 {
+    relink_parents(m_xcells);
+    eval_p2m(m_xcells, true);
+    eval_m2m(m_xcells, true);
 }
 
 void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
@@ -432,18 +467,26 @@ void fmm::traverse_queue(int ix, int iy, int iz)
 	    int level = cell_meta_t::level_of(pair.sourceID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
 	    int children_offset = cell_meta_t::offset_for_level(level+1);
-	    for(int i=0;i<src->num_children;i++) {
-		int childID = children_offset + (pair.sourceID - this_offset)*8 + i;
-		interact(childID, pair.targetID, ix, iy, iz);
+	    int mask = IRIS_FMM_CELL_HAS_CHILD1;
+	    for(int i=0;i<8;i++) {
+		if(m_xcells[pair.sourceID].flags & mask) {
+		    int childID = children_offset + (pair.sourceID - this_offset)*8 + i;
+		    interact(childID, pair.targetID, ix, iy, iz);
+		}
+		mask <<= 1;
 	    }
 	}else {
 	    cell_t *target = m_cells + pair.targetID;
 	    int level = cell_meta_t::level_of(pair.targetID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
 	    int children_offset = cell_meta_t::offset_for_level(level+1);
-	    for(int i=0;i<target->num_children;i++) {
-		int childID = children_offset + (pair.targetID - this_offset)*8 + i;
-		interact(pair.sourceID, childID, ix, iy, iz);
+	    int mask = IRIS_FMM_CELL_HAS_CHILD1;
+	    for(int i=0;i<8;i++) {
+		if(m_cells[pair.targetID].flags & mask) {
+		    int childID = children_offset + (pair.targetID - this_offset)*8 + i;
+		    interact(pair.sourceID, childID, ix, iy, iz);
+		}
+		mask <<= 1;
 	    }
 	}
     }
@@ -463,8 +506,9 @@ void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
     iris_real dy = dest_cy - src_cy;
     iris_real dz = dest_cz - src_cz;
     
-    iris_real dist = sqrt(dx*dx + dy*dy + dz*dz);
-    if(dist * m_mac > m_cell_meta[srcID].radius + m_cell_meta[destID].radius) {
+    iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
+    iris_real dn = m_cell_meta[srcID].radius + m_cell_meta[destID].radius;
+    if(dn/rn < m_mac) {
 	eval_m2l(srcID, destID);
     }else if(cell_meta_t::level_of(srcID) == max_level() &&
 	     cell_meta_t::level_of(destID) == max_level())
@@ -485,5 +529,9 @@ void fmm::eval_p2p(int srcID, int destID)
 
 void fmm::eval_m2l(int srcID, int destID)
 {
-    m_logger->info("M2L %d -> %d", srcID, destID);
+    if(!(m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M)) {
+	m_logger->info("M2L %d -> %d, but Xcell %d doesn't have a valid expansion!", srcID, destID, srcID);
+    }else {
+	m_logger->info("M2L %d -> %d OK", srcID, destID);
+    }
 }

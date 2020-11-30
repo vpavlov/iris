@@ -147,13 +147,13 @@ void domain::octsect_dd()
     iris_real prev_min[3], curr_min[3];
     iris_real prev_max[3], curr_max[3];
     
-    prev_min[0] = m_global_box.xlo;
-    prev_min[1] = m_global_box.ylo;
-    prev_min[2] = m_global_box.zlo;
+    curr_min[0] = prev_min[0] = m_global_box.xlo;
+    curr_min[1] = prev_min[1] = m_global_box.ylo;
+    curr_min[2] = prev_min[2] = m_global_box.zlo;
 
-    prev_max[0] = m_global_box.xhi;
-    prev_max[1] = m_global_box.yhi;
-    prev_max[2] = m_global_box.zhi;
+    curr_max[0] = prev_max[0] = m_global_box.xhi;
+    curr_max[1] = prev_max[1] = m_global_box.yhi;
+    curr_max[2] = prev_max[2] = m_global_box.zhi;
 
     for(int i=0;i<bits;i++) {
 	int d = 2 - i % 3;  // which dimension are we dividing ?

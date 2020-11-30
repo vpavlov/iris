@@ -118,6 +118,7 @@ namespace ORG_NCSA_IRIS {
 	int                 m_order;             // order of expansion (p)
 	int                 m_depth;             // depth of the tree (max level + 1)
 	iris_real           m_mac;               // Multipole acceptance criteria
+	iris_real           m_mac_let_corr;      // Correction for MAC for calculating LET
 	int                 m_nterms;            // number of items in the multipole expansions
 	int                 m_local_root_level;  // the level of the local root (contains all subnodes here)
 	iris_real           m_leaf_size[3];      // size of leaf cells
