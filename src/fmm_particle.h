@@ -57,7 +57,7 @@ namespace ORG_NCSA_IRIS {
     struct particle_t : public xparticle_t {
 	int rank;           // from which rank this particle came ?
 	int index;          // # in m_charges{rank}
-	
+	iris_real tgt[4];   // φ, Ex, Ey, Ez
 	particle_t(int dummy = 0): xparticle_t(0) {}
 
     };

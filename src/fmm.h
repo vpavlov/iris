@@ -90,8 +90,9 @@ namespace ORG_NCSA_IRIS {
 	void relink_parents(cell_t *io_cells);
 	void eval_p2m(cell_t *in_cells, bool alien_only);
 	void eval_m2m(cell_t *in_cells, bool alien_only);
-	void eval_m2l(int srcID, int destID);
-	void eval_p2p(int srcID, int destID);
+	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
+	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
+	void eval_l2l(cell_t *in_cells);
 	
 	void exchange_LET();
 	void exchange_p2p_halo();
@@ -123,7 +124,7 @@ namespace ORG_NCSA_IRIS {
 	int                 m_local_root_level;  // the level of the local root (contains all subnodes here)
 	iris_real           m_leaf_size[3];      // size of leaf cells
 	box_t<iris_real>   *m_local_boxes;       // Local boxes from all ranks
-	iris_real          *m_scratch;           // M2M scratch space
+	iris_real          *m_scratch;           // M2M/M2L scratch space
 	int                *m_border_leafs;      // scratch buffer for P2P halo exchange (cell counts)
 	struct xparticle_t *m_border_parts[2];   // scratch buffer (send) for P2P halo exchange (bodies) - to left and right neighbours
 
@@ -146,6 +147,13 @@ namespace ORG_NCSA_IRIS {
 	bool                m_dirty;
 
 	std::deque<struct pair_t> m_queue;       // the Dual Tree Traversal queue
+
+	// statistics
+	int m_p2m_count;
+	int m_m2m_count;
+	int m_m2l_count;
+	int m_p2p_count;
+	int m_l2l_count;
     };
 }
 

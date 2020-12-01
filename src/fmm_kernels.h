@@ -55,9 +55,23 @@ namespace ORG_NCSA_IRIS {
     // ...etc.
     //
     inline int multipole_index(int l, int m) { return l*(l+1) + 2*m; }
-    
-    void p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_gamma);
-    void m2m(int order, iris_real x, iris_real y, iris_real z, iris_real *in_gamma, iris_real *out_gamma, iris_real *in_scratch);
+    inline void multipole_get(iris_real *M, int l, int m, iris_real *out_re, iris_real *out_im) {
+	assert(l >= 0);
+	if(m < 0) {
+	    int i = multipole_index(l, -m);
+	    *out_re = M[i];
+	    *out_im = -M[i+1];
+	}else {
+	    int i = multipole_index(l, m);
+	    *out_re = M[i];
+	    *out_im = M[i+1];
+	}
+    }
+    void p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M);
+    void p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L);
+    void m2m(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_M, iris_real *in_scratch);
+    void m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_L, iris_real *in_scratch);
+    void l2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_L, iris_real *out_L, iris_real *in_scratch);
 
 }
 
