@@ -3,3 +3,6 @@ src/config.h
 *~
 .vscode
 examples/bob-trj/*
+doc/*.aux
+doc/*.dvi
+doc/*.log

@@ -93,6 +93,7 @@ namespace ORG_NCSA_IRIS {
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
 	void eval_l2l(cell_t *in_cells);
+	void eval_l2p(cell_t *in_cells);
 	
 	void exchange_LET();
 	void exchange_p2p_halo();
@@ -154,6 +155,7 @@ namespace ORG_NCSA_IRIS {
 	int m_m2l_count;
 	int m_p2p_count;
 	int m_l2l_count;
+	int m_l2p_count;
     };
 }
 

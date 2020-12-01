@@ -229,7 +229,6 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
     for(int n=0;n<=order;n++) {
 	for(int m=0;m<=n;m++) {
 	    iris_real re = 0.0, im = 0.0;
-
 	    for(int k=0; k<=order-n;k++) {
 		for(int l=-k;l<=k;l++) {
 
@@ -255,3 +254,46 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 	}
     }
 }
+
+//
+// L2P kernel
+//
+// NOTE: This is the same as L2L, just n<2 and the result is not written in out_L, but in out_phi, Ex,y,z ...
+//       So this can be "write once and only once" optimized, or not -- depends...
+void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *in_L, iris_real *scratch,
+			iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez)
+{
+    p2m(order, x, y, z, 1.0, scratch);
+    for(int n=0;n<=1;n++) {
+	for(int m=0;m<=n;m++) {
+	    iris_real re = 0.0, im = 0.0;
+	    for(int k=0;k<=order-n;k++) {
+		for(int l=-k; l<=k; l++) {
+		    
+		    iris_real a, b;
+		    multipole_get(scratch, k, l, &a, &b);
+		    if(l % 2) {
+			a = -a;
+		    }else {
+			b = -b;
+		    }
+
+		    iris_real c, d;
+		    multipole_get(in_L, n+k, m+l, &c, &d);
+
+		    re += a*c - b*d;
+		    im += a*d + b*c;
+		}
+	    }
+	    if(n == 0 && m == 0) {
+		*out_phi = re;  // multipoles of the L^a_a are real
+	    }else if(n == 1 && m == 1) {
+		*out_Ex = re;
+		*out_Ey = im;
+	    }else if(n == 1 && m == 0) {
+		*out_Ez = re;
+	    }
+	}
+    }
+}
+

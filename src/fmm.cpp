@@ -57,7 +57,7 @@ fmm::fmm(iris *obj):
     m_dirty(true), m_border_leafs(NULL), m_border_parts{NULL, NULL},
     m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
-    m_l2l_count(0)
+    m_l2l_count(0), m_l2p_count(0)
 {
 }
 
@@ -194,13 +194,19 @@ void fmm::handle_box_resize()
 
 void fmm::solve()
 {
-    m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = 0;
+    m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = 0;
     
     upward_pass_in_local_tree();
     exchange_LET();
     dual_tree_traversal();
 
-    m_logger->info("P2M count = %d, M2M count = %d, M2L count = %d, P2P count = %d, L2L count = %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count);
+    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
+
+    iris_real ener = 0.0;
+    for(int i=0;i<m_nparticles;i++) {
+	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
+    }
+    m_logger->info("FMM Local Energy: %f", ener);
     
     MPI_Barrier(m_iris->server_comm());
     exit(-1);
@@ -457,7 +463,7 @@ void fmm::dual_tree_traversal()
     }
 
     eval_l2l(m_cells);
-    //eval_l2p(m_cells);
+    eval_l2p(m_cells);
     
     tm.stop();
     m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
@@ -649,5 +655,28 @@ void fmm::eval_l2l(cell_t *in_cells)
 	    }
 	    scellID++;
 	}
+    }
+}
+
+void fmm::eval_l2p(cell_t *in_cells)
+{
+    int offset = cell_meta_t::offset_for_level(max_level());
+    for(int i=offset;i<m_tree_size;i++) {
+    	cell_t *leaf = &in_cells[i];
+    	if(leaf->num_children == 0) {
+    	    continue;
+    	}
+    	for(int j=0;j<leaf->num_children;j++) {
+	    iris_real x = m_cell_meta[i].center[0] - m_particles[leaf->first_child+j].xyzq[0];
+	    iris_real y = m_cell_meta[i].center[1] - m_particles[leaf->first_child+j].xyzq[1];
+	    iris_real z = m_cell_meta[i].center[2] - m_particles[leaf->first_child+j].xyzq[2];
+	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
+	    l2p(m_order, x, y, z, q, m_L[i], m_scratch,
+		&m_particles[leaf->first_child+j].tgt[0],
+		&m_particles[leaf->first_child+j].tgt[1],
+		&m_particles[leaf->first_child+j].tgt[2],
+		&m_particles[leaf->first_child+j].tgt[3]);
+	    m_l2p_count++;
+    	}
     }
 }
