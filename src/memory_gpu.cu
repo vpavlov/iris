@@ -85,6 +85,30 @@ void memory_set_kernel(iris_real* ptr, int n, iris_real val)
 };
 
 __global__
+void print_kernel(iris_real* ptr, int n, const char* name)
+{
+    int ndx = IRIS_CUDA_INDEX(x);
+    int chunk_size = IRIS_CUDA_CHUNK(x,n);
+    int from = ndx*chunk_size;
+    int to = MIN((ndx+1)*chunk_size,n);
+    
+    for(ndx=from; ndx<to; ++ndx) {
+        if(ndx==0)
+    printf("%s[%d] %f",name,ndx,ptr[ndx]);
+    }
+};
+
+void print_vector_gpu(iris_real* ptr, int n, const char* name)
+{   
+    int blocks = get_NBlocks(n,IRIS_CUDA_NTHREADS);
+    int threads = MIN((n+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
+    print_kernel<<<blocks,threads>>>(ptr,n,name);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+};
+
+
+__global__
 void memory_set_kernel(iris_real*** ptr3d, int n, iris_real val)
 {
     iris_real *ptr = &(ptr3d[0][0][0]);
@@ -166,6 +190,12 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
     return array;
 };
 
+__global__
+void get_2d_1d_pointer_kernel(iris_real **prt, iris_real *&ptr1d)
+{
+    ptr1d = prt[0];
+}
+
 
 void memory_gpu::destroy_2d(iris_real **&array)
 {
@@ -174,6 +204,11 @@ void memory_gpu::destroy_2d(iris_real **&array)
     }
 
     //    wfree(array[0]);  // free the data
+    iris_real *data;
+    get_2d_1d_pointer_kernel<<<1,1>>>(array,data);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+    wfree(data);
     wfree(array);     // free the array
     array = NULL;
 };
@@ -193,13 +228,17 @@ void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* d
 
     int yfrom = yndx*ychunk_size;
     int yto = MIN((yndx+1)*ychunk_size,n2);
-
-    for (xndx=xfrom; xndx<xto; ++xndx) {
-        int m = xndx*n2;
-        array[xndx]=&tmp[m];
-        for (yndx=yfrom; yndx<yto; ++yndx) {
-            int n = xndx*yndx*n3;
-        tmp[m+yndx] = &data[n];
+    int m,n;
+    for (int i=xfrom; i<xto; ++i) {
+        m = i*n2;
+        if (yfrom==0){
+        array[i]=&tmp[m];
+     //   printf("xfrom %d xto %d array[%d] &tmp[%d]\n",xfrom,xto,i,m);
+        }
+        for (int j=yfrom; j<yto; ++j) {
+            n = (m+j)*n3;
+            tmp[m+j] = &data[n];
+           // printf("tmp[%d] &data[%d] (i+1) %d j %d n3 %d\n",m+j,n,i+1,j,n3);
         }
     }
 }
@@ -228,14 +267,19 @@ bool clear, iris_real init_val)
     int nblocks2 = get_NBlocks(n2,IRIS_CUDA_NTHREADS_2D);
     int nthreads1 = MIN((n1+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_2D);
     int nthreads2 = MIN((n2+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_2D);
-    
+    printf("create_3d %d %d %d\n",n1,n2,n3);
     assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
-
     return array;
 };
 
+__global__
+void get_3d_2d_1d_pointer_kernel(iris_real ***ptr3d,iris_real **&ptr2d, iris_real *&ptr1d)
+{
+    ptr2d = ptr3d[0];
+    ptr1d = ptr3d[0][0];
+}
 
 void memory_gpu::destroy_3d(iris_real ***&array)
 {
@@ -249,8 +293,15 @@ void memory_gpu::destroy_3d(iris_real ***&array)
     //wfree((void*)&array[0][0][0]);
     //printf("(void*)&array[0][0][0] LAST CUDA EROOR: %s\n",cudaGetErrorString ( cudaGetLastError()  ));
     
-    //wfree(array[0]); //gives error
-    wfree(array);
+    iris_real **tmpmap;
+    iris_real *datap;
+    get_3d_2d_1d_pointer_kernel<<<1,1>>>(array,tmpmap,datap);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+
+   wfree(datap);
+   wfree(tmpmap);
+   wfree(array);
     
     //printf("array LAST CUDA EROOR: %s\n",cudaGetErrorString ( cudaGetLastError()  ));
     //cudaMemGetInfo(&free,&total);
