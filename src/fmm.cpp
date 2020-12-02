@@ -45,7 +45,7 @@ using namespace ORG_NCSA_IRIS;
 
 #define _LN8 2.0794415416798357  // natural logarithm of 8
 
-#define MIN_DEPTH 2   // minimum value for depth
+#define MIN_DEPTH 4   // minimum value for depth (2)
 #define MAX_DEPTH 16  // more than enough (e.g. 18 quadrillion particles)
 
 fmm::fmm(iris *obj):
@@ -206,7 +206,7 @@ void fmm::solve()
     for(int i=0;i<m_nparticles;i++) {
 	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
     }
-    m_logger->info("FMM Local Energy: %f", ener);
+    m_logger->info("FMM Local Energy: %f", ener / 2);
     
     MPI_Barrier(m_iris->server_comm());
     exit(-1);
@@ -397,13 +397,15 @@ void fmm::exchange_LET()
     tm.start();
     
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
-    exchange_p2p_halo();
-    exchange_rest_of_LET();
-    recalculate_LET();
+    if(m_local_comm->m_size > 1) {
+	exchange_p2p_halo();
+	exchange_rest_of_LET();
+	recalculate_LET();
+    }
     //print_tree("Xcell", m_xcells, 0);
     
     tm.stop();
-    m_logger->info("FMM: Exchange LET  wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    m_logger->info("FMM: Exchange LET wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::recalculate_LET()
@@ -605,7 +607,7 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
-    
+
     iris_real sx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
     iris_real sy = m_cell_meta[srcID].center[1] + iy * m_domain->m_global_box.ysize;
     iris_real sz = m_cell_meta[srcID].center[2] + iz * m_domain->m_global_box.zsize;
@@ -618,6 +620,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
+    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
     m2l(m_order, x, y, z, m_M[srcID], m_L[destID], m_scratch);
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
     m_m2l_count++;
@@ -630,6 +633,12 @@ void fmm::eval_l2l(cell_t *in_cells)
 	int tcellID = cell_meta_t::offset_for_level(level+1);
 	int nscells = tcellID - scellID;
 	for(int i = 0;i<nscells;i++) {
+	    if(!(m_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
+		scellID++;
+		tcellID += 8;
+		continue;
+	    }
+	    
 	    iris_real cx = m_cell_meta[scellID].center[0];
 	    iris_real cy = m_cell_meta[scellID].center[1];
 	    iris_real cz = m_cell_meta[scellID].center[2];
@@ -644,6 +653,7 @@ void fmm::eval_l2l(cell_t *in_cells)
 		iris_real x = cx - m_cell_meta[tcellID].center[0];
 		iris_real y = cy - m_cell_meta[tcellID].center[1];
 		iris_real z = cz - m_cell_meta[tcellID].center[2];
+
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 		l2l(m_order, x, y, z, m_L[scellID], m_L[tcellID], m_scratch);
 		valid_l = true;
@@ -671,6 +681,7 @@ void fmm::eval_l2p(cell_t *in_cells)
 	    iris_real y = m_cell_meta[i].center[1] - m_particles[leaf->first_child+j].xyzq[1];
 	    iris_real z = m_cell_meta[i].center[2] - m_particles[leaf->first_child+j].xyzq[2];
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
+	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 	    l2p(m_order, x, y, z, q, m_L[i], m_scratch,
 		&m_particles[leaf->first_child+j].tgt[0],
 		&m_particles[leaf->first_child+j].tgt[1],

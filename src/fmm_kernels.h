@@ -59,8 +59,15 @@ namespace ORG_NCSA_IRIS {
 	assert(l >= 0);
 	if(m < 0) {
 	    int i = multipole_index(l, -m);
-	    *out_re = M[i];
-	    *out_im = -M[i+1];
+	    iris_real a = M[i];
+	    iris_real b = M[i+1];
+	    if(m % 2) {
+		a = -a;
+	    }else {
+		b = -b;
+	    }
+	    *out_re = a;
+	    *out_im = b;
 	}else {
 	    int i = multipole_index(l, m);
 	    *out_re = M[i];

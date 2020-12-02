@@ -68,6 +68,7 @@ bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
     
     char fname[1024];
     
+    //snprintf(fname, 1024, "%s/bahor.pdb", dirname);
     snprintf(fname, 1024, "%s/bob0-ch.pdb", dirname);
 
     FILE *fp = fopen(fname, "r");
@@ -395,7 +396,7 @@ int main(int argc, char **argv)
     // debugging facility
     
     // bool ready = false;
-    // if(rank == 3) {
+    // if(rank == 1) {
     // 	printf("Rank %d is PID %d\n", rank, getpid());
     // 	while (!ready) {
     // 	    sleep(5);

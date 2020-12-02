@@ -98,15 +98,13 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 	    iris_real re = 0.0, im = 0.0;
 
 	    for(int k=0; k<=n;k++) {
-                int l_min = std::max(-k, m - (n - k));
-                int l_max = std::min(+k, m + (n - k));
-		for(int l=l_min;l<=l_max;l++) {
+		for(int l=-k;l<=k;l++) {
 
 		    iris_real a, b;
-		    multipole_get(in_M, n-k, m-l, &a, &b);
+		    multipole_get(scratch, k, l, &a, &b);
 
 		    iris_real c, d;
-		    multipole_get(scratch, k, l, &c, &d);
+		    multipole_get(in_M, n-k, m-l, &c, &d);
 
 		    re += a*c - b*d;
 		    im += a*d + b*c;
@@ -188,7 +186,7 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 //
 void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_L, iris_real *in_scratch)
 {
-    p2l(order*2, x, y, z, 1.0, in_scratch);
+    p2l(order, x, y, z, 1.0, in_scratch);
     for(int n=0;n<=order;n++) {
 	for(int m=0;m<=n;m++) {
 	    iris_real re = 0.0, im = 0.0;
@@ -196,11 +194,7 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 		for(int l=-k;l<=k;l++) {
 		    iris_real a, b;
 		    multipole_get(in_M, k, l, &a, &b);
-		    if(l % 2) {
-			a = -a;
-		    }else {
-			b = -b;
-		    }
+		    b = -b;
 
 		    iris_real c, d;
 		    multipole_get(in_scratch, n+k, m+l, &c, &d);
