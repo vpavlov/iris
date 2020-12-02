@@ -82,8 +82,6 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_kz;         // kz (2πk/L) tabulated
 	iris_real **m_vc;        // virial coefficients tabulated, 2D array [nx*ny*nz][6]
 
-	iris_real *m_Ek_vir;	// Ek, Virial gpu buffer
-
 	int m_fft_size[3];
 	int m_fft_offset[3];
 	class grid_gpu  *m_fft_grid;

@@ -144,7 +144,8 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_compute_global_energy = true;
     m_compute_global_virial = true;
     m_units = new units(real);
-    memory_gpu::create_1d(m_virial_gpu,6);
+    
+    memory_gpu::create_1d(m_Ek_vir, 7);
 
     m_wff = NULL;
 
@@ -224,8 +225,8 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
 iris_gpu::~iris_gpu()
 {
-    memory_gpu::destroy_1d(m_virial_gpu);
-
+    memory_gpu::destroy_1d(m_Ek_vir);
+    
     if(m_wff != NULL) {
 	delete [] m_wff;
     }
@@ -771,23 +772,23 @@ void iris_gpu::solve()
 
     m_solver->solve();
 
-    iris_real post_corr = 0.5 *
-	m_domain->m_global_box.xsize *
-	m_domain->m_global_box.ysize *
-	m_domain->m_global_box.zsize *
-	m_units->ecf;
+    // iris_real post_corr = 0.5 *
+	// m_domain->m_global_box.xsize *
+	// m_domain->m_global_box.ysize *
+	// m_domain->m_global_box.zsize *
+	// m_units->ecf;
     
-    #warning "post_corr not applied to the gpu data before sending"
+    // #warning "post_corr not applied to the gpu data before sending"
 
-    if(m_compute_global_energy) {
-	m_Ek *= post_corr;
-    }
+    // if(m_compute_global_energy) {
+	// m_Ek *= post_corr;
+    // }
     
-    if(m_compute_global_virial) {
-	for(int i=0;i<6;i++) {
-	    m_virial[i] *= post_corr;
-	}
-    }
+    // if(m_compute_global_virial) {
+	// for(int i=0;i<6;i++) {
+	//     m_virial[i] *= post_corr;
+	// }
+    // }
 
     // iris_real phi_sum = 0.0;
     // for(int i=0;i<m_mesh->m_own_size[0];i++) {

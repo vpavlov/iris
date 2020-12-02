@@ -66,7 +66,7 @@ __global__
 void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** vc,
                         iris_real *out_Ek_vir,
                         int nx, int ny, int nz, float s2, 
-                        int compute_global_energy, int compute_global_virial)
+                        int compute_global_energy, int compute_global_virial, iris_real u_factor)
 {
     __shared__ iris_real virial_acc[6][BLOCK_SIZE];
     __shared__ iris_real Ek_acc[BLOCK_SIZE];
@@ -120,7 +120,7 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
                     Ek_acc[iacc] += s2 * m_greenfn[n] *
                     (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
                     in_rho_phi[2+n+1] * in_rho_phi[2*n+1]);
-                    }
+                   }
                 }
             }
         }
@@ -146,12 +146,29 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
         atomicAdd(&(out_Ek_vir[m+1]), virial_acc[m][iacc]);
         }
     }
+    if (xndx+yndx+zndx==0) {
+        out_Ek_vir[0] *= u_factor;
+        for(int m = 0;m<6;m++) {
+        out_Ek_vir[m+1]*=u_factor;
+        }
+    }
 }
 
 void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 {
     // FFT is not normalized, so we need to do that now
     iris_real s2 = square(1.0/(m_mesh->m_size[0] * m_mesh->m_size[1] * m_mesh->m_size[2]));
+
+    iris_real post_corr = 0.5 *
+	m_domain->m_global_box.xsize *
+	m_domain->m_global_box.ysize *
+	m_domain->m_global_box.zsize *
+	m_units->ecf;
+
+    if(m_iris->m_compute_global_energy||m_iris->m_compute_global_virial)
+    {
+        cudaMemset(m_iris->m_Ek_vir,0,7*sizeof(iris_real));
+    }
 
     int nx = m_fft_size[0];
     int ny = m_fft_size[1];
@@ -172,7 +189,7 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
 
-    kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_Ek_vir, nx, ny, nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial);
+    kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_iris->m_Ek_vir, nx, ny, nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial,post_corr);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
 }
@@ -199,9 +216,9 @@ void kspace_Ex_kernel(iris_real *in_phi, iris_real *out_Ex, iris_real *kx, int n
 			for(int k=k_from;k<k_to;k++) {
                 int n = nj + k;
 
-                out_Ex[2*n] *= in_phi[2*n+1] * kx[i];
-                out_Ex[2*n+1] *= in_phi[2*n] * kx[i];
-			}
+                out_Ex[2*n] = in_phi[2*n+1] * kx[i];
+                out_Ex[2*n+1] = -in_phi[2*n] * kx[i]; 
+            }
 		}
     }
 }
@@ -248,8 +265,8 @@ void kspace_Ey_kernel(iris_real *in_phi, iris_real *out_Ey, iris_real *ky, int n
 			for(int k=k_from;k<k_to;k++) {
                 int n = nj + k;
 
-                out_Ey[2*n] *= in_phi[2*n+1] * ky[j];
-                out_Ey[2*n+1] *= in_phi[2*n] * ky[j];
+                out_Ey[2*n] = in_phi[2*n+1] * ky[j];
+                out_Ey[2*n+1] = -in_phi[2*n] * ky[j];
 			}
 		}
     }
@@ -297,9 +314,9 @@ void kspace_Ez_kernel(iris_real *in_phi, iris_real *out_Ez, iris_real *kz, int n
 			for(int k=k_from;k<k_to;k++) {
                 int n = nj + k;
 
-                out_Ez[2*n] *= in_phi[2*n+1] * kz[k];
-                out_Ez[2*n+1] *= in_phi[2*n] * kz[k];
-			}
+                out_Ez[2*n] = in_phi[2*n+1] * kz[k];
+                out_Ez[2*n+1] = -in_phi[2*n] * kz[k];
+            }
 		}
     }
 }

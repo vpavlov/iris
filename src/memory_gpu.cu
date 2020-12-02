@@ -42,9 +42,7 @@ using namespace ORG_NCSA_IRIS;
 void *memory_gpu::wmalloc(int nbytes)
 {
     void *retval;
-    cudaDeviceSynchronize();
     cudaError_t res = cudaMalloc(&retval, nbytes);
-      cudaDeviceSynchronize();
     if(res != cudaSuccess) {
 	throw std::bad_alloc();
     }
@@ -179,7 +177,6 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
     iris_real* data = (iris_real *)wmalloc(sizeof(iris_real) * nitems);
     if(clear) {
         memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(data,nitems,(iris_real)0);
-        cudaDeviceSynchronize();
         HANDLE_LAST_CUDA_ERROR;
     }
 
@@ -259,7 +256,6 @@ bool clear, iris_real init_val)
       int blocks = get_NBlocks(nitems,IRIS_CUDA_NTHREADS);
       int threads = MIN((nitems+blocks+1)/blocks,IRIS_CUDA_NTHREADS);
       memory_set_kernel<<<blocks,threads>>>(data,nitems, init_val);
-        cudaDeviceSynchronize();
         HANDLE_LAST_CUDA_ERROR;
     }
 
@@ -267,7 +263,6 @@ bool clear, iris_real init_val)
     int nblocks2 = get_NBlocks(n2,IRIS_CUDA_NTHREADS_2D);
     int nthreads1 = MIN((n1+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_2D);
     int nthreads2 = MIN((n2+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_2D);
-    printf("create_3d %d %d %d\n",n1,n2,n3);
     assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;

@@ -178,8 +178,8 @@ void mesh_gpu::assign_charges_gpu(iris_real* sendbuff_gpu)
 	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_Ey_plus, nitems, (iris_real)0.0);
 	memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(m_Ez_plus, nitems, (iris_real)0.0);
 	memory_set_kernel<<<get_NBlocks(2,IRIS_CUDA_NTHREADS),2>>>(sendbuff_gpu, 2, (iris_real)0.0);
-	cudaDeviceSynchronize();
-	HANDLE_LAST_CUDA_ERROR;
+	//test cudaDeviceSynchronize();
+	//HANDLE_LAST_CUDA_ERROR;
 
     for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
 		int ncharges = it->second;
@@ -207,7 +207,7 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
     int from = ndx*chunk_size;
 	int to = MIN((ndx+1)*chunk_size,in_ncharges);
-	
+
 	for(int n=from;n<to;n++) {
 		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
 		int iz = (int) (tz + ics_bump);
@@ -233,8 +233,11 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 			for(int j = 0; j < order; j++) {
 				iris_real t2 = t1 * weights[1][j];
 				for(int k = 0; k < order; k++) {
+					//printf("i %d j %d k %d\n",i,j,k);
 					iris_real t3 = t2 * weights[2][k];
 					atomicAdd(&(m_rho_plus[ix+i][iy+j][iz+k]), t3);
+					//if(n<3)
+					//printf("assign_charges1_kernel tx %f ty %f tz %f m_rho_plus[%d][%d][%d] %f\n",tx,ty,tz,ix+i,iy+j,iz+k,m_rho_plus[ix+i][iy+j][iz+k]);
 				}
 			}
 		}
@@ -242,6 +245,7 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 		iris_real q = in_charges[n*5 + 3];
 		atomicAdd(&(sendbuff_gpu[0]), q);
 		atomicAdd(&(sendbuff_gpu[1]), q*q);
+		//printf("assign_charges1_kernel n %d q %f sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",n,q,sendbuff_gpu[0],sendbuff_gpu[1]);
 	}
 }
 
@@ -250,7 +254,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 {
     //box_t<iris_real> *gbox = &(m_domain->m_global_box);
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
-
+	//printf("calling assign_charges1\n");
 	assign_charges1_kernel<<<get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>
 	(in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
 	m_h[0], m_h[1], m_h[2], 
@@ -455,6 +459,7 @@ void extract_kernel(iris_real ***rho, iris_real ***rho_plus,
 		for(int j=j_from;j<j_to;j++) {
 			for(int k=k_from;k<k_to;k++) {
 				rho[i-sx][j-sy][k-sz] = rho_plus[i][j][k];
+				//printf("extract rho[%d][%d][%d] %f rho_plus[%d][%d][%d] %f\n",i-sx,j-sy,k-sz, rho[i-sx][j-sy][k-sz],i,j,k,rho_plus[i][j][k]);
 			}
 		}
 	}
@@ -522,6 +527,8 @@ void imtract_kernel(iris_real ***v3_plus, iris_real ***v3,
 		for(int j=j_from;j<j_to;j++) {
 			for(int k=k_from;k<k_to;k++) {
 				v3_plus[i][j][k] = v3[i-sx][j-sy][k-sz];
+				//if(xndx==0&&yndx==0&&zndx==0)
+				//printf("imtract v3_plus[%d][%d][%d] %f v3[%d][%d][%d] %f\n",i,j,k,v3_plus[i][j][k],i-sx,j-sy,k-sz, v3[i-sx][j-sy][k-sz]);
 			}
 		}
 	}
@@ -803,25 +810,30 @@ void mesh_gpu::imtract_phi()
 // }
 
 __global__
-void assign_energy_virial_data_kernel(iris_real* forces, iris_real Ek, iris_real* virial)
+void assign_energy_virial_data_kernel(iris_real* forces, iris_real *m_Ek_vir)
 {
-	forces[0] = Ek;
-	forces[1] = virial[0];
-	forces[2] = virial[1];
-	forces[3] = virial[2];
-	forces[4] = virial[3];
-	forces[5] = virial[4];
-	forces[6] = virial[5];
+	forces[0] = m_Ek_vir[0];
+	forces[1] = m_Ek_vir[1];
+	forces[2] = m_Ek_vir[2];
+	forces[3] = m_Ek_vir[3];
+	forces[4] = m_Ek_vir[4];
+	forces[5] = m_Ek_vir[5];
+	forces[6] = m_Ek_vir[6];
+	for(int i=0;i<7;i++)
+	printf("forces[%d] %f m_Ek_vir[%d] %f\n",i,forces[i],i,m_Ek_vir[i]);
 }
 
 void mesh_gpu::assign_energy_virial_data(iris_real *forces, bool include_energy_virial){
 	if(include_energy_virial) {
-		assign_energy_virial_data_kernel<<<1,1>>>(forces,m_iris->m_Ek,m_iris->m_virial_gpu);
+		//  assign_energy_virial_data_kernel<<<1,1>>>(forces,m_iris->m_Ek_vir);
+		//  cudaDeviceSynchronize();
+		cudaMemcpy (forces, m_iris->m_Ek_vir, 7*sizeof(iris_real), cudaMemcpyDeviceToDevice );
 	}else {
-		memory_set_kernel<<<1,1>>>(forces,7, (iris_real)0.0);
+		//memory_set_kernel<<<1,1>>>(forces,7, (iris_real)0.0);
+		cudaMemset (forces , 0, 7*sizeof(iris_real) );
 	}
-	cudaDeviceSynchronize();
-	HANDLE_LAST_CUDA_ERROR;
+	// cudaDeviceSynchronize();
+	// HANDLE_LAST_CUDA_ERROR;
 	// cuda dev sync will happened after assing_forces1(_ad) 
 }
 
@@ -838,8 +850,9 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
     int from = ndx*chunk_size;
 	int to = MIN((ndx+1)*chunk_size,in_ncharges);
-	
+	//printf("gridDim %d BlockDim %d blockId %d int_ncharges %d ndx %d from %d to %d\n",gridDim.x,blockDim.x, blockIdx.x, in_ncharges, ndx, from, to);
 	for(int n=from;n<to;n++) {
+		//printf("n %d\n",n);
 		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
 		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
 		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
@@ -872,6 +885,8 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
 			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
 			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+			// if(ndx==0)
+			// printf("imtract m_Ex_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f\n",ix+i,iy+j,iz+k,m_Ex_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ey_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ez_plus[ix+i][iy+j][iz+k]);
 			}
 		}
 		}
@@ -881,6 +896,7 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 		out_forces[7 + n*4 + 1] = factor * ekx;
 		out_forces[7 + n*4 + 2] = factor * eky;
 		out_forces[7 + n*4 + 3] = factor * ekz;
+	//printf("factor %f out_forces %d %f %f %f %f\n",factor,n,out_forces[7 + n*4 + 0],out_forces[7 + n*4 + 1],out_forces[7 + n*4 + 2],out_forces[7 + n*4 + 3]);
 	}
 }
 
@@ -890,7 +906,15 @@ void mesh_gpu::assign_forces1(int in_ncharges, iris_real *in_charges,
     //box_t<iris_real> *gbox = &(m_domain->m_global_box);
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
-	assign_forces1_kernel<<<get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(in_charges, in_ncharges, out_forces,
+	// iris_real post_corr = 0.5 *
+	// m_domain->m_global_box.xsize *
+	// m_domain->m_global_box.ysize *
+	// m_domain->m_global_box.zsize *
+	// m_units->ecf;
+
+	int nblocks = get_NBlocks(in_ncharges,IRIS_CUDA_NTHREADS_2D);
+	int nthreads = MIN((in_ncharges+nblocks+1)/nblocks,IRIS_CUDA_NTHREADS_2D);
+	assign_forces1_kernel<<<nblocks,nthreads>>>(in_charges, in_ncharges, out_forces,
 							m_Ex_plus, m_Ey_plus, m_Ez_plus,
 							lbox->xlo, lbox->ylo, lbox->zlo,
 							m_h[0], m_h[1], m_h[2],

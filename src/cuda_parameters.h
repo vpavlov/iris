@@ -1,7 +1,7 @@
 #pragma once
 #include "utils.h"
 #include "stdio.h"
-#define IRIS_CUDA_NTHREADS 16
+#define IRIS_CUDA_NTHREADS 8
 #define IRIS_CUDA_NTHREADS_2D 8
 #define IRIS_CUDA_NTHREADS_3D 8
 

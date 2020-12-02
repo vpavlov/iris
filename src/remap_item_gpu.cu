@@ -110,8 +110,8 @@ void pack_src_1d_kernel(iris_real *src, int src_offset, iris_real *dest, int des
 	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,m_ny);
 	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,m_nz);
 
-	src += src_offset;
-	dest += dest_offset;
+	src = &(src[src_offset]);
+	dest = &(dest[dest_offset]);
 
     for(int i = i_from; i < i_to; i++) {
 	int plane = i * m_stride_plane;
@@ -162,8 +162,8 @@ void unpack_kernel(iris_real *src, int src_offset, iris_real *dest, int dest_off
 	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,m_ny);
 	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,m_nz);
 
-	src += src_offset;
-	dest += dest_offset;
+	src = &(src[src_offset]);
+	dest = &(dest[dest_offset]);
 
     for(int i = i_from; i < i_to; i++) {
 	int plane = i * m_stride_plane;

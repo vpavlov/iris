@@ -363,12 +363,13 @@ void mesh_gpu::assign_charges()
 	{
     MPI_Allreduce(sendbuf_gpu, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
 	} else {
-	memory_gpu::sync_cpu_buffer(sendbuf,sendbuf_gpu,2);
+	memory_gpu::sync_cpu_buffer(sendbuf,sendbuf_gpu,2*sizeof(iris_real));
 	MPI_Allreduce(sendbuf, recvbuf, 2, IRIS_REAL, MPI_SUM, m_iris->server_comm());
 	}
     m_logger->trace("assign_charge called MPI_Allreduce");
     m_qtot = recvbuf[0];
     m_q2tot = recvbuf[1];
+	m_logger->trace("m_qtot %f m_q2tot %f",m_qtot,m_q2tot);
 	memory_gpu::wfree(sendbuf_gpu);
 }
 
@@ -434,12 +435,12 @@ void mesh_gpu::assign_forces(bool ad)
 	}else {
 	    assign_forces1(ncharges, m_charges[it->first], forces);
 	}
-
+assign_energy_virial_data(forces,include_energy_virial);
 	MPI_Request req;
 	if(memory_gpu::m_env_psp_cuda!=0) {
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
 	} else {
-	memory_gpu::sync_cpu_buffer(forces_cpu, forces, size);
+	int test = memory_gpu::sync_cpu_buffer(forces_cpu, forces, size);
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces_cpu, &req, NULL);
 	}
 	MPI_Request_free(&req);

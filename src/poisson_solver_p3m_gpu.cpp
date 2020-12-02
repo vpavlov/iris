@@ -55,7 +55,7 @@ poisson_solver_p3m_gpu::poisson_solver_p3m_gpu(class iris_gpu *obj)
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
-      m_work1(NULL), m_work2(NULL), m_work3(NULL), m_Ek_vir(NULL),
+      m_work1(NULL), m_work2(NULL), m_work3(NULL),
       m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
@@ -73,7 +73,7 @@ poisson_solver_p3m_gpu::~poisson_solver_p3m_gpu()
     memory_gpu::destroy_1d(m_work1);
     memory_gpu::destroy_1d(m_work2);
     memory_gpu::destroy_1d(m_work3);
-    memory_gpu::destroy_1d(m_Ek_vir);
+    
     if(m_fft1) { delete m_fft1; }
     if(m_fft2) { delete m_fft2; }
     if(m_fft_grid) { delete m_fft_grid; }
@@ -141,9 +141,6 @@ void poisson_solver_p3m_gpu::commit()
 
     memory_gpu::destroy_2d(m_vc);
     memory_gpu::create_2d(m_vc, m_fft_size[0]*m_fft_size[1]*m_fft_size[2], 6);
-
-    memory_gpu::destroy_1d(m_Ek_vir);
-    memory_gpu::create_1d(m_Ek_vir, 7);
 
     if (m_denominator_x==NULL) {
 	memory_gpu::create_1d(m_denominator_x, m_fft_size[0]);
@@ -220,7 +217,7 @@ void poisson_solver_p3m_gpu::solve()
     }
 
     kspace_phi(m_work1);
-
+    
     kspace_Ex(m_work1, m_work2);
     m_fft2->compute_bk(m_work2, m_mesh->m_Ex);
     

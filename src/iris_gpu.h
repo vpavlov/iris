@@ -233,7 +233,7 @@ namespace ORG_NCSA_IRIS {
 	bool                   m_compute_global_virial;  // whether to compute global long-range virial
 	iris_real              m_Ek;  // E(k) contribution to the global energy (from this process only)
 	iris_real              m_virial[6];  // global virial, 6-element tensor
-	iris_real             *m_virial_gpu;  // global virial, 6-element tensor allocated in gpu mem
+	iris_real *m_Ek_vir;	// Ek, Virial gpu buffer
 
 	iris_real              m_qtot2;       // Q^2 (sum of all charges squared)
 	iris_real              m_cutoff;      // real-space cutoff
