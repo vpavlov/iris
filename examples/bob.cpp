@@ -499,7 +499,7 @@ int main(int argc, char **argv)
     pade.i = 2;
     x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
     
-    x->set_order(4);
+    x->set_order(6);
     x->set_mesh_size(128, 128, 128);
     x->set_alpha(2.6028443952840625);
     x->set_accuracy(1e-4, true);
