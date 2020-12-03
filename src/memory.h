@@ -31,6 +31,10 @@
 #define __IRIS_MEMORY_H__
 
 #include <stdlib.h>
+#include <map>
+#include <string>
+#include <array>
+#include <tuple>
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {
@@ -202,41 +206,57 @@ namespace ORG_NCSA_IRIS {
 	    array = NULL;
 	}
     };
-
+	#define IRIS_CUDA
 #ifdef IRIS_CUDA
     class memory_gpu {
 
     public:
 
-	static void *wmalloc(int nbytes);
+	static void *wmalloc(int nbytes, void * parent=NULL, const std::string label="");
 	static void *wrealloc(void *ptr, int nbytes, int old_size);
-	static void wfree(void *ptr);
+	static void wfree(void *ptr, bool keep_it=false);
 	static int sync_gpu_buffer(void* dst_gpu, const void* src, size_t count);
 	static int sync_cpu_buffer(void* dst, const void* src_gpu, size_t count);
 
 	static int m_env_psp_cuda;
 
+	static std::map<void *, std::map<std::string, void*> > gpu_allocated_pointers;
+	static std::map<void *, std::array<int,3> > gpu_allocated_pointers_shape;
+
 	//**********************************************************************
 	// 1D Arrays
 	//**********************************************************************
-	static iris_real *create_1d(iris_real *&array, int n1, bool clear = false);
+	static iris_real *create_1d(iris_real *&array, int n1, bool clear = false, 
+								void * parent=NULL,  const std::string label="");
 	
-	static void destroy_1d(iris_real *&array);
+	static void destroy_1d(iris_real *&array, bool keep_it=false);
 
 	//**********************************************************************
 	// 2D Arrays
 	//**********************************************************************
-	static iris_real **create_2d(iris_real **&array, int n1, int n2, bool clear = false);
+	static iris_real **create_2d(iris_real **&array, int n1, int n2, bool clear = false, 
+								void * parent=NULL,  const std::string label="");
 	
-	static void destroy_2d(iris_real **&array);
+	static void destroy_2d(iris_real **&array, bool keep_it=false);
 
 	//**********************************************************************
 	// 3D Arrays
 	//**********************************************************************
 	static iris_real ***create_3d(iris_real ***&array, int n1, int n2, int n3,
-			      bool clear = false, iris_real init_val = 0);
+			     				bool clear = false, iris_real init_val = 0, 
+								void * parent=NULL,  const std::string label="");
 
-	static void destroy_3d(iris_real ***&array);
+	static void destroy_3d(iris_real ***&array, bool keep_it=false);
+
+	static void * get_registered_gpu_pointer(void *parent, std::string label);
+	static void register_gpu_pointer(void *parent, std::string label, void *ptr);
+	static void unregister_gpu_pointer(void *parent, std::string label);
+
+	static bool has_shape(void *ptr, std::array<int,3> in_shape);
+	static void register_gpu_pointer_shape(void *ptr, std::array<int,3> in_shape);
+	static void unregister_gpu_pointer_shape(void *ptr);
+
+	static std::pair<void *,std::string> get_parent_and_label(void* prt);
 	};
 #endif
 };

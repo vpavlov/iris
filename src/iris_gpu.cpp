@@ -79,7 +79,7 @@ using namespace ORG_NCSA_IRIS;
 
 iris_gpu::iris_gpu(MPI_Comm in_uber_comm)
     : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-      m_remote_leader(0)
+      m_remote_leader(0),  m_Ek_vir(NULL)
 {
     init(in_uber_comm, in_uber_comm);
 }
