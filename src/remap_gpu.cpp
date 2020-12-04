@@ -492,14 +492,14 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
     memory_gpu::wfree(send_buff_gpu);
     memory_gpu::wfree(recv_buff_gpu);
 	} else {
+    memory::wfree(send_buff);
+    memory::wfree(recv_buff);
+	}
 	memory::wfree(send_counts);
     memory::wfree(recv_counts);
-	}
     memory::wfree(send_offsets);
     memory::wfree(recv_offsets);
     memory::wfree(recv_map);
-    memory::wfree(send_buff);
-    memory::wfree(recv_buff);
     memory_gpu::wfree(send_buff_gpu);
     memory_gpu::wfree(recv_buff_gpu);
 }
@@ -651,16 +651,14 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
     memory_gpu::wfree(send_buff_gpu);
     memory_gpu::wfree(recv_buff_gpu);
 	} else {
-	memory::wfree(send_counts);
-    memory::wfree(recv_counts);
+	memory::wfree(send_buff);
+    memory::wfree(recv_buff);
 	}
     memory::wfree(send_counts);
     memory::wfree(recv_counts);
     memory::wfree(send_offsets);
     memory::wfree(recv_offsets);
     memory::wfree(recv_map);
-	memory::wfree(send_buff);
-    memory::wfree(recv_buff);
     memory_gpu::wfree(send_buff_gpu);
     memory_gpu::wfree(recv_buff_gpu);
 }

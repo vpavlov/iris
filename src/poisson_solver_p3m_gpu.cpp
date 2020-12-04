@@ -51,7 +51,7 @@
 using namespace ORG_NCSA_IRIS;
 
 poisson_solver_p3m_gpu::poisson_solver_p3m_gpu(class iris_gpu *obj)
-    : poisson_solver_gpu(obj), m_greenfn(NULL), 
+    : poisson_solver_gpu(obj), m_greenfn(NULL),
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),

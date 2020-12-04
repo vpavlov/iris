@@ -142,7 +142,8 @@ static iris_real gfd_coeff6[] = { 1.0, -2.0, 19.0/15, -256.0/945, 62.0/4725, -4.
 static iris_real gfd_coeff7[] = { 1.0, -7.0/3, 28.0/15, -16.0/27, 26.0/405, -2.0/1485, 4.0/6081075 };
 
 charge_assigner_gpu::charge_assigner_gpu(iris_gpu *obj)
-    :state_accessor_gpu(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL)
+    :state_accessor_gpu(obj), m_order(0), m_dirty(true), m_weights(NULL), m_dweights(NULL),
+    m_coeff(NULL),m_dcoeff(NULL),m_gfd_coeff(NULL)
 {
 }
 

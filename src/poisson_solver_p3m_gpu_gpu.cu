@@ -509,9 +509,9 @@ void poisson_solver_p3m_gpu::calculate_gf_fact()
 	
     const int _2n = 2*m_chass->m_order;
 
-    iris_real *greenfn_x;
-    iris_real *greenfn_y;
-    iris_real *greenfn_z;
+    iris_real *greenfn_x = NULL;
+    iris_real *greenfn_y = NULL;
+    iris_real *greenfn_z = NULL;
 	
     int nx = m_fft_size[0];
     int ny = m_fft_size[1];

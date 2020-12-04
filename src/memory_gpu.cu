@@ -170,8 +170,10 @@ iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear,
     }
 
     array =  (iris_real *)wmalloc(sizeof(iris_real) * n1, parent, label);
-
+    
+    if(!label.empty()) {
     register_gpu_pointer_shape((void*)array,{n1,0,0});
+    }
 
     if(clear) {
       int blocks = get_NBlocks(n1,IRIS_CUDA_NTHREADS);
@@ -242,12 +244,15 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
 
     if(clear) {
         memory_set_kernel<<<get_NBlocks(nitems,IRIS_CUDA_NTHREADS),IRIS_CUDA_NTHREADS>>>(array,nitems,(iris_real)0);
-        HANDLE_LAST_CUDA_ERROR;
     }
 
     
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
+
+    if(!label.empty()) {
+    register_gpu_pointer_shape((void*)array,{n1,n2,0});
+    }
 
     return array;
 };
@@ -298,12 +303,12 @@ void assign_3d_indexing_kernel(iris_real*** array, iris_real** tmp, iris_real* d
         m = i*n2;
         if (yfrom==0){
         array[i]=&tmp[m];
-        printf("xfrom %d xto %d array[%d] &tmp[%d]\n",xfrom,xto,i,m);
+        //printf("xfrom %d xto %d array[%d] &tmp[%d]\n",xfrom,xto,i,m);
         }
         for (int j=yfrom; j<yto; ++j) {
             n = (m+j)*n3;
             tmp[m+j] = &data[n];
-            printf("tmp[%d] &data[%d] (i+1) %d j %d n3 %d\n",m+j,n,i+1,j,n3);
+            //printf("tmp[%d] &data[%d] (i+1) %d j %d n3 %d\n",m+j,n,i+1,j,n3);
         }
     }
 }
@@ -334,7 +339,9 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
         assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
         cudaDeviceSynchronize();
         HANDLE_LAST_CUDA_ERROR;
+        if(!label.empty()) {
         register_gpu_pointer(parent,label,array);
+        }
     } else {
         array = (iris_real***) ptr;
     }
@@ -346,6 +353,11 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
     }
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
+
+    if(!label.empty()) {
+    register_gpu_pointer_shape((void*)array,{n1,n2,0});
+    }
+
     return array;
 };
 
