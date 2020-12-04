@@ -81,7 +81,7 @@ void *memory_gpu::wrealloc(void *ptr, int nbytes, int old_size)
 
 void memory_gpu::wfree(void *ptr, bool keep_it)
 {
-    if (!keep_it&&ptr!=NULL) {
+    if ((!keep_it) && (ptr!=NULL)) {
     HANDLE_LAST_CUDA_ERROR;
     cudaFree(ptr);
     HANDLE_LAST_CUDA_ERROR;
@@ -165,7 +165,7 @@ iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear,
                                     void * parent,  const std::string label)
 {
 
-    if(!has_shape((void*)array,{n1,0,0})) {
+    if ((!has_shape((void*)array,{n1,0,0}))&&(!label.empty())) {
         wfree(array);
     }
 
@@ -225,7 +225,7 @@ void assign_2d_indexing_kernel(iris_real** array,iris_real* tmp, int n1, int n2)
 iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear, 
 								void * parent,  const std::string label)
 {
-    if(!has_shape((void*)array,{n1,n2,0})) {
+    if((!has_shape((void*)array,{n1,n2,0}))&&(!label.empty())) {
         destroy_2d(array);
     }
 
@@ -323,7 +323,7 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
 {
     int nitems = n1 * n2 * n3;
 
-    if(!has_shape(array,{n1,n2,n3})) {
+    if((!has_shape(array,{n1,n2,n3}))&&(!label.empty())) {
         destroy_3d(array);
     }
 
