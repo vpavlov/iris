@@ -386,8 +386,8 @@ iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
 	// dest[j++] = 0.0;
     // }
 
-	int nthreads = MIN(m_count,IRIS_CUDA_NTHREADS);
-    int nblocks = get_NBlocks(m_count,nthreads);
+	int nthreads = IRIS_CUDA_NTHREADS_YX;
+    int nblocks = get_NBlocks_X(m_count,nthreads);
 
 	get_data_from_mesh_kernel<<<nblocks,nthreads>>>(src, m_count, dest);
     cudaDeviceSynchronize();
@@ -474,8 +474,8 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real *dest)
 	// j += 2;
 	// }
 	
-	int nthreads = MIN(m_count,IRIS_CUDA_NTHREADS);
-    int nblocks = get_NBlocks(m_count,nthreads);
+	int nthreads = IRIS_CUDA_NTHREADS_YX;
+    int nblocks = get_NBlocks_X(m_count,nthreads);
 
 	send_data_to_mesh_kernel<<<nblocks,nthreads>>>(src, m_count, dest);
     cudaDeviceSynchronize();
@@ -524,8 +524,8 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real ***dest)
 	// j += 2;
 	// }
 	
-	int nthreads = MIN(m_count,IRIS_CUDA_NTHREADS);
-    int nblocks = get_NBlocks(m_count,nthreads);
+	int nthreads = IRIS_CUDA_NTHREADS_YX;
+    int nblocks = get_NBlocks_X(m_count,nthreads);
 
 	send_data_to_mesh_3d_kernel<<<nblocks,nthreads>>>(src, m_count, dest);
     cudaDeviceSynchronize();

@@ -710,8 +710,10 @@ bool iris_gpu::handle_commit_charges()
     m_logger->trace("Client called 'commit_charges'. Initiating computation...");
     m_logger->trace("Server called 'assign_charges'. Initiating computation...");
     m_mesh->assign_charges();
+    m_mesh->dump_ascii_from_gpu("rho_ext",m_mesh->m_rho_plus);
     m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
     m_mesh->exchange_rho_halo();
+     m_mesh->dump_ascii_from_gpu("rho",m_mesh->m_rho);
     m_logger->trace("Server called 'solve'. Initiating computation...");
     //    m_mesh->dump_ascii("rho", m_mesh->m_rho);
     solve();

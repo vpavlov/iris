@@ -1,6 +1,6 @@
 #include <iris/cuda_parameters.h>
 //#include <box.h>
-const int BLOCK_SIZE=IRIS_CUDA_NTHREADS_3D*IRIS_CUDA_NTHREADS_3D*IRIS_CUDA_NTHREADS_3D;
+const int BLOCK_SIZE=IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z;
 
 using namespace ORG_NCSA_IRIS;
 
@@ -24,7 +24,7 @@ void kspace_eng_kernel(iris_real *in_rho_phi,
 	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ny);
 	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,nz);
 
-    int iacc = xndx*IRIS_CUDA_NTHREADS_3D*IRIS_CUDA_NTHREADS_3D + yndx*IRIS_CUDA_NTHREADS_3D + zndx;
+    int iacc = xndx*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z + yndx*IRIS_CUDA_NTHREADS_Z + zndx;
 
 
 
@@ -138,15 +138,15 @@ int main()
 
     //cudaMemset(in_rho_phi,1.0,2*nx*ny*nz);
 
-    int nthreads=IRIS_CUDA_NTHREADS_3D;
+    int nthreads=IRIS_CUDA_NTHREADS_Z;
 
     int nblocks1=1;//static_cast<int>((nx+nthreads-1)/nthreads);
     int nblocks2=1;//static_cast<int>((ny+nthreads-1)/nthreads);
     int nblocks3=1;//static_cast<int>((nz+nthreads-1)/nthreads);
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_3D;
-    int nthreads2 = IRIS_CUDA_NTHREADS_3D;
-    int nthreads3 = IRIS_CUDA_NTHREADS_3D;
+    int nthreads1 = IRIS_CUDA_NTHREADS_Z;
+    int nthreads2 = IRIS_CUDA_NTHREADS_Z;
+    int nthreads3 = IRIS_CUDA_NTHREADS_Z;
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);

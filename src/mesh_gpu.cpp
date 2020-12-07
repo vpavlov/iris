@@ -347,7 +347,11 @@ void mesh_gpu::assign_charges()
 	#warning "use gpu buffer manager here..."
 	memory_gpu::create_1d(sendbuf_gpu,2,true);
 
+	printf("sum rho_lus %f\n",calc_sum(m_rho_plus,m_ext_size[0],m_ext_size[1],m_ext_size[2]));
+
 	assign_charges_gpu(sendbuf_gpu);
+
+	printf(" after sum rho_lus %f\n",calc_sum(m_rho_plus,m_ext_size[0],m_ext_size[1],m_ext_size[2]));
 	
 	// implemented in assign_charges_gpu
     // for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {

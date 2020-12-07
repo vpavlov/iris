@@ -217,6 +217,8 @@ namespace ORG_NCSA_IRIS {
 	static void wfree(void *ptr, bool keep_it=false);
 	static int sync_gpu_buffer(void* dst_gpu, const void* src, size_t count);
 	static int sync_cpu_buffer(void* dst, const void* src_gpu, size_t count);
+	static int sync_gpu_buffer(iris_real*** dst_gpu, void* src, size_t count);
+	static int sync_cpu_buffer(void* dst, iris_real*** src_gpu, size_t count);
 
 	static int m_env_psp_cuda;
 
@@ -260,5 +262,5 @@ namespace ORG_NCSA_IRIS {
 	};
 #endif
 };
-
+iris_real calc_sum(iris_real ***v, int nx, int ny, int nz);
 #endif

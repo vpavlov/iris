@@ -79,12 +79,12 @@ void unpack_kernel2(iris_real *src, int src_offset, iris_real *dest, int dest_of
 
 void remap_item_complex_permute2_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset)
 {
-	int nblocks1 = get_NBlocks(m_nx,IRIS_CUDA_NTHREADS_3D);
-	int nblocks2 = get_NBlocks(m_ny,IRIS_CUDA_NTHREADS_3D);
-	int nblocks3 = get_NBlocks(m_nz,IRIS_CUDA_NTHREADS_3D);
-    int nthreads1 = MIN((m_nx+nblocks1+1)/nblocks1,IRIS_CUDA_NTHREADS_3D);
-    int nthreads2 = MIN((m_ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
-    int nthreads3 = MIN((m_nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
+    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
+	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
+	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
+    int nblocks1 = get_NBlocks_X(m_nx,IRIS_CUDA_NTHREADS_YX);
+	int nblocks2 = get_NBlocks_YZ(m_ny,IRIS_CUDA_NTHREADS_YX);
+	int nblocks3 = get_NBlocks_YZ(m_nz,IRIS_CUDA_NTHREADS_Z);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);

@@ -74,7 +74,7 @@ if(IRIS_GPU)
   find_package(CUDA REQUIRED)
   add_definitions(-DIRIS_CUDA)
   list(APPEND IRIS_LINK_LIBS -lcufftw)
-  set(CMAKE_CUDA_ARCHITECTURES  30 35 50 70 72)
+  set(CMAKE_CUDA_ARCHITECTURES  50 70 72)
 endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
