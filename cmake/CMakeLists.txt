@@ -134,6 +134,9 @@ endif()
 add_executable(bob ${IRIS_SOURCE_DIR}/../examples/bob.cpp)
 target_link_libraries(bob iris)
 
+add_executable(bob-ref ${IRIS_SOURCE_DIR}/../examples/bob-ref.cpp)
+target_link_libraries(bob-ref iris)
+
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
 

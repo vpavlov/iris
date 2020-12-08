@@ -228,11 +228,7 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 
 		    iris_real a, b;
 		    multipole_get(scratch, k, l, &a, &b);
-		    if(l % 2) {
-			a = -a;
-		    }else {
-			b = -b;
-		    }
+		    b = -b;
 		    
 		    iris_real c, d;
 		    multipole_get(in_L, n+k, m+l, &c, &d);
@@ -266,11 +262,7 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
 		    
 		    iris_real a, b;
 		    multipole_get(scratch, k, l, &a, &b);
-		    if(l % 2) {
-			a = -a;
-		    }else {
-			b = -b;
-		    }
+		    b = -b;
 
 		    iris_real c, d;
 		    multipole_get(in_L, n+k, m+l, &c, &d);
@@ -282,10 +274,10 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    if(n == 0 && m == 0) {
 		*out_phi = re;  // multipoles of the L^a_a are real
 	    }else if(n == 1 && m == 1) {
-		*out_Ex = re;
-		*out_Ey = im;
+		*out_Ex = -re;
+		*out_Ey = -im;
 	    }else if(n == 1 && m == 0) {
-		*out_Ez = re;
+		*out_Ez = -re;
 	    }
 	}
     }

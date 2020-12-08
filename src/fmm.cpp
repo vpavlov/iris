@@ -45,7 +45,7 @@ using namespace ORG_NCSA_IRIS;
 
 #define _LN8 2.0794415416798357  // natural logarithm of 8
 
-#define MIN_DEPTH 4   // minimum value for depth (2)
+#define MIN_DEPTH 2   // minimum value for depth (2)
 #define MAX_DEPTH 16  // more than enough (e.g. 18 quadrillion particles)
 
 fmm::fmm(iris *obj):
@@ -203,9 +203,22 @@ void fmm::solve()
     m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
 
     iris_real ener = 0.0;
+    iris_real fx_sum = 0.0;
+    iris_real fy_sum = 0.0;
+    iris_real fz_sum = 0.0;
     for(int i=0;i<m_nparticles;i++) {
+	iris_real fx = m_particles[i].tgt[1] * m_particles[i].xyzq[3];
+	iris_real fy = m_particles[i].tgt[2] * m_particles[i].xyzq[3];
+	iris_real fz = m_particles[i].tgt[3] * m_particles[i].xyzq[3];
+
+	fx_sum += fx;
+	fy_sum += fy;
+	fz_sum += fz;
+	
+	m_logger->info("F[%d] = (%f, %f, %f)", m_particles[i].index, fx, fy, fz);
 	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
     }
+    m_logger->info("Ftot = (%f, %f, %f)", fx_sum, fy_sum, fz_sum);
     m_logger->info("FMM Local Energy: %f", ener / 2);
     
     MPI_Barrier(m_iris->server_comm());
@@ -595,12 +608,13 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 	    sum_ex += ex;
 	    sum_ey += ey;
 	    sum_ez += ez;
+	    
+	    m_p2p_count++;
 	}
-	m_particles[m_cells[destID].first_child + i].tgt[0] = sum_phi;
-	m_particles[m_cells[destID].first_child + i].tgt[1] = sum_ex;
-	m_particles[m_cells[destID].first_child + i].tgt[2] = sum_ey;
-	m_particles[m_cells[destID].first_child + i].tgt[3] = sum_ez;
-	m_p2p_count++;
+	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;
+	m_particles[m_cells[destID].first_child + i].tgt[1] += sum_ex;
+	m_particles[m_cells[destID].first_child + i].tgt[2] += sum_ey;
+	m_particles[m_cells[destID].first_child + i].tgt[3] += sum_ez;
     }
 }
 
@@ -673,7 +687,7 @@ void fmm::eval_l2p(cell_t *in_cells)
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {
     	cell_t *leaf = &in_cells[i];
-    	if(leaf->num_children == 0) {
+    	if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
     	    continue;
     	}
     	for(int j=0;j<leaf->num_children;j++) {
@@ -682,11 +696,15 @@ void fmm::eval_l2p(cell_t *in_cells)
 	    iris_real z = m_cell_meta[i].center[2] - m_particles[leaf->first_child+j].xyzq[2];
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	    l2p(m_order, x, y, z, q, m_L[i], m_scratch,
-		&m_particles[leaf->first_child+j].tgt[0],
-		&m_particles[leaf->first_child+j].tgt[1],
-		&m_particles[leaf->first_child+j].tgt[2],
-		&m_particles[leaf->first_child+j].tgt[3]);
+	    iris_real phi, Ex, Ey, Ez;
+	    
+	    l2p(m_order, x, y, z, q, m_L[i], m_scratch, &phi, &Ex, &Ey, &Ez);
+	    
+	    m_particles[leaf->first_child+j].tgt[0] += phi;
+	    m_particles[leaf->first_child+j].tgt[1] += Ex;
+	    m_particles[leaf->first_child+j].tgt[2] += Ey;
+	    m_particles[leaf->first_child+j].tgt[3] += Ez;
+	    
 	    m_l2p_count++;
     	}
     }
