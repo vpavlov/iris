@@ -1,11 +1,11 @@
 #pragma once
 #include "utils.h"
 #include "stdio.h"
-#define IRIS_CUDA_NTHREADS_YX 1
-#define IRIS_CUDA_NTHREADS_Z 1
+#define IRIS_CUDA_NTHREADS_YX 8
+#define IRIS_CUDA_NTHREADS_Z 8
 
-#define IRIS_CUDA_MAX_NBLOCKS_X 8 //2147483647
-#define IRIS_CUDA_MAX_NBLOCKS_YZ 8 //65535
+#define IRIS_CUDA_MAX_NBLOCKS_X 1 //2147483647
+#define IRIS_CUDA_MAX_NBLOCKS_YZ 1 //65535
 
 
 #define IRIS_CUDA_INDEX(X) (blockIdx.X*blockDim.X + threadIdx.X)

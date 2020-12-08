@@ -361,6 +361,50 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
     return array;
 };
 
+
+iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
+                bool clear, iris_real init_val, iris_real *&data, void * parent,  const std::string label)
+{
+    int nitems = n1 * n2 * n3;
+
+    if((!has_shape(array,{n1,n2,n3}))&&(!label.empty())) {
+        destroy_3d(array);
+    }
+
+    void* ptr = get_registered_gpu_pointer(parent,label);
+    if (ptr==NULL) {
+        array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1,parent,label);
+        iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
+        data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
+        int nblocks1 = get_NBlocks_X(n1,IRIS_CUDA_NTHREADS_YX);
+        int nblocks2 = get_NBlocks_YZ(n2,IRIS_CUDA_NTHREADS_YX);
+        int nthreads1 = IRIS_CUDA_NTHREADS_YX;
+        int nthreads2 = IRIS_CUDA_NTHREADS_YX;
+        assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
+        cudaDeviceSynchronize();
+        HANDLE_LAST_CUDA_ERROR;
+        if(!label.empty()) {
+        register_gpu_pointer(parent,label,array);
+        }
+    } else {
+        array = (iris_real***) ptr;
+    }
+
+    if(clear) {
+      int blocks = get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX);
+      int threads = IRIS_CUDA_NTHREADS_YX;
+      memory_set_kernel<<<blocks,threads>>>(array,nitems, init_val);
+    }
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+
+    if(!label.empty()) {
+    register_gpu_pointer_shape((void*)array,{n1,n2,0});
+    }
+
+    return array;
+};
+
 __global__
 void get_3d_2d_1d_pointer_kernel(iris_real ***ptr3d,iris_real **&ptr2d, iris_real *&ptr1d)
 {

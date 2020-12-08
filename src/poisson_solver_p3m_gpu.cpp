@@ -217,7 +217,7 @@ void poisson_solver_p3m_gpu::solve()
     }
 
     kspace_phi(m_work1);
-    
+    // do tuk work1 e tochno
     kspace_Ex(m_work1, m_work2);
     m_fft2->compute_bk(m_work2, m_mesh->m_Ex);
     

@@ -55,8 +55,9 @@ namespace ORG_NCSA_IRIS {
 	void assign_forces(bool ad);
 
 	void dump_bov(const char *in_fname, iris_real ***data);
-	void dump_ascii(const char *in_fname, iris_real ***data);
-	void dump_ascii_from_gpu(const char *fname, iris_real ***data);
+	void dump_ascii(const char *in_fname, iris_real ***data,int n1,int n2, int n3);
+	void dump_ascii_from_gpu(const char *fname, iris_real ***data,int n1, int n2, int n3);
+	void dump_ascii_from_gpu(const char *fname, iris_real *data,int n1, int n2, int n3);
 	void dump_log(const char *in_name, iris_real ***data);
 
 	void dump_exyz(const char *in_fname);
@@ -121,6 +122,7 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real ***m_rho;  // own charge density (ρ), part of RHS
 	iris_real ***m_rho_plus;  // ρ, own + halo items
+	iris_real *m_rho_plus_1d;
 
 	iris_real ***m_phi;  // potential φ (unknown in the LHS)
 	iris_real ***m_phi_plus;  // potential φ (unknown in the LHS)

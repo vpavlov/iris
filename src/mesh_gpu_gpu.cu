@@ -135,17 +135,35 @@ void mesh_gpu::dump_exyz(const char *fname)
 }
 
 
-void mesh_gpu::dump_ascii_from_gpu(const char *fname, iris_real ***data)
+void mesh_gpu::dump_ascii_from_gpu(const char *fname, iris_real ***data,int n1, int n2, int n3)
 {
 	iris_real ***cpubuff;
-	memory::create_3d(cpubuff,m_own_size[0],m_own_size[1],m_own_size[2]);
-	memory_gpu::sync_cpu_buffer(&(cpubuff[0][0][0]),data,m_own_size[0]*m_own_size[1]*m_own_size[2]);
-	dump_ascii(fname,cpubuff);
+	memory::create_3d(cpubuff,n1,n2,n3,false);
+	memory_gpu::sync_cpu_buffer(&(cpubuff[0][0][0]),data,n1*n2*n3*sizeof(iris_real));
+	dump_ascii(fname,cpubuff,n1,n2,n3);
 	memory::destroy_3d(cpubuff);
 }
 
+void mesh_gpu::dump_ascii_from_gpu(const char *fname, iris_real *data,int n1, int n2, int n3)
+{
+	iris_real ***cpubuff;
+	memory::create_3d(cpubuff,n1,n2,n3,false);
+	memory_gpu::sync_cpu_buffer(&(cpubuff[0][0][0]),data,n1*n2*n3*sizeof(iris_real));
+	dump_ascii(fname,cpubuff,n1,n2,n3);
+	memory::destroy_3d(cpubuff);
+}
 
-void mesh_gpu::dump_ascii(const char *fname, iris_real ***data)
+// void mesh_gpu::dump_ascii_from_gpu(const char *fname, iris_real *data)
+// {
+// 	iris_real ***cpubuff;
+// 	memory::create_3d(cpubuff,m_own_size[0],m_own_size[1],m_own_size[2]);
+// 	memory_gpu::sync_cpu_buffer(&(cpubuff[0][0][0]),data,m_own_size[0]*m_own_size[1]*m_own_size[2]);
+// 	dump_ascii(fname,cpubuff);
+// 	memory::destroy_3d(cpubuff);
+// }
+
+
+void mesh_gpu::dump_ascii(const char *fname, iris_real ***data, int nx,int ny,int nz)
 {
     char values_fname[256];
     char header_fname[256];
@@ -154,9 +172,9 @@ void mesh_gpu::dump_ascii(const char *fname, iris_real ***data)
     
     // 1. write the bov file
     FILE *fp = fopen(values_fname, "wb");
-    for(int i=0;i<m_own_size[2];i++) {
-	for(int j=0;j<m_own_size[1];j++) {
-	    for(int k=0;k<m_own_size[0];k++) {
+    for(int i=0;i<nz;i++) {
+	for(int j=0;j<ny;j++) {
+	    for(int k=0;k<nx;k++) {
 	      //fprintf(fp, "%g\n", data[k][j][i]);
 	      fprintf(fp, "%s[%d][%d][%d] %.15f 0x%x\n", fname, k, j, i, data[k][j][i], *(int*)&(data[k][j][i]));
 	    }
@@ -213,57 +231,125 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 	iris_real ics_bump, iris_real ics_center,
 	int order, iris_real *m_coeff, iris_real m_h3inv, iris_real *sendbuff_gpu)
 {
-printf("beg assign_charges1_kernel sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",sendbuff_gpu[0],sendbuff_gpu[1]);
+	iris_real *ptr = &(m_rho_plus[0][0][0]);
+//printf("beg assign_charges1_kernel sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",sendbuff_gpu[0],sendbuff_gpu[1]);
 	int ndx = IRIS_CUDA_INDEX(x);
     int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
     int from = ndx*chunk_size;
 	int to = MIN((ndx+1)*chunk_size,in_ncharges);
 
-	printf("ndx %d from %d to %d chnk_size %d charge 0 %f\n",ndx,from,to,chunk_size,in_charges[3]);
+//	printf("ndx %d from %d to %d chnk_size %d charge 0 %f\n",ndx,from,to,chunk_size,in_charges[3]);
 
 	for(int n=from;n<to;n++) {
-	// printf("ndx %d from %d to %d chnk_size %d charge n %d %f\n",ndx,from,to,chunk_size,n,in_charges[n*5+3]);
-	// 	iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
-	// 	int iz = (int) (tz + ics_bump);
+	//printf("ndx %d from %d to %d chnk_size %d charge n %d %f\n",ndx,from,to,chunk_size,n,in_charges[n*5+3]);
+		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
+		int iz = (int) (tz + ics_bump);
 
-	// 	iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
-	// 	iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
+		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
+		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
 
-	// 	int ix = (int) (tx + ics_bump);
-	// 	int iy = (int) (ty + ics_bump);
+		int ix = (int) (tx + ics_bump);
+		int iy = (int) (ty + ics_bump);
 
-	// 	iris_real dx = ix - tx + ics_center;
-	// 	iris_real dy = iy - ty + ics_center;
-	// 	iris_real dz = iz - tz + ics_center;
+		iris_real dx = ix - tx + ics_center;
+		iris_real dy = iy - ty + ics_center;
+		iris_real dz = iz - tz + ics_center;
 		
-	// 	iris_real weights[3][IRIS_MAX_ORDER];
+		iris_real weights[3][IRIS_MAX_ORDER];
 		
-	// 	compute_weights_dev(dx, dy, dz, m_coeff, weights, order);
+		compute_weights_dev(dx, dy, dz, m_coeff, weights, order);
 
-	// 	iris_real t0 = m_h3inv * in_charges[n*5 + 3];
+		iris_real t0 = m_h3inv * in_charges[n*5 + 3];
 
-	// 	for(int i = 0; i < order; i++) {
-	// 		iris_real t1 = t0 * weights[0][i];
-	// 		for(int j = 0; j < order; j++) {
-	// 			iris_real t2 = t1 * weights[1][j];
-	// 			for(int k = 0; k < order; k++) {
-	// 				//printf("i %d j %d k %d\n",i,j,k);
-	// 				iris_real t3 = t2 * weights[2][k];
-	// 				atomicAdd(&(m_rho_plus[ix+i][iy+j][iz+k]), t3);
-	// 				//if(n<3)
-	// 				//printf("assign_charges1_kernel tx %f ty %f tz %f m_rho_plus[%d][%d][%d] %f\n",tx,ty,tz,ix+i,iy+j,iz+k,m_rho_plus[ix+i][iy+j][iz+k]);
-	// 			}
-	// 		}
-	// 	}
+		for(int i = 0; i < order; i++) {
+			iris_real t1 = t0 * weights[0][i];
+			for(int j = 0; j < order; j++) {
+				iris_real t2 = t1 * weights[1][j];
+				for(int k = 0; k < order; k++) {
+				
+					iris_real t3 = t2 * weights[2][k];
+					t3=1000.;
+					ptr[(ix)*131*131+(iy)*131+iz] = ix*1000000 + iy*1000 + iz;
+//					atomicAdd(&(m_rho_plus[ix+i][iy+j][iz+k]), t3);
+					//atomicAdd(&(ptr[(ix+i)*132*132+(iy+j)*132+iz+k]), t3);
+					//if (ix==32&&iy==34&&iz==99)
+					//printf("n %d ix %d iy %d iz %d prt %f \n",n,ix+i,iy+j,iz+k,m_rho_plus[ix+i][iy+j][iz+k]);
+					//if(n<3)
+					//printf("assign_charges1_kernel tx %f ty %f tz %f m_rho_plus[%d][%d][%d] %f\n",tx,ty,tz,ix+i,iy+j,iz+k,m_rho_plus[ix+i][iy+j][iz+k]);
+				}
+			}
+		}
 
 		iris_real q = in_charges[n*5 + 3];
 		atomicAdd(&(sendbuff_gpu[0]), q);
 		atomicAdd(&(sendbuff_gpu[1]), q*q);
 	}
-	__syncthreads();
-	printf("ndx %d assign_charges1_kernel sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",ndx,sendbuff_gpu[0],sendbuff_gpu[1]);
+	//__syncthreads();
+	//printf("ndx %d assign_charges1_kernel sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",ndx,sendbuff_gpu[0],sendbuff_gpu[1]);
 }
 
+__global__
+void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
+	iris_real ***m_rho_plus, iris_real *m_rho_plus_1d, int nx, int ny, int nz,
+	iris_real lbox_xlo, iris_real lbox_ylo, iris_real lbox_zlo,
+	iris_real m_h_0, iris_real m_h_1, iris_real m_h_2,
+	iris_real ics_bump, iris_real ics_center,
+	int order, iris_real *m_coeff, iris_real m_h3inv, iris_real *sendbuff_gpu)
+{
+	volatile int ndx = IRIS_CUDA_INDEX(x);
+    volatile int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
+    volatile int from = ndx*chunk_size;
+	volatile int to = MIN((ndx+1)*chunk_size,in_ncharges);
+
+	//printf("1d ndx %d from %d to %d chnk_size %d charge 0 %f ncharges %d\n",ndx,from,to,chunk_size,in_charges[3],in_ncharges);
+
+	for(int n=from;n<to;n++) {
+	//printf("ndx %d from %d to %d chnk_size %d charge n %d %f\n",ndx,from,to,chunk_size,n,in_charges[n*5+3]);
+		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
+		volatile int iz = (int) (tz + ics_bump);
+
+		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
+		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
+
+		volatile int ix = (int) (tx + ics_bump);
+		volatile int iy = (int) (ty + ics_bump);
+
+		iris_real dx = ix - tx + ics_center;
+		iris_real dy = iy - ty + ics_center;
+		iris_real dz = iz - tz + ics_center;
+		
+		iris_real weights[3][IRIS_MAX_ORDER];
+		
+		compute_weights_dev(dx, dy, dz, m_coeff, weights, order);
+
+		iris_real t0 = m_h3inv * in_charges[n*5 + 3];
+
+		for(int i = 0; i < order; i++) {
+			iris_real t1 = t0 * weights[0][i];
+			for(int j = 0; j < order; j++) {
+				iris_real t2 = t1 * weights[1][j];
+				for(int k = 0; k < order; k++) {
+				
+					iris_real t3 = t2 * weights[2][k];
+
+					atomicAdd(&(m_rho_plus[ix+i][iy+j][iz+k]), t3);
+				}
+			}
+		}
+
+		iris_real q = in_charges[n*5 + 3];
+		atomicAdd(&(sendbuff_gpu[0]), q);
+		atomicAdd(&(sendbuff_gpu[1]), q*q);
+		// if(ix<0||ix>=nx)
+		// printf("opaaa nx ix %d\n",ix);
+		// 		if(iy<0||iy>=ny)
+		// printf("opaaa ny iy %d\n",iy);
+		// if(iz<0||iz>=nz)
+		// printf("opaaa ny iz %d\n",iz);
+	}
+	// __syncthreads();
+	// printf("1d ndx %d assign_charges1_kernel sendbuff_gpu[0] %f sendbuff_gpu[1] %f\n",ndx,sendbuff_gpu[0],sendbuff_gpu[1]);
+}
 
 void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real *sendbuff_gpu)
 {
@@ -276,8 +362,16 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 	// m_chass->m_ics_bump, m_chass->m_ics_center,
 	// m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
 
-	assign_charges1_kernel<<<256,1>>>
-	(in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
+	printf("ext_size %d %d %d\n",m_ext_size[0],m_ext_size[1],m_ext_size[2]);
+	// assign_charges1_kernel<<<1,2>>>
+	// (in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
+	// m_h[0], m_h[1], m_h[2], 
+	// m_chass->m_ics_bump, m_chass->m_ics_center,
+	// m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
+
+	assign_charges1_kernel<<<128,1>>>
+	(in_charges, in_ncharges,m_rho_plus, m_rho_plus_1d, m_ext_size[0],m_ext_size[1],m_ext_size[2],
+	lbox->xlo, lbox->ylo, lbox->zlo, 
 	m_h[0], m_h[1], m_h[2], 
 	m_chass->m_ics_bump, m_chass->m_ics_center,
 	m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);

@@ -410,7 +410,7 @@ iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
 			   (complex_t *)dest,
 			   (complex_t *)dest);
 #endif
-	tm2.stop();
+
 	// m_logger->trace("AFTER FFT %d", i);
 	// for(int j=0;j<m_count;j++) {
 	//     m_logger->trace("FFT[%d] = %.15g + j*%.15g",
@@ -418,10 +418,14 @@ iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
 	// }
 
     }
+	tm2.stop();
 
     tm1[3].start();
     m_remaps[3]->perform(dest, dest, m_scratch);
     tm1[3].stop();
+
+// m_mesh->dump_ascii_from_gpu("src-before-fftw",dest,m_mesh->m_own_size[0],m_mesh->m_own_size[1],2*m_mesh->m_own_size[2]);
+// 	exit(333);
 
     // m_logger->trace("AFTER FINAL REMAP");
     // for(int j=0;j<m_count;j++) {

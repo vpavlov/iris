@@ -247,6 +247,10 @@ namespace ORG_NCSA_IRIS {
 	static iris_real ***create_3d(iris_real ***&array, int n1, int n2, int n3,
 			     				bool clear = false, iris_real init_val = 0, 
 								void * parent=NULL,  const std::string label="");
+	
+	static iris_real ***create_3d(iris_real ***&array, int n1, int n2, int n3,
+			     				bool clear, iris_real init_val, iris_real *&data,
+								void * parent=NULL,  const std::string label="");
 
 	static void destroy_3d(iris_real ***&array, bool keep_it=false);
 

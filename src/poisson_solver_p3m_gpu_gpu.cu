@@ -104,6 +104,8 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
                     iris_real ener = s2 * m_greenfn[n] *
                     (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
                     in_rho_phi[2*n+1] * in_rho_phi[2*n+1]);
+                    // if(nx*ny*nz-n<10) 
+                    //   printf("n %d  m_greenfn[%d] %f ener %f Ek_acc[%d] %f\n",n,n,m_greenfn[n],ener,iacc,Ek_acc[iacc]);
                     for(int m = 0;m<6;m++) {
                         virial_acc[m][iacc] += ener * vc[2*n/2][m];
                     }
@@ -132,14 +134,17 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
 
     __syncthreads();
     
-    for(int i = BLOCK_SIZE-1; i > 0; i/=2 ) {
+    for(int i = BLOCK_SIZE; i > 0; i/=2 ) {
         int stride = BLOCK_SIZE/i;
         if (iacc < (BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
             for(int m = 0;m<6;m++) {
                 virial_acc[m][iacc] += virial_acc[m][iacc+stride];
             }
             Ek_acc[iacc] += Ek_acc[iacc+stride];
+            // if(stride>1&&stride%2)
+            
         }
+       // printf("i %d iacc %d stride %d iacc+stride %d \n",i,iacc,stride,iacc+stride);
         __syncthreads();
     }
 
@@ -150,10 +155,12 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
         }
     }
     if (xndx+yndx+zndx==0) {
+        printf(" out_Ek_vir[0] %f\n",  out_Ek_vir[0]);
         out_Ek_vir[0] *= u_factor;
         for(int m = 0;m<6;m++) {
         out_Ek_vir[m+1]*=u_factor;
         }
+        printf(" out_Ek_vir[0]*u_factor %f\n",  out_Ek_vir[0]);
     }
 }
 
@@ -192,9 +199,17 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
 
 printf("bl %d %d %d the %d %d %d\n",blocks.x,blocks.y,blocks.z,threads.x,threads.y,threads.z);
+
     kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_iris->m_Ek_vir, nx, ny, nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial,post_corr);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
+    
+    m_mesh->dump_ascii_from_gpu("denominator_x",m_denominator_x,1,1,m_fft_size[0]);
+    m_mesh->dump_ascii_from_gpu("denominator_y",m_denominator_y,1,1,m_fft_size[1]);
+    m_mesh->dump_ascii_from_gpu("denominator_z",m_denominator_z,1,1,m_fft_size[2]);
+    m_mesh->dump_ascii_from_gpu("greenfn",m_greenfn,1,1,m_fft_size[0]*m_fft_size[1]*m_fft_size[2]);
+	exit(333);
+    exit(777);
 }
 
 
@@ -435,7 +450,7 @@ void poisson_solver_p3m_gpu::calculate_denominator()
 }
 
 __global__
-void calculate_gf_fact_1_kernel(iris_real *greenfn_r, iris_real *denominator_r, int sr, int nr, int rM, int krm, int _2n, iris_real rL, iris_real alpha)
+void calculate_gf_fact_1_kernel(iris_real *greenfn_r, iris_real *denominator_r, int sr, int nr, int rM, iris_real krm, int _2n, iris_real rL, iris_real alpha)
 {
     int rndx = IRIS_CUDA_INDEX(x);
     int rchunk_size = IRIS_CUDA_CHUNK(x,nr);
@@ -449,6 +464,7 @@ void calculate_gf_fact_1_kernel(iris_real *greenfn_r, iris_real *denominator_r, 
 	    iris_real rwnsq = pow_sinx_x_dev(rkplusb * rL / (2 * rM), _2n);
 	    iris_real part2 = rrho * rwnsq;
 	    greenfn_r[r - sr] = part2 / denominator_r[r - sr];
+//        printf("greenfn_r[%d] %f rkplusb %f rrho %f rwnsq %f rj %d krm %f\n",r - sr,greenfn_r[r - sr],rkplusb, rrho, rwnsq, rj,krm );
 	}
 
 }
@@ -527,7 +543,7 @@ void poisson_solver_p3m_gpu::calculate_gf_fact()
     int ex = sx + nx;
     int ey = sy + ny;
     int ez = sz + nz;
-
+   // printf("sx %d nx %d xM %d kxm %f _2n %d xL %d alpha %f\n", sx, nx, xM, kxm, _2n, xL, alpha);
     memory_gpu::create_1d(greenfn_x, nx);
     memory_gpu::create_1d(greenfn_y, ny);
     memory_gpu::create_1d(greenfn_z, nz);
