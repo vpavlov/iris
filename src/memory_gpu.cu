@@ -121,8 +121,9 @@ void print_kernel(iris_real* ptr, int n, const char* name)
 
 void print_vector_gpu(iris_real* ptr, int n, const char* name)
 {   
-    int blocks = get_NBlocks_X(n,IRIS_CUDA_NTHREADS_YX);
-    int threads = MIN((n+blocks+1)/blocks,IRIS_CUDA_NTHREADS_YX);
+    int threads = get_NThreads_1D(n);
+    int blocks = get_NBlocks_X(n,threads);
+
     print_kernel<<<blocks,threads>>>(ptr,n,name);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
@@ -176,8 +177,8 @@ iris_real *memory_gpu::create_1d(iris_real *&array, int n1, bool clear,
     }
 
     if(clear) {
-      int blocks = get_NBlocks_X(n1,IRIS_CUDA_NTHREADS_YX);
-      int threads = IRIS_CUDA_NTHREADS_YX;
+      int blocks = get_NBlocks_X(n1,IRIS_CUDA_SHARED_BLOCK_SIZE);
+      int threads = IRIS_CUDA_SHARED_BLOCK_SIZE;
       memory_set_kernel<<<blocks,threads>>>(array,n1,(iris_real)0);
       cudaDeviceSynchronize();
       HANDLE_LAST_CUDA_ERROR;
@@ -236,14 +237,16 @@ iris_real **memory_gpu::create_2d(iris_real **&array, int n1, int n2, bool clear
     if (ptr==NULL) {
         array =  (iris_real **)wmalloc(sizeof(iris_real *) * n1, parent, label);
         iris_real* data = (iris_real *)wmalloc(sizeof(iris_real) * nitems);
-        assign_2d_indexing_kernel<<<get_NBlocks_X(n1,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(array,data,n1,n2);
+        int nthreads = get_NThreads_1D(n1);
+        int nblocks = get_NBlocks_X(n1,nthreads);
+        assign_2d_indexing_kernel<<<nblocks,nthreads>>>(array,data,n1,n2);
         register_gpu_pointer_shape(array,{n1,n2,0});
     } else {
         array = (iris_real **)ptr;
     }
 
     if(clear) {
-        memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(array,nitems,(iris_real)0);
+        memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>(array,nitems,(iris_real)0);
     }
 
     
@@ -332,10 +335,11 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
         array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1,parent,label);
         iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
         iris_real *data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
-        int nblocks1 = get_NBlocks_X(n1,IRIS_CUDA_NTHREADS_YX);
-        int nblocks2 = get_NBlocks_YZ(n2,IRIS_CUDA_NTHREADS_YX);
-        int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-        int nthreads2 = IRIS_CUDA_NTHREADS_YX;
+        int nthreads1 = get_NThreads_X(n1);
+        int nthreads2 = get_NThreads_Y(n2);
+        int nblocks1 = get_NBlocks_X(n1,nthreads1);
+        int nblocks2 = get_NBlocks_Y(n2,nthreads2);
+
         assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
         cudaDeviceSynchronize();
         HANDLE_LAST_CUDA_ERROR;
@@ -347,8 +351,8 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
     }
 
     if(clear) {
-      int blocks = get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX);
-      int threads = IRIS_CUDA_NTHREADS_YX;
+      int blocks = get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE);
+      int threads = IRIS_CUDA_SHARED_BLOCK_SIZE;
       memory_set_kernel<<<blocks,threads>>>(array,nitems, init_val);
     }
     cudaDeviceSynchronize();
@@ -376,10 +380,11 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
         array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1,parent,label);
         iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
         data = (iris_real *)   wmalloc(sizeof(iris_real)    * nitems);
-        int nblocks1 = get_NBlocks_X(n1,IRIS_CUDA_NTHREADS_YX);
-        int nblocks2 = get_NBlocks_YZ(n2,IRIS_CUDA_NTHREADS_YX);
-        int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-        int nthreads2 = IRIS_CUDA_NTHREADS_YX;
+        int nthreads1 = get_NThreads_X(n1);
+        int nthreads2 = get_NThreads_Y(n2);
+        int nblocks1 = get_NBlocks_X(n1,nthreads1);
+        int nblocks2 = get_NBlocks_Y(n2,nthreads2);
+
         assign_3d_indexing_kernel<<<dim3(nblocks1,nblocks2),dim3(nthreads1,nthreads2)>>>(array, tmp, data, n1, n2, n3);
         cudaDeviceSynchronize();
         HANDLE_LAST_CUDA_ERROR;
@@ -391,8 +396,8 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
     }
 
     if(clear) {
-      int blocks = get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX);
-      int threads = IRIS_CUDA_NTHREADS_YX;
+      int blocks = get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE);
+      int threads = IRIS_CUDA_SHARED_BLOCK_SIZE;
       memory_set_kernel<<<blocks,threads>>>(array,nitems, init_val);
     }
     cudaDeviceSynchronize();
@@ -555,154 +560,4 @@ std::pair<void *,std::string> memory_gpu::get_parent_and_label(void* prt)
             }
     }
     return std::pair<void*, std::string>(NULL,"");
-}
-
-
-const int BLOCK_SIZE = IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z;
-
-__global__
-void dot_kernel(iris_real ***in_rho_phi,
-                        iris_real *dot,
-                        int nx, int ny, int nz)
-{
-    __shared__ iris_real Ek_acc[BLOCK_SIZE];
-    
-    int xndx = IRIS_CUDA_INDEX(x);
-    int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    int yndx = IRIS_CUDA_INDEX(y);
-    int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    int zndx = IRIS_CUDA_INDEX(z);
-    int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
-
-	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
-	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ny);
-	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,nz);
-
-    int iacc = xndx*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z + yndx*IRIS_CUDA_NTHREADS_Z + zndx;
-
-
-
-    // printf("bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z);
-
-    //printf("iacc = %d i_from %d i_to %d j_from %d j_to %d k_from %d k_to %d xchunk_size %d ychunk_size %d zchunk_size %d nx %d ny %d nz %d\n",iacc,i_from,i_to,j_from,j_to,k_from,k_to, xchunk_size, ychunk_size, zchunk_size,nx,ny,nz);
-    //printf("out of the for bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d ndx %d %d %d i_from %d i_to %d j_from %d j_to %d k_from %d k_to %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z,xndx,yndx,zndx,i_from,i_to,j_from,j_to,k_from,k_to);
-   
-
-    Ek_acc[iacc] = 0.0;
-
-  // printf("bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z);
-
-        for(int i=i_from;i<i_to;i++) {
-            int ni = i*ny*nz;
-            for(int j=j_from;j<j_to;j++) {
-                int nj = ni + j*nz;
-                for(int k=k_from;k<k_to;k++) {
-                int n = nj + k;
-                Ek_acc[iacc] += in_rho_phi[i][j][k]*in_rho_phi[i][j][k];
-                }
-            }
-        }
-
-    __syncthreads();
-
-    for(int i = BLOCK_SIZE; i > 1; i/=2 ) {
-        //printf("echo  BLOCK_SIZE %d ibl %d iacc %d + %d BLOCK_SIZE/i %d (iacc)%(BLOCK_SIZE/i) %d \n",BLOCK_SIZE,i,iacc,iacc+BLOCK_SIZE/i,BLOCK_SIZE/i,(iacc)%(BLOCK_SIZE/i));
-        int stride = BLOCK_SIZE/i;
-        if (iacc < (BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
-          //  printf("i %d Ek_acc[%d] %f Ek_acc[%d] %f\n", i, iacc,Ek_acc[iacc],iacc+stride,Ek_acc[iacc+stride]);
-            Ek_acc[iacc] += Ek_acc[iacc+stride];
-            //printf("echo ibl %d iacc %d + %d BLOCK_SIZE/i %d (iacc)%(BLOCK_SIZE/i) %d \n",i,iacc,iacc+BLOCK_SIZE/i,BLOCK_SIZE/i,(iacc)%(BLOCK_SIZE/i));
-            
-       }
-        __syncthreads();
-    }
-
-    if (iacc==0) {
-        atomicAdd(dot,Ek_acc[iacc]);
-    }
-}
-
-__global__
-void sum_kernel(iris_real ***in_rho_phi,
-                        iris_real *dot,
-                        int nx, int ny, int nz)
-{
-    __shared__ iris_real Ek_acc[BLOCK_SIZE];
-    
-    int xndx = IRIS_CUDA_INDEX(x);
-    int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    int yndx = IRIS_CUDA_INDEX(y);
-    int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    int zndx = IRIS_CUDA_INDEX(z);
-    int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
-
-	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
-	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ny);
-	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,nz);
-
-    int iacc = xndx*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z + yndx*IRIS_CUDA_NTHREADS_Z + zndx;
-
-
-
-    // printf("bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z);
-
-    //printf("iacc = %d i_from %d i_to %d j_from %d j_to %d k_from %d k_to %d xchunk_size %d ychunk_size %d zchunk_size %d nx %d ny %d nz %d\n",iacc,i_from,i_to,j_from,j_to,k_from,k_to, xchunk_size, ychunk_size, zchunk_size,nx,ny,nz);
-    //printf("out of the for bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d ndx %d %d %d i_from %d i_to %d j_from %d j_to %d k_from %d k_to %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z,xndx,yndx,zndx,i_from,i_to,j_from,j_to,k_from,k_to);
-  
-    Ek_acc[iacc] = 0.0;
-
-  // printf("bdimx %d bdimy %d bdimz %d tidx %d tidy %d tidz %d\n",blockDim.x,blockDim.y,blockDim.z, threadIdx.x, threadIdx.y,threadIdx.z);
-
-        for(int i=i_from;i<i_to;i++) {
-            int ni = i*ny*nz;
-            for(int j=j_from;j<j_to;j++) {
-                int nj = ni + j*nz;
-                for(int k=k_from;k<k_to;k++) {
-                int n = nj + k;
-                Ek_acc[iacc] += in_rho_phi[i][j][k];
-                }
-            }
-        }
-
-    __syncthreads();
-
-    for(int i = BLOCK_SIZE; i > 1; i/=2 ) {
-        //printf("echo  BLOCK_SIZE %d ibl %d iacc %d + %d BLOCK_SIZE/i %d (iacc)%(BLOCK_SIZE/i) %d \n",BLOCK_SIZE,i,iacc,iacc+BLOCK_SIZE/i,BLOCK_SIZE/i,(iacc)%(BLOCK_SIZE/i));
-        int stride = BLOCK_SIZE/i;
-        if (iacc < (BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
-          //  printf("i %d Ek_acc[%d] %f Ek_acc[%d] %f\n", i, iacc,Ek_acc[iacc],iacc+stride,Ek_acc[iacc+stride]);
-            Ek_acc[iacc] += Ek_acc[iacc+stride];
-            //printf("echo ibl %d iacc %d + %d BLOCK_SIZE/i %d (iacc)%(BLOCK_SIZE/i) %d \n",i,iacc,iacc+BLOCK_SIZE/i,BLOCK_SIZE/i,(iacc)%(BLOCK_SIZE/i));
-            
-       }
-        __syncthreads();
-    }
-
-    if (iacc==0) {
-        atomicAdd(dot,Ek_acc[iacc]);
-    }
-}
-
-
-iris_real calc_sum(iris_real ***v, int nx, int ny, int nz)
-{
-    int nthreads1 = IRIS_CUDA_NTHREADS_Z;
-	int nthreads2 = IRIS_CUDA_NTHREADS_Z;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_Z);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_Z);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
-
-	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-    auto threads = dim3(nthreads1,nthreads2,nthreads3);
-    iris_real *res;
-    iris_real result;
-    cudaMalloc((void**)&res,sizeof(iris_real));
-     HANDLE_LAST_CUDA_ERROR;
-    sum_kernel<<<blocks,threads>>>(v,res,nx,ny,nz);
-    cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR;
-    cudaMemcpy ( &result, res,sizeof(iris_real), cudaMemcpyDeviceToHost);
-     HANDLE_LAST_CUDA_ERROR;
-    return result;
 }

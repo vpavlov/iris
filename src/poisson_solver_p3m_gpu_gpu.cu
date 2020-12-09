@@ -44,12 +44,12 @@ void poisson_solver_p3m_gpu::kspace_phi(iris_real *io_rho_phi)
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
     
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -59,48 +59,32 @@ void poisson_solver_p3m_gpu::kspace_phi(iris_real *io_rho_phi)
     HANDLE_LAST_CUDA_ERROR;
 }
 
-
-const int BLOCK_SIZE = IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z;
-
 __global__
 void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** vc,
                         iris_real *out_Ek_vir,
-                        int nx, int ny, int nz, float s2, 
+                        int nn, float s2, 
                         int compute_global_energy, int compute_global_virial, iris_real u_factor)
 {
-    __shared__ iris_real virial_acc[6][BLOCK_SIZE];
-    __shared__ iris_real Ek_acc[BLOCK_SIZE];
+    __shared__ iris_real virial_acc[6][IRIS_CUDA_SHARED_BLOCK_SIZE];
+    __shared__ iris_real Ek_acc[IRIS_CUDA_SHARED_BLOCK_SIZE];
     
     int xndx = IRIS_CUDA_INDEX(x);
-    int xchunk_size = IRIS_CUDA_CHUNK(x,nx);
-    int yndx = IRIS_CUDA_INDEX(y);
-    int ychunk_size = IRIS_CUDA_CHUNK(y,ny);
-    int zndx = IRIS_CUDA_INDEX(z);
-    int zchunk_size = IRIS_CUDA_CHUNK(z,nz);
+    int xchunk_size = IRIS_CUDA_CHUNK(x,nn);
 
-	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nx);
-	int j_from = yndx*ychunk_size, j_to = MIN((yndx+1)*ychunk_size,ny);
-	int k_from = zndx*zchunk_size, k_to = MIN((zndx+1)*zchunk_size,nz);
+	int i_from = xndx*xchunk_size, i_to = MIN((xndx+1)*xchunk_size,nn);
 
-    int iacc = (xndx-blockIdx.x*blockDim.x)*IRIS_CUDA_NTHREADS_Z*IRIS_CUDA_NTHREADS_Z + (yndx-blockIdx.y*blockDim.y)*IRIS_CUDA_NTHREADS_Z + zndx -blockIdx.z*blockDim.z;
-    //int iacc = (xndx-blockIdx.x*blockDim.x)*IRIS_CUDA_NTHREADS_YX + (yndx-blockIdx.y*blockDim.y) + zndx -blockIdx.z*blockDim.z;
+    int iacc = (xndx-blockIdx.x*blockDim.x);
+
     for(int m = 0;m<6;m++) {
     virial_acc[m][iacc] = 0.0;
     }
     Ek_acc[iacc] = 0.0;
 
- //printf(" i_from %d i_to %d iacc %d xndx %d yndx %d zndx %d  \n",i_from,i_to,iacc,xndx,yndx,zndx);
+ //printf(" i_from %d i_to %d iacc %d xndx %d \n",i_from,i_to,iacc,xndx);
 
-    if (xndx<nx && yndx<ny && zndx < nz)
-    {
         //printf("if xndx %d yndx %d zndx %d\n",xndx,yndx,zndx);
         if(compute_global_virial) {
-            for(int i=i_from;i<i_to;i++) {
-                int ni = i*ny*nz;
-                for(int j=j_from;j<j_to;j++) {
-                    int nj = ni + j*nz;
-                    for(int k=k_from;k<k_to;k++) {
-                    int n = nj + k;
+            for(int n=i_from;n<i_to;n++) {
                     iris_real ener = s2 * m_greenfn[n] *
                     (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
                     in_rho_phi[2*n+1] * in_rho_phi[2*n+1]);
@@ -113,30 +97,21 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
                         Ek_acc[iacc] += ener;
                     }
                     }
-                }
-            }
         }else {
-            for(int i=i_from;i<i_to;i++) {
-                int ni = i*ny*nz;
-                for(int j=j_from;j<j_to;j++) {
-                    int nj = ni + j*nz;
-                    for(int k=k_from;k<k_to;k++) {
-                    int n = nj + k;
+            for(int n=i_from;n<i_to;n++) {
                     Ek_acc[iacc] += s2 * m_greenfn[n] *
                     (in_rho_phi[2*n  ] * in_rho_phi[2*n  ] +
                     in_rho_phi[2+n+1] * in_rho_phi[2*n+1]);
                    }
-                }
-            }
         }
 
-    }
+    
 
     __syncthreads();
     
-    for(int i = BLOCK_SIZE; i > 0; i/=2 ) {
-        int stride = BLOCK_SIZE/i;
-        if (iacc < (BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
+    for(int i = IRIS_CUDA_SHARED_BLOCK_SIZE; i > 0; i/=2 ) {
+        int stride = IRIS_CUDA_SHARED_BLOCK_SIZE/i;
+        if (iacc < (IRIS_CUDA_SHARED_BLOCK_SIZE - stride)  && (iacc)%(2*stride)==0) {
             for(int m = 0;m<6;m++) {
                 virial_acc[m][iacc] += virial_acc[m][iacc+stride];
             }
@@ -149,19 +124,19 @@ void kspace_eng_kernel(iris_real *in_rho_phi, iris_real *m_greenfn, iris_real** 
     }
 
     if (iacc==0) {
-        atomicAdd(&(out_Ek_vir[0]),Ek_acc[iacc]);
+        atomicAdd(&(out_Ek_vir[0]),Ek_acc[iacc]*u_factor);
         for(int m = 0;m<6;m++) {
-        atomicAdd(&(out_Ek_vir[m+1]), virial_acc[m][iacc]);
+        atomicAdd(&(out_Ek_vir[m+1]), virial_acc[m][iacc]*u_factor);
         }
     }
-    if (xndx+yndx+zndx==0) {
-        printf(" out_Ek_vir[0] %f\n",  out_Ek_vir[0]);
-        out_Ek_vir[0] *= u_factor;
-        for(int m = 0;m<6;m++) {
-        out_Ek_vir[m+1]*=u_factor;
-        }
-        printf(" out_Ek_vir[0]*u_factor %f\n",  out_Ek_vir[0]);
-    }
+    // if (xndx==0) {
+    //     printf(" out_Ek_vir[0] %f\n",  out_Ek_vir[0]);
+    //     out_Ek_vir[0] *= u_factor;
+    //     for(int m = 0;m<6;m++) {
+    //     out_Ek_vir[m+1]*=u_factor;
+    //     }
+    //     printf(" out_Ek_vir[0]*u_factor %f\n",  out_Ek_vir[0]);
+    // }
 }
 
 void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
@@ -188,28 +163,26 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 
     // the kernel has to be rewritten in move convenient way
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_Z;
-	int nthreads2 = IRIS_CUDA_NTHREADS_Z;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_Z);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_Z);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = IRIS_CUDA_SHARED_BLOCK_SIZE;
+	// int nthreads3 = IRIS_CUDA_NTHREADS_Z;
+    int nblocks1 = get_NBlocks_X(nx*ny*nz,IRIS_CUDA_SHARED_BLOCK_SIZE);
+	// int nblocks3 = get_NBlocks_Z(nz,IRIS_CUDA_NTHREADS_Z);
 
-	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
-    auto threads = dim3(nthreads1,nthreads2,nthreads3);
+	auto blocks = dim3(nblocks1);
+    auto threads = dim3(nthreads1);
 
 printf("bl %d %d %d the %d %d %d\n",blocks.x,blocks.y,blocks.z,threads.x,threads.y,threads.z);
 
-    kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_iris->m_Ek_vir, nx, ny, nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial,post_corr);
+    kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_iris->m_Ek_vir, nx*ny*nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial,post_corr);
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
     
-    m_mesh->dump_ascii_from_gpu("denominator_x",m_denominator_x,1,1,m_fft_size[0]);
-    m_mesh->dump_ascii_from_gpu("denominator_y",m_denominator_y,1,1,m_fft_size[1]);
-    m_mesh->dump_ascii_from_gpu("denominator_z",m_denominator_z,1,1,m_fft_size[2]);
-    m_mesh->dump_ascii_from_gpu("greenfn",m_greenfn,1,1,m_fft_size[0]*m_fft_size[1]*m_fft_size[2]);
-	exit(333);
-    exit(777);
+   // m_mesh->dump_ascii_from_gpu("denominator_x",m_denominator_x,1,1,m_fft_size[0]);
+   // m_mesh->dump_ascii_from_gpu("denominator_y",m_denominator_y,1,1,m_fft_size[1]);
+   // m_mesh->dump_ascii_from_gpu("denominator_z",m_denominator_z,1,1,m_fft_size[2]);
+   // m_mesh->dump_ascii_from_gpu("greenfn",m_greenfn,1,1,m_fft_size[0]*m_fft_size[1]*m_fft_size[2]);
+	// exit(333);
+   //  exit(777);
 }
 
 
@@ -247,12 +220,12 @@ void poisson_solver_p3m_gpu::kspace_Ex(iris_real *in_phi, iris_real *out_Ex)
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -296,12 +269,12 @@ void poisson_solver_p3m_gpu::kspace_Ey(iris_real *in_phi, iris_real *out_Ey)
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -345,12 +318,12 @@ void poisson_solver_p3m_gpu::kspace_Ez(iris_real *in_phi, iris_real *out_Ez)
     int ny = m_fft_size[1];
     int nz = m_fft_size[2];
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -432,16 +405,16 @@ void poisson_solver_p3m_gpu::calculate_denominator()
 	int sy = m_fft_offset[1];
 	int sz = m_fft_offset[2];
     
-    int nthreads = MIN(nx,IRIS_CUDA_NTHREADS_YX);
+    int nthreads = get_NThreads_X(nx);
     int nblocks = get_NBlocks_X(nx,nthreads);
 
     calculate_denominator_kernel<<<nblocks,nthreads>>>(m_denominator_x, sx, nx, xM, m_chass->m_order, m_chass->m_gfd_coeff);
 
-    nthreads = MIN(ny,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(ny);
     nblocks = get_NBlocks_X(ny,nthreads);
     calculate_denominator_kernel<<<nblocks,nthreads>>>(m_denominator_y, sy, ny, yM, m_chass->m_order, m_chass->m_gfd_coeff);
 
-    nthreads = MIN(nz,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(nz);
     nblocks = get_NBlocks_X(nz,nthreads);
     calculate_denominator_kernel<<<nblocks,nthreads>>>(m_denominator_z, sz, nz, zM, m_chass->m_order, m_chass->m_gfd_coeff);
 
@@ -548,28 +521,28 @@ void poisson_solver_p3m_gpu::calculate_gf_fact()
     memory_gpu::create_1d(greenfn_y, ny);
     memory_gpu::create_1d(greenfn_z, nz);
 
-    int nthreads = MIN(nx,IRIS_CUDA_NTHREADS_YX);
+    int nthreads = get_NThreads_X(nx);
     int nblocks = get_NBlocks_X(nx,nthreads);
 
     calculate_gf_fact_1_kernel<<<nblocks,nthreads>>>(greenfn_x, m_denominator_x, sx, nx, xM, kxm, _2n, xL, alpha);
 
-    nthreads = MIN(ny,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(ny);
     nblocks = get_NBlocks_X(ny,nthreads);
     calculate_gf_fact_1_kernel<<<nblocks,nthreads>>>(greenfn_y, m_denominator_y, sy, ny, yM, kym, _2n, yL, alpha);
 
-    nthreads = MIN(nz,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(nz);
     nblocks = get_NBlocks_X(nz,nthreads);
     calculate_gf_fact_1_kernel<<<nblocks,nthreads>>>(greenfn_z, m_denominator_z, sz, nz, zM, kzm, _2n, zL, alpha);
 
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -693,12 +666,12 @@ void poisson_solver_p3m_gpu::calculate_gf_full()
     int ey = sy + ny;
     int ez = sz + nz;
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -757,15 +730,15 @@ void poisson_solver_p3m_gpu::calculate_k()
     int ey = sy + ny;
     int ez = sz + nz;
 
-    int nthreads = MIN(nx,IRIS_CUDA_NTHREADS_YX);
+    int nthreads = get_NThreads_X(nx);;
     int nblocks = get_NBlocks_X(nx,nthreads);
     calculate_k_kernel<<<nblocks,nthreads>>>(m_kx, kxm, sx, ex, xM);
 
-    nthreads = MIN(ny,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(ny);
     nblocks = get_NBlocks_X(ny,nthreads);
     calculate_k_kernel<<<nblocks,nthreads>>>(m_ky, kym, sy, ey, yM);
 
-    nthreads = MIN(nz,IRIS_CUDA_NTHREADS_YX);
+    nthreads = get_NThreads_X(nz);
     nblocks = get_NBlocks_X(nz,nthreads);
     calculate_k_kernel<<<nblocks,nthreads>>>(m_kz, kzm, sz, ez, zM);
 
@@ -837,12 +810,12 @@ void poisson_solver_p3m_gpu::calculate_virial_coeff()
     int ey = sy + ny;
     int ez = sz + nz;
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);

@@ -47,12 +47,12 @@ void copy_to_sendbuf(iris_real *sendbuf,iris_real ***data,
     // int nthreads2 = MIN((ny+nblocks2+1)/nblocks2,IRIS_CUDA_NTHREADS_3D);
     // int nthreads3 = MIN((nz+nblocks3+1)/nblocks3,IRIS_CUDA_NTHREADS_3D);
     int  nthreads1,nthreads2,nthreads3 ; 
-    nthreads1=IRIS_CUDA_NTHREADS_YX;
-    nthreads2=IRIS_CUDA_NTHREADS_YX;
-    nthreads3=IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    nthreads1=get_NThreads_X(nx);
+    nthreads2=get_NThreads_Y(ny);
+    nthreads3=get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
     copy_to_sendbuf_kernel<<<blocks,threads>>>(sendbuf, data, sx, sy, sz, ex, ey, ez);
@@ -105,12 +105,12 @@ void copy_from_recvbuf(iris_real *recvbuf,iris_real ***data, int mode,
     int ny=ey-sy;
     int nz=ez-sz;
     
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-    int nthreads2 = IRIS_CUDA_NTHREADS_YX; 
-    int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+    int nthreads2 = get_NThreads_Y(ny); 
+    int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);

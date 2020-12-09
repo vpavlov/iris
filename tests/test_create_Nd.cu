@@ -57,12 +57,14 @@ int main()
     iris_real*** ap;
     ORG_NCSA_IRIS::memory_gpu::create_3d(ap,2,3,4,true,777.);
 
-    int nblocks1 = get_NBlocks_X(2,IRIS_CUDA_NTHREADS_YX);
-    int nblocks2 = get_NBlocks_YZ(3,IRIS_CUDA_NTHREADS_YX);
-    int nblocks3 = get_NBlocks_YZ(4,IRIS_CUDA_NTHREADS_Z);
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-    int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-    int nthreads3 = IRIS_CUDA_NTHREADS_Z;
+    int nthreads1 = get_NThreads_X(2);
+    int nthreads2 = get_NThreads_Y(3);
+    int nthreads3 = get_NThreads_Z(4);
+
+    int nblocks1 = get_NBlocks_X(2,nthreads1);
+    int nblocks2 = get_NBlocks_Y(3,nthreads2);
+    int nblocks3 = get_NBlocks_Z(4,nthreads3);
+
 
     auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);

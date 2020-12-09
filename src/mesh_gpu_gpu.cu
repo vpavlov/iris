@@ -201,10 +201,10 @@ void mesh_gpu::assign_charges_gpu(iris_real* sendbuff_gpu)
 {
 	int nitems = m_ext_size[0]*m_ext_size[1]*m_ext_size[2];
 	#warning it might be optimized using cudaMemset ....
-	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(m_rho_plus, nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(m_Ex_plus, nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(m_Ey_plus, nitems, (iris_real)0.0);
-	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(m_Ez_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>(m_rho_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>(m_Ex_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>(m_Ey_plus, nitems, (iris_real)0.0);
+	memory_set_kernel<<<get_NBlocks_X(nitems,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>(m_Ez_plus, nitems, (iris_real)0.0);
 	memory_set_kernel<<<1,2>>>(sendbuff_gpu, 2, (iris_real)0.0);
 	//test cudaDeviceSynchronize();
 	//HANDLE_LAST_CUDA_ERROR;
@@ -355,12 +355,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 {
     //box_t<iris_real> *gbox = &(m_domain->m_global_box);
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
-	//printf("calling assign_charges1\n");
-	// assign_charges1_kernel<<<get_NBlocks_X(in_ncharges,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>
-	// (in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
-	// m_h[0], m_h[1], m_h[2], 
-	// m_chass->m_ics_bump, m_chass->m_ics_center,
-	// m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
+
 
 	printf("ext_size %d %d %d\n",m_ext_size[0],m_ext_size[1],m_ext_size[2]);
 	// assign_charges1_kernel<<<1,2>>>
@@ -369,7 +364,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
 	// m_chass->m_ics_bump, m_chass->m_ics_center,
 	// m_chass->m_order,m_chass->get_coeff(), m_h3inv, sendbuff_gpu);
 
-	assign_charges1_kernel<<<128,1>>>
+	assign_charges1_kernel<<<get_NBlocks_X(in_ncharges,IRIS_CUDA_SHARED_BLOCK_SIZE),IRIS_CUDA_SHARED_BLOCK_SIZE>>>
 	(in_charges, in_ncharges,m_rho_plus, m_rho_plus_1d, m_ext_size[0],m_ext_size[1],m_ext_size[2],
 	lbox->xlo, lbox->ylo, lbox->zlo, 
 	m_h[0], m_h[1], m_h[2], 
@@ -599,12 +594,12 @@ void mesh_gpu::extract_rho()
 	ny = ey - sy;
 	nz = ez - sz;
 	
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
 	auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -669,12 +664,12 @@ void mesh_gpu::imtract_field()
 	ny = ey - sy;
 	nz = ez - sz;
 	
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
 	auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -718,12 +713,12 @@ void mesh_gpu::imtract_phi()
 	ny = ey - sy;
 	nz = ez - sz;
 
-    int nthreads1 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads2 = IRIS_CUDA_NTHREADS_YX;
-	int nthreads3 = IRIS_CUDA_NTHREADS_Z;
-    int nblocks1 = get_NBlocks_X(nx,IRIS_CUDA_NTHREADS_YX);
-	int nblocks2 = get_NBlocks_YZ(ny,IRIS_CUDA_NTHREADS_YX);
-	int nblocks3 = get_NBlocks_YZ(nz,IRIS_CUDA_NTHREADS_Z);
+    int nthreads1 = get_NThreads_X(nx);
+	int nthreads2 = get_NThreads_Y(ny);
+	int nthreads3 = get_NThreads_Z(nz);
+    int nblocks1 = get_NBlocks_X(nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(nz,nthreads3);
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
@@ -1029,8 +1024,9 @@ void mesh_gpu::assign_forces1(int in_ncharges, iris_real *in_charges,
 	// m_domain->m_global_box.zsize *
 	// m_units->ecf;
 
-	int nblocks = get_NBlocks_X(in_ncharges,IRIS_CUDA_NTHREADS_YX);
-	int nthreads = IRIS_CUDA_NTHREADS_YX;
+	int nthreads = get_NThreads_1D(in_ncharges);
+	int nblocks = get_NBlocks_X(in_ncharges,nthreads);
+	
 	assign_forces1_kernel<<<nblocks,nthreads>>>(in_charges, in_ncharges, out_forces,
 							m_Ex_plus, m_Ey_plus, m_Ez_plus,
 							lbox->xlo, lbox->ylo, lbox->zlo,
@@ -1119,7 +1115,10 @@ void mesh_gpu::assign_forces1_ad(int in_ncharges, iris_real *in_charges,
 {
     box_t<iris_real> *gbox = &(m_domain->m_global_box);
 
-	assign_forces1_ad_kernel<<<get_NBlocks_X(in_ncharges,IRIS_CUDA_NTHREADS_YX),IRIS_CUDA_NTHREADS_YX>>>(in_charges, in_ncharges, out_forces,
+	int nthreads = get_NThreads_1D(in_ncharges);
+	int nblocks = get_NBlocks_X(in_ncharges,nthreads);
+
+	assign_forces1_ad_kernel<<<nblocks,nthreads>>>(in_charges, in_ncharges, out_forces,
 		m_phi_plus,
 		gbox->xlo,
 		gbox->ylo,

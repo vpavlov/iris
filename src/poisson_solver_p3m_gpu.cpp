@@ -219,13 +219,19 @@ void poisson_solver_p3m_gpu::solve()
     kspace_phi(m_work1);
     // do tuk work1 e tochno
     kspace_Ex(m_work1, m_work2);
+    // m_mesh->dump_ascii_from_gpu("work2",m_work2,1,1,2*m_fft1->m_count);
+    // exit(777);
     m_fft2->compute_bk(m_work2, m_mesh->m_Ex);
-    
+    // m_mesh->dump_ascii_from_gpu("Ex",m_mesh->m_Ex,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    // exit(777);
     kspace_Ey(m_work1, m_work2);
     m_fft2->compute_bk(m_work2, m_mesh->m_Ey);
-    
+    // m_mesh->dump_ascii_from_gpu("Ey",m_mesh->m_Ey,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    //exit(777);
     kspace_Ez(m_work1, m_work2);
     m_fft2->compute_bk(m_work2, m_mesh->m_Ez);
+    // m_mesh->dump_ascii_from_gpu("Ez",m_mesh->m_Ez,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    // exit(777);
 
     //////////////// we do not need this ////////////////////////
     // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
