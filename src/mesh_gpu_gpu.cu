@@ -296,23 +296,24 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 	iris_real ics_bump, iris_real ics_center,
 	int order, iris_real *m_coeff, iris_real m_h3inv, iris_real *sendbuff_gpu)
 {
-	volatile int ndx = IRIS_CUDA_INDEX(x);
-    volatile int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
-    volatile int from = ndx*chunk_size;
-	volatile int to = MIN((ndx+1)*chunk_size,in_ncharges);
+	iris_real *ptr = &(m_rho_plus[0][0][0]);
+	int ndx = IRIS_CUDA_INDEX(x);
+	int chunk_size = IRIS_CUDA_CHUNK(x,in_ncharges);
+	int from = ndx*chunk_size;
+	int to = MIN((ndx+1)*chunk_size,in_ncharges);
 
 	//printf("1d ndx %d from %d to %d chnk_size %d charge 0 %f ncharges %d\n",ndx,from,to,chunk_size,in_charges[3],in_ncharges);
 
 	for(int n=from;n<to;n++) {
 	//printf("ndx %d from %d to %d chnk_size %d charge n %d %f\n",ndx,from,to,chunk_size,n,in_charges[n*5+3]);
 		iris_real tz=(in_charges[n*5+2]-lbox_zlo)/m_h_2;
-		volatile int iz = (int) (tz + ics_bump);
+		int iz = (int) (tz + ics_bump);
 
 		iris_real tx=(in_charges[n*5+0]-lbox_xlo)/m_h_0;
 		iris_real ty=(in_charges[n*5+1]-lbox_ylo)/m_h_1;
 
-		volatile int ix = (int) (tx + ics_bump);
-		volatile int iy = (int) (ty + ics_bump);
+		int ix = (int) (tx + ics_bump);
+		int iy = (int) (ty + ics_bump);
 
 		iris_real dx = ix - tx + ics_center;
 		iris_real dy = iy - ty + ics_center;
@@ -328,12 +329,14 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 			iris_real t1 = t0 * weights[0][i];
 			for(int j = 0; j < order; j++) {
 				iris_real t2 = t1 * weights[1][j];
-				for(int k = 0; k < order; k++) {
-				
-					iris_real t3 = t2 * weights[2][k];
-
-					atomicAdd(&(m_rho_plus[ix+i][iy+j][iz+k]), t3);
+				iris_real t3 = t2 * weights[2][0];
+				iris_real *rho_ptr = &(ptr[(ix)*nx*nz+(iy)*nz+iz]);
+				for(int k = 1; k < order; k++) {
+				  atomicAdd(rho_ptr, t3);
+				  t3 = t2 * weights[2][k];
+				  rho_ptr++;
 				}
+				atomicAdd(rho_ptr, t3);
 			}
 		}
 
@@ -992,14 +995,25 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 		iris_real t1 = weights[0][i];
 		for(int j = 0; j < m_order; j++) {
 			iris_real t2 = t1 * weights[1][j];
-			for(int k = 0; k < m_order; k++) {
-			iris_real t3 = t2 * weights[2][k];
-			ekx -= t3 * m_Ex_plus[ix+i][iy+j][iz+k];
-			eky -= t3 * m_Ey_plus[ix+i][iy+j][iz+k];
-			ekz -= t3 * m_Ez_plus[ix+i][iy+j][iz+k];
+			iris_real t3 = t2 * weights[2][0];
+			iris_real ex = m_Ex_plus[ix+i][iy+j][iz];
+			iris_real ey = m_Ey_plus[ix+i][iy+j][iz];
+			iris_real ez = m_Ey_plus[ix+i][iy+j][iz];
+			for(int k = 1; k < m_order; k++) {
+	
+			ekx -= t3 * ex;
+			eky -= t3 * ey;
+			ekz -= t3 * ez;
+			t3 = t2 * weights[2][k];
+			ex = m_Ex_plus[ix+i][iy+j][iz];
+			ey = m_Ey_plus[ix+i][iy+j][iz];
+			ez = m_Ey_plus[ix+i][iy+j][iz];
 			// if(ndx==0)
 			// printf("imtract m_Ex_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f\n",ix+i,iy+j,iz+k,m_Ex_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ey_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ez_plus[ix+i][iy+j][iz+k]);
 			}
+			ekx -= t3 * ex;
+			eky -= t3 * ey;
+			ekz -= t3 * ez;
 		}
 		}
 		
