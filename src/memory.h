@@ -206,7 +206,7 @@ namespace ORG_NCSA_IRIS {
 	    array = NULL;
 	}
     };
-	#define IRIS_CUDA
+//	#define IRIS_CUDA
 #ifdef IRIS_CUDA
     class memory_gpu {
 
@@ -264,6 +264,7 @@ namespace ORG_NCSA_IRIS {
 
 	static std::pair<void *,std::string> get_parent_and_label(void* prt);
 	};
+	void sync_with_gpu();
 #endif
 };
 iris_real calc_sum(iris_real ***v, int nx, int ny, int nz);

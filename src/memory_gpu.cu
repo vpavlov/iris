@@ -561,3 +561,9 @@ std::pair<void *,std::string> memory_gpu::get_parent_and_label(void* prt)
     }
     return std::pair<void*, std::string>(NULL,"");
 }
+
+void ORG_NCSA_IRIS::sync_with_gpu()
+{
+	cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+}

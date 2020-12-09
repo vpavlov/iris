@@ -615,6 +615,8 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	}
     }
 
+	sync_with_gpu();
+
 	if (memory_gpu::m_env_psp_cuda!=0) {
 		memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
 		memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
@@ -643,6 +645,8 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	    offset += plan->m_size;
 	}
     }
+
+	sync_with_gpu();
 
 	if (memory_gpu::m_env_psp_cuda!=0)
 	{

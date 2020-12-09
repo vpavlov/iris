@@ -357,7 +357,7 @@ void mesh_gpu::assign_charges1(int in_ncharges, iris_real *in_charges, iris_real
     box_t<iris_real> *lbox = &(m_domain->m_local_box);
 
 
-	printf("ext_size %d %d %d\n",m_ext_size[0],m_ext_size[1],m_ext_size[2]);
+	//printf("ext_size %d %d %d\n",m_ext_size[0],m_ext_size[1],m_ext_size[2]);
 	// assign_charges1_kernel<<<1,2>>>
 	// (in_charges, in_ncharges, m_rho_plus, lbox->xlo, lbox->ylo, lbox->zlo, 
 	// m_h[0], m_h[1], m_h[2], 

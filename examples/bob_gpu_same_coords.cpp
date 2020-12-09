@@ -14,7 +14,7 @@
 #include <iris/timer.h>
 #include <iris/factorizer.h>
 
-#define NSTEPS 2
+#define NSTEPS 10
 #define CUTOFF 1.2  // 12 angstroms
 
 using namespace ORG_NCSA_IRIS;
@@ -341,16 +341,16 @@ void handle_forces(iris_gpu *iris, int *nforces, iris_real *forces)
 
     char fname[256];
     sprintf(fname, "forces%d.dat", iris->m_local_comm->m_rank);
-    FILE *fp = fopen(fname, "wt");
+   // FILE *fp = fopen(fname, "wt");
 
     fsum[0] = fsum[1] = fsum[2] = 0.0;
     int n = 0;
     for(int i=0;i<iris->m_server_size;i++) {
 	for(int j=0;j<nforces[i];j++) {
-	    fprintf(fp, "%f %f %f\n",
-		    forces[n*4 + 1], 
-		    forces[n*4 + 2], 
-		    forces[n*4 + 3]);
+	    // fprintf(fp, "%f %f %f\n",
+		//     forces[n*4 + 1], 
+		//     forces[n*4 + 2], 
+		//     forces[n*4 + 3]);
 
 	    // forces[n*4 + 0] is the atom ID (encoded as iris_real)
 	    fsum[0] += forces[n*4 + 1];
@@ -366,7 +366,7 @@ void handle_forces(iris_gpu *iris, int *nforces, iris_real *forces)
 			      tot_fsum[0], tot_fsum[1], tot_fsum[2]);
     }
 
-    fclose(fp);
+    //fclose(fp);
 }
 
 main(int argc, char **argv)
@@ -520,6 +520,8 @@ main(int argc, char **argv)
 	    iris_real Ek, Es, Ecorr;
 	    iris_real virial[6];
 	    iris_real *forces = x->receive_forces(&nforces, &Ek, virial);
+		x->get_global_energy(&Ek, &Es, &Ecorr);
+		if(rank==0) {
 	    x->m_logger->info("Ek(partial) = %f [%s]", Ek, x->m_units->energy_unit);
 	    x->m_logger->info("Virial[0] = %f", virial[0]);
 	    x->m_logger->info("Virial[1] = %f", virial[1]);
@@ -527,9 +529,9 @@ main(int argc, char **argv)
 	    x->m_logger->info("Virial[3] = %f", virial[3]);
 	    x->m_logger->info("Virial[4] = %f", virial[4]);
 	    x->m_logger->info("Virial[5] = %f", virial[5]);
-	    x->get_global_energy(&Ek, &Es, &Ecorr);
+	 
 	    x->m_logger->info("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
-
+		}
 	    handle_forces(x, nforces, forces);
 	    delete [] nforces;
 	    memory::wfree(forces);
@@ -538,7 +540,7 @@ main(int argc, char **argv)
 	    // x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);
 	    // x->m_mesh->dump_ascii("bob-phi", x->m_mesh->m_phi);
 	    
-	    read_frameN(i, dirname, x->m_local_comm, &input);
+	    //read_frameN(i, dirname, x->m_local_comm, &input);
 	}else {
 	    x->run();
 	}

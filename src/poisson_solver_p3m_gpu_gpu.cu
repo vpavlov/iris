@@ -171,7 +171,7 @@ void poisson_solver_p3m_gpu::kspace_eng(iris_real *in_rho_phi)
 	auto blocks = dim3(nblocks1);
     auto threads = dim3(nthreads1);
 
-printf("bl %d %d %d the %d %d %d\n",blocks.x,blocks.y,blocks.z,threads.x,threads.y,threads.z);
+//printf("bl %d %d %d the %d %d %d\n",blocks.x,blocks.y,blocks.z,threads.x,threads.y,threads.z);
 
     kspace_eng_kernel<<<blocks,threads>>>(in_rho_phi, m_greenfn, m_vc, m_iris->m_Ek_vir, nx*ny*nz, s2, m_iris->m_compute_global_energy, m_iris->m_compute_global_virial,post_corr);
     cudaDeviceSynchronize();

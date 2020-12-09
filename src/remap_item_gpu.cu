@@ -139,11 +139,11 @@ void remap_item_gpu::pack(iris_real *src, int src_offset, iris_real *dest, int d
 
 	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
     auto threads = dim3(nthreads1,nthreads2,nthreads3);
-	
+
 	pack_src_1d_kernel<<<blocks,threads>>>
 	(src, src_offset ,dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
-	cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR;
+	// cudaDeviceSynchronize();
+    // HANDLE_LAST_CUDA_ERROR;
 }
 
 __global__
@@ -195,6 +195,6 @@ void remap_item_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int
 	
 	unpack_kernel<<<blocks,threads>>>
 	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
-	cudaDeviceSynchronize();
-    HANDLE_LAST_CUDA_ERROR;
+	// cudaDeviceSynchronize();
+    // HANDLE_LAST_CUDA_ERROR;
 }
