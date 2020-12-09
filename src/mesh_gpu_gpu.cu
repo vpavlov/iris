@@ -330,7 +330,7 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 			for(int j = 0; j < order; j++) {
 				iris_real t2 = t1 * weights[1][j];
 				iris_real t3 = t2 * weights[2][0];
-				iris_real *rho_ptr = &(ptr[(ix)*nx*nz+(iy)*nz+iz]);
+				iris_real *rho_ptr = &(ptr[(ix+i)*nx*nz+(iy+j)*nz+iz]);
 				for(int k = 1; k < order; k++) {
 				  atomicAdd(rho_ptr, t3);
 				  t3 = t2 * weights[2][k];
@@ -1005,9 +1005,9 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 			eky -= t3 * ey;
 			ekz -= t3 * ez;
 			t3 = t2 * weights[2][k];
-			ex = m_Ex_plus[ix+i][iy+j][iz];
-			ey = m_Ey_plus[ix+i][iy+j][iz];
-			ez = m_Ey_plus[ix+i][iy+j][iz];
+			ex = m_Ex_plus[ix+i][iy+j][iz+k];
+			ey = m_Ey_plus[ix+i][iy+j][iz+k];
+			ez = m_Ey_plus[ix+i][iy+j][iz+k];
 			// if(ndx==0)
 			// printf("imtract m_Ex_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f\n",ix+i,iy+j,iz+k,m_Ex_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ey_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ez_plus[ix+i][iy+j][iz+k]);
 			}
