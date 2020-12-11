@@ -601,15 +601,35 @@ void fft3d_gpu::compute_bk_fft_dir(int i, iris_real *src ,collective_fft3D_state
 	cudaEventRecord(fftstate.fft_ready,fftstate.gpu_stream);
 }
 
-void fft3d_gpu::compute_bk_finalize(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+void fft3d_gpu::compute_bk_finalize_init(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
 {
 	cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
 	printf("start perform finalize\n");
 	m_remaps[3]->perform_init(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_finalize_pack(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
 	m_remaps[3]->perform_pack(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_finalize_communicate1(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
 	m_remaps[3]->perform_communicate1(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_finalize_communicate(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
 	m_remaps[3]->perform_communicate(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_finalize_finalize1(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
 	m_remaps[3]->perform_finalize1(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_finalize_finalize(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
 	m_remaps[3]->perform_finalize(src,src,fftstate);
 
 	int nthreads = get_NThreads_1D(m_count);

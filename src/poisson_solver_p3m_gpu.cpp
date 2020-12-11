@@ -385,9 +385,31 @@ void poisson_solver_p3m_gpu::solve_async()
     m_fft2->compute_bk_fft_dir(2,m_work2y,statey);
     m_fft2->compute_bk_fft_dir(2,m_work2z,statez);
 
-    m_fft2->compute_bk_finalize(m_work2,m_mesh->m_Ex,statex);
-    m_fft2->compute_bk_finalize(m_work2y,m_mesh->m_Ey,statey);
-    m_fft2->compute_bk_finalize(m_work2z,m_mesh->m_Ez,statez);
+    m_fft2->compute_bk_finalize_init(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_init(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_init(m_work2z,m_mesh->m_Ez,statez);
+
+    m_fft2->compute_bk_finalize_pack(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_pack(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_pack(m_work2z,m_mesh->m_Ez,statez);
+
+    m_fft2->compute_bk_finalize_communicate1(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_communicate1(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_communicate1(m_work2z,m_mesh->m_Ez,statez);
+
+    m_fft2->compute_bk_finalize_communicate(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_communicate(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_communicate(m_work2z,m_mesh->m_Ez,statez);
+
+    m_fft2->compute_bk_finalize_finalize1(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_finalize1(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_finalize1(m_work2z,m_mesh->m_Ez,statez);
+
+    m_fft2->compute_bk_finalize_finalize(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize_finalize(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize_finalize(m_work2z,m_mesh->m_Ez,statez);
+
+
     free_collective_fft3D_memory(statex);
     free_collective_fft3D_memory(statey);
     free_collective_fft3D_memory(statez);
