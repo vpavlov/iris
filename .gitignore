@@ -6,3 +6,5 @@ examples/bob-trj/*
 doc/*.aux
 doc/*.dvi
 doc/*.log
+examples_data/
+examples_data_small/
