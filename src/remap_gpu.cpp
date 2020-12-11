@@ -46,12 +46,12 @@
 
 using namespace ORG_NCSA_IRIS;
 remap_gpu::remap_gpu(class iris_gpu *obj,
-	     int *in_from_offset, int *in_from_size, 
-	     int *in_to_offset, int *in_to_size,
-	     int in_unit_size,
-	     int in_permute,
-	     const char *in_name,
-	     bool in_use_collective)
+		     int *in_from_offset, int *in_from_size, 
+		     int *in_to_offset, int *in_to_size,
+		     int in_unit_size,
+		     int in_permute,
+		     const char *in_name,
+		     bool in_use_collective)
     : state_accessor_gpu(obj), m_send_plans(NULL), m_recv_plans(NULL), m_nsend(0),
       m_nrecv(0), m_use_collective(in_use_collective), m_collective_comm(MPI_COMM_NULL)
 {
@@ -405,19 +405,19 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
     iris_real *send_buff_gpu = (iris_real *)memory_gpu::wmalloc(send_buff_size * sizeof(iris_real));
     iris_real *recv_buff_gpu = (iris_real *)memory_gpu::wmalloc(recv_buff_size * sizeof(iris_real));
 
-	iris_real *send_buff, *recv_buff;
-	int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
+    iris_real *send_buff, *recv_buff;
+    int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
 
-	if (memory_gpu::m_env_psp_cuda!=0)
+    if (memory_gpu::m_env_psp_cuda!=0)
 	{
-		send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	    send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	    recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	    send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	    recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
 	} else {
-		send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
+	send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
     	recv_buff = (iris_real *)memory::wmalloc(recv_buff_size * sizeof(iris_real));
-	}
+    }
 
     int *send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     int *recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
@@ -458,25 +458,25 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 	}
     }
 
-	if (memory_gpu::m_env_psp_cuda!=0) {
-		memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
-		memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
-		MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
-		  recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
-		  m_collective_comm);
-		memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
-		memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
-	} else {
-	#warning "all to all goes using cumemcpy all2allv cumemcpy"
+    if (memory_gpu::m_env_psp_cuda!=0) {
+	memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
+	memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
+	MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
+		      recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
+		      m_collective_comm);
+	memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
+	memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
+    } else {
+#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
 	memory_gpu::sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size*sizeof(iris_real));
 
-		MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
-		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
-		  m_collective_comm);
+	MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+		      recv_buff, recv_counts, recv_offsets, IRIS_REAL,
+		      m_collective_comm);
 	
 	memory_gpu::sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size*sizeof(iris_real));
-	}
+    }
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {
 	if(recv_map[i] != -1) {
@@ -486,17 +486,17 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 	}
     }
 
-	if (memory_gpu::m_env_psp_cuda!=0)
+    if (memory_gpu::m_env_psp_cuda!=0)
 	{
-	memory_gpu::wfree(send_offsets_gpu);
-    memory_gpu::wfree(recv_offsets_gpu);
-    memory_gpu::wfree(send_counts_gpu);
-    memory_gpu::wfree(recv_counts_gpu);
+	    memory_gpu::wfree(send_offsets_gpu);
+	    memory_gpu::wfree(recv_offsets_gpu);
+	    memory_gpu::wfree(send_counts_gpu);
+	    memory_gpu::wfree(recv_counts_gpu);
 	} else {
-    memory::wfree(send_buff);
-    memory::wfree(recv_buff);
-	}
-	memory::wfree(send_counts);
+	memory::wfree(send_buff);
+	memory::wfree(recv_buff);
+    }
+    memory::wfree(send_counts);
     memory::wfree(recv_counts);
     memory::wfree(send_offsets);
     memory::wfree(recv_offsets);
@@ -560,22 +560,21 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	recv_buff_size += m_recv_plans[i].m_size;
     }
 
-	iris_real *send_buff_gpu = (iris_real *)memory_gpu::wmalloc(send_buff_size * sizeof(iris_real));
+    iris_real *send_buff_gpu = (iris_real *)memory_gpu::wmalloc(send_buff_size * sizeof(iris_real));
     iris_real *recv_buff_gpu = (iris_real *)memory_gpu::wmalloc(recv_buff_size * sizeof(iris_real));
 
-	iris_real *send_buff, *recv_buff;
-	int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
+    iris_real *send_buff, *recv_buff;
+    int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
 
-	if (memory_gpu::m_env_psp_cuda!=0)
-	{
-		send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-	} else {
-		send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
+    if (memory_gpu::m_env_psp_cuda!=0) {
+	send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+    }else {
+	send_buff = (iris_real *)memory::wmalloc(send_buff_size * sizeof(iris_real));
     	recv_buff = (iris_real *)memory::wmalloc(recv_buff_size * sizeof(iris_real));
-	}
+    }
 
     int *send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     int *recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
@@ -616,27 +615,27 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	}
     }
 
-	sync_with_gpu();
+    sync_with_gpu();
 
-	if (memory_gpu::m_env_psp_cuda!=0) {
-		memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
-		memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
-		MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
-		  recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
-		  m_collective_comm);
-		memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
-		memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
-	} else {
-	#warning "all to all goes using cumemcpy all2allv cumemcpy"
+    if (memory_gpu::m_env_psp_cuda!=0) {
+	memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
+	memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
+	MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
+		      recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
+		      m_collective_comm);
+	memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
+	memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
+    } else {
+#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
-		memory_gpu::sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size*sizeof(iris_real));
+	memory_gpu::sync_cpu_buffer(send_buff, send_buff_gpu, send_buff_size*sizeof(iris_real));
 		
-		MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
-			recv_buff, recv_counts, recv_offsets, IRIS_REAL,
-			m_collective_comm);
-		//	m_mesh->dump_ascii("after-a2a-sync",&(recv_buff[0]),recv_buff_size);
-		memory_gpu::sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size*sizeof(iris_real));
-	}
+	MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
+		      recv_buff, recv_counts, recv_offsets, IRIS_REAL,
+		      m_collective_comm);
+	//	m_mesh->dump_ascii("after-a2a-sync",&(recv_buff[0]),recv_buff_size);
+	memory_gpu::sync_gpu_buffer(recv_buff_gpu, recv_buff, recv_buff_size*sizeof(iris_real));
+    }
 
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {
@@ -647,18 +646,17 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 	}
     }
 
-	sync_with_gpu();
+    sync_with_gpu();
 
-	if (memory_gpu::m_env_psp_cuda!=0)
-	{
+    if (memory_gpu::m_env_psp_cuda!=0) {
 	memory_gpu::wfree(send_offsets_gpu);
-    memory_gpu::wfree(recv_offsets_gpu);
-    memory_gpu::wfree(send_counts_gpu);
-    memory_gpu::wfree(recv_counts_gpu);
-	} else {
+	memory_gpu::wfree(recv_offsets_gpu);
+	memory_gpu::wfree(send_counts_gpu);
+	memory_gpu::wfree(recv_counts_gpu);
+    } else {
 	memory::wfree(send_buff);
-    memory::wfree(recv_buff);
-	}
+	memory::wfree(recv_buff);
+    }
     memory::wfree(send_counts);
     memory::wfree(recv_counts);
     memory::wfree(send_offsets);
@@ -687,25 +685,24 @@ void remap_gpu::perform_collective_init(iris_real *in_src, iris_real *in_dest, c
 	fftstate.recv_buff_size += m_recv_plans[i].m_size;
     }
 	
-	free_collective_fft3D_memory(fftstate);
-	fftstate.send_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
+    free_collective_fft3D_memory(fftstate);
+    fftstate.send_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
     fftstate.recv_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.recv_buff_size * sizeof(iris_real));
 
-	// iris_real *send_buff, *recv_buff;
-	// int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
+    // iris_real *send_buff, *recv_buff;
+    // int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
 
-	if (memory_gpu::m_env_psp_cuda!=0)
-	{
-		fftstate.send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	fftstate.recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	fftstate.send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-    	fftstate.recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-	} else {
-		//fftstate.send_buff = (iris_real *)memory::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
-		cudaHostAlloc(&(fftstate.send_buff),fftstate.send_buff_size * sizeof(iris_real),0);
+    if (memory_gpu::m_env_psp_cuda!=0) {
+	fftstate.send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	fftstate.recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	fftstate.send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+	fftstate.recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+    }else {
+	//fftstate.send_buff = (iris_real *)memory::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
+	cudaHostAlloc(&(fftstate.send_buff),fftstate.send_buff_size * sizeof(iris_real),0);
     	//fftstate.recv_buff = (iris_real *)memory::wmalloc(fftstate.recv_buff_size * sizeof(iris_real));
-		cudaHostAlloc(&(fftstate.recv_buff),fftstate.recv_buff_size * sizeof(iris_real),0);
-	}
+	cudaHostAlloc(&(fftstate.recv_buff),fftstate.recv_buff_size * sizeof(iris_real),0);
+    }
 
     fftstate.send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     fftstate.recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
@@ -718,35 +715,35 @@ void remap_gpu::perform_collective_pack(iris_real *in_src, iris_real *in_dest, c
 {
     int offset = 0;
     for(int i=0;i<m_comm_len;i++) {
-		fftstate.send_counts[i] = 0;
-		fftstate.send_offsets[i] = 0;
-		for(int j=0;j<m_nsend;j++) {
-			remap_item_gpu *plan = &m_send_plans[j];
-			if(plan->m_peer == m_comm_list[i]) {
-			fftstate.send_counts[i] = plan->m_size;
-			fftstate.send_offsets[i] = offset;
-			plan->pack(in_src,plan->m_offset, fftstate.send_buff_gpu,offset,fftstate.gpu_stream);
-			offset += plan->m_size;
-			break;
-			}
-		}
+	fftstate.send_counts[i] = 0;
+	fftstate.send_offsets[i] = 0;
+	for(int j=0;j<m_nsend;j++) {
+	    remap_item_gpu *plan = &m_send_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		fftstate.send_counts[i] = plan->m_size;
+		fftstate.send_offsets[i] = offset;
+		plan->pack(in_src,plan->m_offset, fftstate.send_buff_gpu,offset,fftstate.gpu_stream);
+		offset += plan->m_size;
+		break;
+	    }
+	}
     }
 
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {
-		fftstate.recv_counts[i] = 0;
-		fftstate.recv_offsets[i] = 0;
-		fftstate.recv_map[i] = -1;
-		for(int j=0;j<m_nrecv;j++) {
-			remap_item_gpu *plan = &m_recv_plans[j];
-			if(plan->m_peer == m_comm_list[i]) {
-			fftstate.recv_counts[i] = plan->m_size;
-			fftstate.recv_offsets[i] = offset;
-			offset += plan->m_size;
-			fftstate.recv_map[i] = j;
-			break;
-			}
-		}
+	fftstate.recv_counts[i] = 0;
+	fftstate.recv_offsets[i] = 0;
+	fftstate.recv_map[i] = -1;
+	for(int j=0;j<m_nrecv;j++) {
+	    remap_item_gpu *plan = &m_recv_plans[j];
+	    if(plan->m_peer == m_comm_list[i]) {
+		fftstate.recv_counts[i] = plan->m_size;
+		fftstate.recv_offsets[i] = offset;
+		offset += plan->m_size;
+		fftstate.recv_map[i] = j;
+		break;
+	    }
+	}
     }
 
 
@@ -758,17 +755,17 @@ void remap_gpu::perform_collective_communicate1(collective_fft3D_state &fftstate
     if(m_comm_len <= 0) {
 	return;
     }
-	// exchange buffers
-	if (memory_gpu::m_env_psp_cuda!=0) {
+    // exchange buffers
+    if (memory_gpu::m_env_psp_cuda!=0) {
 
-		memory_gpu::sync_gpu_buffer(fftstate.send_counts_gpu, fftstate.send_counts, m_comm_len * sizeof(int),fftstate.gpu_stream);
-		memory_gpu::sync_gpu_buffer(fftstate.send_offsets_gpu, fftstate.send_offsets, m_comm_len * sizeof(int),fftstate.gpu_stream);
+	memory_gpu::sync_gpu_buffer(fftstate.send_counts_gpu, fftstate.send_counts, m_comm_len * sizeof(int),fftstate.gpu_stream);
+	memory_gpu::sync_gpu_buffer(fftstate.send_offsets_gpu, fftstate.send_offsets, m_comm_len * sizeof(int),fftstate.gpu_stream);
 	
-	} else {
+    } else {
 
-		memory_gpu::sync_cpu_buffer(fftstate.send_buff, fftstate.send_buff_gpu, fftstate.send_buff_size*sizeof(iris_real),fftstate.gpu_stream);
+	memory_gpu::sync_cpu_buffer(fftstate.send_buff, fftstate.send_buff_gpu, fftstate.send_buff_size*sizeof(iris_real),fftstate.gpu_stream);
 		
-	}
+    }
 }
 
 // ==================== do collective communication =========================
@@ -779,22 +776,22 @@ void remap_gpu::perform_collective_communicate(collective_fft3D_state &fftstate)
 	return;
     }
 
-	cudaStreamSynchronize(fftstate.gpu_stream);
-	printf("communicate 0x%x\n",fftstate.gpu_stream);
-	// do all2all
-	if (memory_gpu::m_env_psp_cuda!=0) {
+    cudaStreamSynchronize(fftstate.gpu_stream);
+    printf("communicate 0x%x\n",fftstate.gpu_stream);
+    // do all2all
+    if (memory_gpu::m_env_psp_cuda!=0) {
 
-		MPI_Alltoallv(fftstate.send_buff_gpu, fftstate.send_counts_gpu, fftstate.send_offsets_gpu, IRIS_REAL,
-		  fftstate.recv_buff_gpu, fftstate.recv_counts_gpu, fftstate.recv_offsets_gpu, IRIS_REAL,
-		  m_collective_comm);
+	MPI_Alltoallv(fftstate.send_buff_gpu, fftstate.send_counts_gpu, fftstate.send_offsets_gpu, IRIS_REAL,
+		      fftstate.recv_buff_gpu, fftstate.recv_counts_gpu, fftstate.recv_offsets_gpu, IRIS_REAL,
+		      m_collective_comm);
 
-	} else {
+    } else {
 
-		MPI_Alltoallv(fftstate.send_buff, fftstate.send_counts, fftstate.send_offsets, IRIS_REAL,
-			fftstate.recv_buff, fftstate.recv_counts, fftstate.recv_offsets, IRIS_REAL,
-			m_collective_comm);
+	MPI_Alltoallv(fftstate.send_buff, fftstate.send_counts, fftstate.send_offsets, IRIS_REAL,
+		      fftstate.recv_buff, fftstate.recv_counts, fftstate.recv_offsets, IRIS_REAL,
+		      m_collective_comm);
 
-	}
+    }
 
 }
 
@@ -803,19 +800,19 @@ void remap_gpu::perform_collective_finalize1(iris_real *in_dest, collective_fft3
     if(m_comm_len <= 0) {
 	return;
     }
-	//cudaStreamSynchronize(fftstate.gpu_stream);
-	printf("sync buffs 0x%x\n",fftstate.gpu_stream);
-	// exchange buffers
-	if (memory_gpu::m_env_psp_cuda!=0) {
+    //cudaStreamSynchronize(fftstate.gpu_stream);
+    printf("sync buffs 0x%x\n",fftstate.gpu_stream);
+    // exchange buffers
+    if (memory_gpu::m_env_psp_cuda!=0) {
 
-		memory_gpu::sync_cpu_buffer(fftstate.recv_counts, fftstate.recv_counts_gpu, m_comm_len * sizeof(int),fftstate.gpu_stream);
-		memory_gpu::sync_cpu_buffer(fftstate.recv_offsets, fftstate.recv_offsets_gpu, m_comm_len * sizeof(int),fftstate.gpu_stream);
+	memory_gpu::sync_cpu_buffer(fftstate.recv_counts, fftstate.recv_counts_gpu, m_comm_len * sizeof(int),fftstate.gpu_stream);
+	memory_gpu::sync_cpu_buffer(fftstate.recv_offsets, fftstate.recv_offsets_gpu, m_comm_len * sizeof(int),fftstate.gpu_stream);
 
-	} else {
-		//m_mesh->dump_ascii("after-a2a-async",&(fftstate.recv_buff[0]),fftstate.recv_buff_size);
-		memory_gpu::sync_gpu_buffer(fftstate.recv_buff_gpu, fftstate.recv_buff, fftstate.recv_buff_size*sizeof(iris_real),fftstate.gpu_stream);
+    } else {
+	//m_mesh->dump_ascii("after-a2a-async",&(fftstate.recv_buff[0]),fftstate.recv_buff_size);
+	memory_gpu::sync_gpu_buffer(fftstate.recv_buff_gpu, fftstate.recv_buff, fftstate.recv_buff_size*sizeof(iris_real),fftstate.gpu_stream);
 
-	}
+    }
 }
 
 // ==================== unpack and free the buffers =========================
@@ -828,11 +825,11 @@ void remap_gpu::perform_collective_finalize(iris_real *in_dest, collective_fft3D
 
     int offset = 0;
     for(int i=0;i<m_comm_len;i++) {
-		if(fftstate.recv_map[i] != -1) {
-			remap_item_gpu *plan = &m_recv_plans[fftstate.recv_map[i]];
-			plan->unpack(fftstate.recv_buff_gpu, offset, in_dest, plan->m_offset,fftstate.gpu_stream);
-			offset += plan->m_size;
-		}
+	if(fftstate.recv_map[i] != -1) {
+	    remap_item_gpu *plan = &m_recv_plans[fftstate.recv_map[i]];
+	    plan->unpack(fftstate.recv_buff_gpu, offset, in_dest, plan->m_offset,fftstate.gpu_stream);
+	    offset += plan->m_size;
+	}
     }
 }
 

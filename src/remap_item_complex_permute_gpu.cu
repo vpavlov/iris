@@ -95,3 +95,21 @@ void remap_item_complex_permute_gpu::unpack(iris_real *src, int src_offset, iris
 	cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
 }
+
+void remap_item_complex_permute_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t &gpu_str)
+{
+    int nthreads1 = get_NThreads_X(m_nx);
+    int nthreads2 = get_NThreads_Y(m_ny);
+    int nthreads3 = get_NThreads_Z(m_nz);
+    int nblocks1 = get_NBlocks_X(m_nx,nthreads1);
+    int nblocks2 = get_NBlocks_Y(m_ny,nthreads2);
+    int nblocks3 = get_NBlocks_Z(m_nz,nthreads3);
+    
+    auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
+    
+    unpack_kernel1<<<blocks,threads, 0, gpu_str>>>
+	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+    cudaDeviceSynchronize();
+    HANDLE_LAST_CUDA_ERROR;
+}

@@ -42,6 +42,7 @@ namespace ORG_NCSA_IRIS {
 	~remap_item_complex_permute_gpu();
 
 	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset);
+	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t &gpu_str);
     };
 
 }
