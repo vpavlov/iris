@@ -685,24 +685,23 @@ void remap_gpu::perform_collective_init(iris_real *in_src, iris_real *in_dest, c
 	fftstate.recv_buff_size += m_recv_plans[i].m_size;
     }
 	
-    free_collective_fft3D_memory(fftstate);
-    fftstate.send_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
-    fftstate.recv_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.recv_buff_size * sizeof(iris_real));
+    free_collective_fft3D_memory(fftstate,true);
+    fftstate.send_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.send_buff_size * sizeof(iris_real),&fftstate,"send_buff_gpu");
+    fftstate.recv_buff_gpu = (iris_real *)memory_gpu::wmalloc(fftstate.recv_buff_size * sizeof(iris_real),&fftstate,"recv_buff_gpu");
 
     // iris_real *send_buff, *recv_buff;
     // int *send_counts_gpu, *recv_counts_gpu, *send_offsets_gpu, *recv_offsets_gpu;
 
     if (memory_gpu::m_env_psp_cuda!=0) {
-	fftstate.send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-	fftstate.recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-	fftstate.send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
-	fftstate.recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int));
+		// TODO: allocate this only once
+		fftstate.send_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int),this,"send_counts_gpu");
+		fftstate.recv_counts_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int),this,"recv_counts_gpu");
+		fftstate.send_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int),this,"send_offsets_gpu");
+		fftstate.recv_offsets_gpu = (int *)memory_gpu::wmalloc(m_comm_len * sizeof(int),this,"recv_offsets_gpu");
     }else {
-	//fftstate.send_buff = (iris_real *)memory::wmalloc(fftstate.send_buff_size * sizeof(iris_real));
-	cudaHostAlloc(&(fftstate.send_buff),fftstate.send_buff_size * sizeof(iris_real),0);
-    	//fftstate.recv_buff = (iris_real *)memory::wmalloc(fftstate.recv_buff_size * sizeof(iris_real));
-	cudaHostAlloc(&(fftstate.recv_buff),fftstate.recv_buff_size * sizeof(iris_real),0);
-    }
+		fftstate.send_buff = (iris_real *)memory_gpu::wmalloc(fftstate.send_buff_size * sizeof(iris_real),&fftstate,"send_buff",true);
+		fftstate.recv_buff = (iris_real *)memory_gpu::wmalloc(fftstate.recv_buff_size * sizeof(iris_real),&fftstate,"recv_buff",true);
+	}
 
     fftstate.send_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));
     fftstate.recv_counts = (int *)memory::wmalloc(m_comm_len * sizeof(int));

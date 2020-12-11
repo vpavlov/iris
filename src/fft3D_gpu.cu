@@ -638,6 +638,5 @@ void fft3d_gpu::compute_bk_finalize_finalize(iris_real *src, iris_real ***dest, 
 	send_data_to_mesh_3d_kernel<<<nblocks,nthreads,0,fftstate.gpu_stream>>>(src, m_count, dest);
     
 	cudaStreamSynchronize(fftstate.gpu_stream);
-	cudaStreamDestroy(fftstate.gpu_stream);
     HANDLE_LAST_CUDA_ERROR;
 }

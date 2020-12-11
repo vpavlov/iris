@@ -213,9 +213,9 @@ namespace ORG_NCSA_IRIS {
 
     public:
 
-	static void *wmalloc(int nbytes, void * parent=NULL, const std::string label="");
+	static void *wmalloc(int nbytes, void * parent=NULL, const std::string label="", bool host=false);
 	static void *wrealloc(void *ptr, int nbytes, int old_size);
-	static void wfree(void *ptr, bool keep_it=false);
+	static void wfree(void *ptr, bool keep_it=false, bool host=false);
 	static int sync_gpu_buffer(void* dst_gpu, const void* src, size_t count);
 	static int sync_cpu_buffer(void* dst, const void* src_gpu, size_t count);
 	static int sync_gpu_buffer(iris_real*** dst_gpu, void* src, size_t count);

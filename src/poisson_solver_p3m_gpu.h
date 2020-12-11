@@ -96,6 +96,9 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_work2y;
 	iris_real *m_work2z;
 	iris_real *m_work3;  // temporary, to be removed
+
+	// remap buffers
+	collective_fft3D_state m_statex, m_statey, m_statez;
     };
 };
 

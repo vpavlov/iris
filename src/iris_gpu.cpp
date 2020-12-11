@@ -1301,28 +1301,24 @@ bool iris_gpu::handle_get_global_energy(event_t *in_event)
     return false;
 }
 
-void ORG_NCSA_IRIS::free_collective_fft3D_memory(collective_fft3D_state &fftstate)
+void ORG_NCSA_IRIS::free_collective_fft3D_memory(collective_fft3D_state &fftstate, bool keep_it)
 {
 //    cudaStreamDestroy(fftstate.gpu_stream);
 	if (memory_gpu::m_env_psp_cuda!=0)
 	{
-		memory_gpu::wfree(fftstate.send_offsets_gpu);
-		memory_gpu::wfree(fftstate.recv_offsets_gpu);
-		memory_gpu::wfree(fftstate.send_counts_gpu);
-		memory_gpu::wfree(fftstate.recv_counts_gpu);
+		memory_gpu::wfree(fftstate.send_offsets_gpu, keep_it);
+		memory_gpu::wfree(fftstate.recv_offsets_gpu, keep_it);
+		memory_gpu::wfree(fftstate.send_counts_gpu, keep_it);
+		memory_gpu::wfree(fftstate.recv_counts_gpu, keep_it);
 	} else {
-		//memory::wfree(fftstate.send_buff);
-		//memory::wfree(fftstate.recv_buff);
-        if(fftstate.recv_buff!=NULL)
-            cudaFreeHost(fftstate.send_buff);
-        if(fftstate.recv_buff!=NULL)
-            cudaFreeHost(fftstate.recv_buff);
+		memory_gpu::wfree(fftstate.send_buff, keep_it, true);
+		memory_gpu::wfree(fftstate.recv_buff, keep_it, true);
 	}
     memory::wfree(fftstate.send_counts);
     memory::wfree(fftstate.recv_counts);
     memory::wfree(fftstate.send_offsets);
     memory::wfree(fftstate.recv_offsets);
     memory::wfree(fftstate.recv_map);
-    memory_gpu::wfree(fftstate.send_buff_gpu);
-    memory_gpu::wfree(fftstate.recv_buff_gpu);
+    memory_gpu::wfree(fftstate.send_buff_gpu, keep_it);
+    memory_gpu::wfree(fftstate.recv_buff_gpu, keep_it);
 }

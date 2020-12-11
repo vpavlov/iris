@@ -291,6 +291,6 @@ namespace ORG_NCSA_IRIS {
 
 	typedef collective_fft3D_state_t collective_fft3D_state;
 
-	void free_collective_fft3D_memory(collective_fft3D_state &fftstate);
+	void free_collective_fft3D_memory(collective_fft3D_state &fftstate, bool keep_it);
 }
 #endif

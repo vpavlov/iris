@@ -42,7 +42,7 @@ using namespace ORG_NCSA_IRIS;
 std::map<void *, std::map<std::string, void*> > memory_gpu::gpu_allocated_pointers;
 std::map<void *, std::array<int,3> > memory_gpu::gpu_allocated_pointers_shape;
 
-void *memory_gpu::wmalloc(int nbytes, void * parent,  const std::string label)
+void *memory_gpu::wmalloc(int nbytes, void * parent,  const std::string label, bool host)
 {
     void *retval = NULL;
     
@@ -51,15 +51,20 @@ void *memory_gpu::wmalloc(int nbytes, void * parent,  const std::string label)
     }
 
     if (retval==NULL || label.empty()) {
-           HANDLE_LAST_CUDA_ERROR;
-    cudaError_t res = cudaMalloc((void**)&retval, nbytes);
-    HANDLE_LAST_CUDA_ERROR;
-    if(res != cudaSuccess) {
-	throw std::bad_alloc();
-    }
-    if(!label.empty()) {
-        register_gpu_pointer(parent,label,retval);
-    }
+        HANDLE_LAST_CUDA_ERROR;
+        cudaError_t res;
+        if (host) {
+            res = cudaHostAlloc((void**)&retval, nbytes, 0);
+        } else {
+            res = cudaMalloc((void**)&retval, nbytes);
+        }
+        HANDLE_LAST_CUDA_ERROR;
+        if(res != cudaSuccess) {
+	        throw std::bad_alloc();
+        }
+        if(!label.empty()) {
+            register_gpu_pointer(parent,label,retval);
+        }
     }
 
     return retval;
@@ -79,15 +84,19 @@ void *memory_gpu::wrealloc(void *ptr, int nbytes, int old_size)
 	return tmp;
  };
 
-void memory_gpu::wfree(void *ptr, bool keep_it)
+void memory_gpu::wfree(void *ptr, bool keep_it, bool host)
 {
     if ((!keep_it) && (ptr!=NULL)) {
-    HANDLE_LAST_CUDA_ERROR;
-    cudaFree(ptr);
     HANDLE_LAST_CUDA_ERROR;
     auto pl = get_parent_and_label(ptr);
     unregister_gpu_pointer(pl.first,pl.second);
     unregister_gpu_pointer_shape(ptr);
+    if (host) {
+        cudaFreeHost(ptr);
+    } else {
+        cudaFree(ptr);
+    }
+    HANDLE_LAST_CUDA_ERROR;
     }
 };
 
@@ -376,6 +385,7 @@ iris_real ***memory_gpu::create_3d(iris_real ***&array, int n1, int n2, int n3,
     }
 
     void* ptr = get_registered_gpu_pointer(parent,label);
+
     if (ptr==NULL) {
         array   = (iris_real ***) wmalloc(sizeof(iris_real **) * n1,parent,label);
         iris_real **tmp = (iris_real **)  wmalloc(sizeof(iris_real *)  * n1 * n2);
