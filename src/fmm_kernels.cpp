@@ -37,51 +37,33 @@ using namespace ORG_NCSA_IRIS;
 //
 // P2M CPU Kernel
 //
-void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q,
-			iris_real *out_M)
+void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
     iris_real r2 = x * x + y * y + z * z;
-    iris_real zz = z + z;
-    std::complex<iris_real> x_plus_iy(x, y);
-    std::complex<iris_real> t = 1;
-    iris_real next = q;
-    iris_real itz = z + zz;
+
+    std::complex<iris_real> R_m_m(q, 0);
+    std::complex<iris_real> xy(x, y);
+    
     for(int m = 0; m < order; m++) {
-	// 1. R^m_m
-	iris_real R_m_m = next;
-	int i = multipole_index(m, m);
-	out_M[i] += t.real() * R_m_m;
-	out_M[i+1] += t.imag() * R_m_m;
+	multipole_add(out_M, m, m, R_m_m);
 
-	next = R_m_m / (2*(m+1));
+	std::complex<iris_real> R_mplus1_m = z * R_m_m;
+	multipole_add(out_M, m+1, m, R_mplus1_m);
 
-	// 2. R_m+1^m
-	iris_real R_mplus1_m = z * R_m_m;
-	i = multipole_index(m+1, m);
-	out_M[i] += t.real() * R_mplus1_m;
-	out_M[i+1] += t.imag() * R_mplus1_m;
-
-	iris_real prev2 = R_m_m;
-	iris_real prev1 = R_mplus1_m;
-	iris_real itz1 = itz;
+	std::complex<iris_real> prev2 = R_m_m;
+	std::complex<iris_real> prev1 = R_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
-
-	    // 3. R_l_m
-	    iris_real R_l_m = (itz1 * prev1 - r2 * prev2) / (l * l - m * m);
-	    i = multipole_index(l, m);
-	    out_M[i] += t.real() * R_l_m;
-	    out_M[i+1] += t.imag() * R_l_m;
-
+	    std::complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
+	    R_l_m /= (l * l - m * m);
+	    multipole_add(out_M, l, m, R_l_m);
 	    prev2 = prev1;
 	    prev1 = R_l_m;
-	    itz1 += zz;
 	}
-	t *= x_plus_iy;
-	itz += zz;
+
+	R_m_m *= xy;
+	R_m_m /= 2*(m+1);
     }
-    int i = multipole_index(order, order);
-    out_M[i] += t.real() * next;
-    out_M[i+1] += t.imag() * next;
+    multipole_add(out_M, order, order, R_m_m);
 }
 
 
@@ -122,62 +104,36 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 //
 // P2L CPU kernel
 //
-void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q,
-			iris_real *out_L)
+void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L)
 {
     iris_real r2 = x * x + y * y + z * z;
     iris_real r = sqrt(r2);
-    iris_real zz = z + z;
-    std::complex<iris_real> x_plus_iy(x, y);
-    std::complex<iris_real> t = 1;            // (x+iy)^m
-    iris_real next = q / r;                   // q * I^0_0
-    iris_real twomplus1_over_r2 = 1/r2;       // (2m+1)/r^2
-    iris_real two_over_r2 = twomplus1_over_r2 * 2;  // 2/r^2
-    iris_real z_over_r2 = z / r2;
-    iris_real twoz_over_r2 = z_over_r2 + z_over_r2;
-    
+    std::complex<iris_real> I_m_m(q/r, 0);
+    std::complex<iris_real> xy(x, y);
+
     for(int m = 0; m < order; m++) {
+	multipole_add(out_L, m, m, I_m_m);
 
-	// 1. I^m_m
-	iris_real I_m_m = next;
-	int i = multipole_index(m, m);
-	out_L[i] += t.real() * I_m_m;
-	out_L[i+1] += t.imag() * I_m_m;
+	std::complex<iris_real> I_mplus1_m = ((2*m+1)*z/r2) * I_m_m;
+	multipole_add(out_L, m+1, m, I_mplus1_m);
 
-	next = twomplus1_over_r2 * I_m_m;
-
-	// 2. I_m+1^m
-	iris_real I_mplus1_m = z * next;
-	i = multipole_index(m+1, m);
-	out_L[i] += t.real() * I_mplus1_m;
-	out_L[i+1] += t.imag() * I_mplus1_m;
-
-	iris_real itz1 = twomplus1_over_r2 + two_over_r2;
-	iris_real prev2 = I_m_m;
-	iris_real prev1 = I_mplus1_m;
-	iris_real t1 = itz1 * z;
-	iris_real t2 = twomplus1_over_r2;
-	iris_real t3 = t2;
+	std::complex<iris_real> prev2 = I_m_m;
+	std::complex<iris_real> prev1 = I_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
-
-	    // 3. I_l_m
-	    iris_real I_l_m = (t1 * prev1 - t3 * prev2);
-	    i = multipole_index(l, m);
-	    out_L[i] += t.real() * I_l_m;
-	    out_L[i+1] += t.imag() * I_l_m;
-
+	    std::complex<iris_real> t = prev2;
+	    t *= ((l-1)*(l-1) - m*m);
+	    std::complex<iris_real> I_l_m = (2*l-1) * z * prev1 - t;
+	    I_l_m /= r2;
+	    multipole_add(out_L, l, m, I_l_m);
 	    prev2 = prev1;
 	    prev1 = I_l_m;
-	    t1 += twoz_over_r2;
-	    t2 += two_over_r2;
-	    t3 += t2;
 	}
-	t *= x_plus_iy;
-	twomplus1_over_r2 = itz1;
+
+	I_m_m *= (2*m+1);
+	I_m_m *= xy;
+	I_m_m /= r2;
     }
-    int i = multipole_index(order, order);
-    out_L[i] += t.real() * next;
-    out_L[i+1] += t.imag() * next;
+    multipole_add(out_L, order, order, I_m_m);
 }
 
 

@@ -30,6 +30,7 @@
 #ifndef __IRIS_FMM_KERNELS_H__
 #define __IRIS_FMM_KERNELS_H__
 
+#include <complex>
 #include "real.h"
 
 namespace ORG_NCSA_IRIS {
@@ -74,6 +75,16 @@ namespace ORG_NCSA_IRIS {
 	    *out_im = M[i+1];
 	}
     }
+
+    inline void multipole_add(iris_real *M, int l, int m, std::complex<iris_real> &val)
+    {
+	assert(l >= 0);
+	assert(m >= 0);
+	int i = multipole_index(l, m);
+	M[i] += val.real();
+	M[i+1] += val.imag();
+    }
+    
     void p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M);
     void p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L);
     void m2m(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_M, iris_real *in_scratch);

@@ -200,7 +200,7 @@ void fmm::solve()
     exchange_LET();
     dual_tree_traversal();
 
-    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
+    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: ~%d^2, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, (int)sqrt(m_p2p_count*1.0), m_l2l_count, m_l2p_count);
 
     sort_back_particles(m_particles, m_nparticles);
 
@@ -579,14 +579,14 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 		}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN6) {
 		    ptr = m_xparticles[5];
 		}
-		sx = ptr[m_xcells[srcID].first_child + j].xyzq[0];
-		sy = ptr[m_xcells[srcID].first_child + j].xyzq[1];
-		sz = ptr[m_xcells[srcID].first_child + j].xyzq[2];
+		sx = ptr[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
+		sy = ptr[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
+		sz = ptr[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
 		sq = ptr[m_xcells[srcID].first_child + j].xyzq[3];
 	    }else {
-		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0];
-		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1];
-		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2];
+		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
+		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
+		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
 		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
 	    }
 
@@ -697,9 +697,9 @@ void fmm::eval_l2p(cell_t *in_cells)
 	    iris_real y = m_cell_meta[i].center[1] - m_particles[leaf->first_child+j].xyzq[1];
 	    iris_real z = m_cell_meta[i].center[2] - m_particles[leaf->first_child+j].xyzq[2];
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
-	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 	    iris_real phi, Ex, Ey, Ez;
 	    
+	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 	    l2p(m_order, x, y, z, q, m_L[i], m_scratch, &phi, &Ex, &Ey, &Ez);
 	    
 	    m_particles[leaf->first_child+j].tgt[0] += phi;

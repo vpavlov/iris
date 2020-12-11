@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define iris_real double
+#define iris_real float
+#define IMAGES 1
 
 char **split(char *line, int max)
 {
@@ -122,39 +123,47 @@ int main()
     iris_real fy_tot = 0.0;
     iris_real fz_tot = 0.0;
     iris_real ener = 0.0;
+    
+		
     for(int i=0;i<input.natoms;i++) {
 	iris_real fx = 0.0;
 	iris_real fy = 0.0;
 	iris_real fz = 0.0;
-
+	
 	iris_real rx = input.atoms[i].xyzqi[0];
 	iris_real ry = input.atoms[i].xyzqi[1];
 	iris_real rz = input.atoms[i].xyzqi[2];
 	iris_real q = input.atoms[i].xyzqi[3];
 	
-	for(int j=0;j<input.natoms;j++) {
-	    if(j == i) {
-		continue;
+	for(int ix=-IMAGES;ix<=IMAGES;ix++) {
+	    for(int iy=-IMAGES;iy<=IMAGES;iy++) {
+		for(int iz=-IMAGES;iz<=IMAGES;iz++) {
+		    for(int j=0;j<input.natoms;j++) {
+			if(j == i && ix == 0 && iy == 0 && iz == 0) {
+			    continue;
+			}
+			iris_real rix = input.atoms[j].xyzqi[0] + ix * input.box[0];
+			iris_real riy = input.atoms[j].xyzqi[1] + iy * input.box[1];
+			iris_real riz = input.atoms[j].xyzqi[2] + iz * input.box[2];
+			iris_real qi = input.atoms[j].xyzqi[3];
+			
+			iris_real dx = rx - rix;
+			iris_real dy = ry - riy;
+			iris_real dz = rz - riz;
+			
+			iris_real ri2 = dx*dx + dy*dy + dz*dz;
+			iris_real ri = sqrt(ri2);
+			
+			iris_real e = q * qi / ri;
+			iris_real ee = e / ri2;
+			
+			fx += ee * dx;
+			fy += ee * dy;
+			fz += ee * dz;
+			ener += e;
+		    }
+		}
 	    }
-	    iris_real rix = input.atoms[j].xyzqi[0];
-	    iris_real riy = input.atoms[j].xyzqi[1];
-	    iris_real riz = input.atoms[j].xyzqi[2];
-	    iris_real qi = input.atoms[j].xyzqi[3];
-
-	    iris_real dx = rx - rix;
-	    iris_real dy = ry - riy;
-	    iris_real dz = rz - riz;
-
-	    iris_real ri2 = dx*dx + dy*dy + dz*dz;
-	    iris_real ri = sqrt(ri2);
-
-	    iris_real e = q * qi / ri;
-	    iris_real ee = e / ri2;
-
-	    fx += ee * dx;
-	    fy += ee * dy;
-	    fz += ee * dz;
-	    ener += e;
 	}
 	printf("F[%d] = (%f, %f, %f)\n", i, fx, fy, fz);
 	fx_tot += fx;
