@@ -202,6 +202,8 @@ void fmm::solve()
 
     m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
 
+    sort_back_particles(m_particles, m_nparticles);
+
     iris_real ener = 0.0;
     iris_real fx_sum = 0.0;
     iris_real fy_sum = 0.0;

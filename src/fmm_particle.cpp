@@ -65,3 +65,33 @@ int ORG_NCSA_IRIS::__xcompar_desc(const void *aptr, const void *bptr)
 	return 0;
     }
 }
+
+//
+// A comparator function used to sort the array of xparticles by cellID ascending
+//
+int ORG_NCSA_IRIS::__compar_id_asc(const void *aptr, const void *bptr)
+{
+    particle_t *a = (particle_t *)aptr;
+    particle_t *b = (particle_t *)bptr;
+
+    if(a->rank > b->rank) {
+	return 1;
+    }else if(a->rank < b->rank) {
+	return -1;
+    }else {
+	if(a->index > b->index) {
+	    return 1;
+	}else if(a->index < b->index) {
+	    return -1;
+	}else {
+	    return 0;
+	}
+    }
+}
+
+void ORG_NCSA_IRIS::sort_back_particles(particle_t *in_out_particles, int count)
+{
+    int (*fn)(const void *, const void *);
+    fn = __compar_id_asc;
+    qsort(in_out_particles, count, sizeof(particle_t), fn);
+}
