@@ -597,14 +597,14 @@ void fft3d_gpu::compute_bk_fft_dir(int i, iris_real *src ,collective_fft3D_state
 			   (complex_t *)src);
 #endif
 	tm2.stop();
-	printf("cufftw done dir %d\n",i);
+	//printf("cufftw done dir %d\n",i);
 	cudaEventRecord(fftstate.fft_ready,fftstate.gpu_stream);
 }
 
 void fft3d_gpu::compute_bk_finalize_init(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
 {
 	cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
-	printf("start perform finalize\n");
+	//printf("start perform finalize\n");
 	m_remaps[3]->perform_init(src,src,fftstate);
 }
 

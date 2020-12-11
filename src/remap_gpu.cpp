@@ -776,7 +776,7 @@ void remap_gpu::perform_collective_communicate(collective_fft3D_state &fftstate)
     }
 
     cudaStreamSynchronize(fftstate.gpu_stream);
-    printf("communicate 0x%x\n",fftstate.gpu_stream);
+    //printf("communicate 0x%x\n",fftstate.gpu_stream);
     // do all2all
     if (memory_gpu::m_env_psp_cuda!=0) {
 
@@ -800,7 +800,7 @@ void remap_gpu::perform_collective_finalize1(iris_real *in_dest, collective_fft3
 	return;
     }
     //cudaStreamSynchronize(fftstate.gpu_stream);
-    printf("sync buffs 0x%x\n",fftstate.gpu_stream);
+    //printf("sync buffs 0x%x\n",fftstate.gpu_stream);
     // exchange buffers
     if (memory_gpu::m_env_psp_cuda!=0) {
 

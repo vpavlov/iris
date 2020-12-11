@@ -235,7 +235,7 @@ void remap_item_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int
 	
 	unpack_kernel<<<blocks,threads,0,gpu_str>>>
 	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
-	printf("unpack stream 0x%x \n",gpu_str);
+	// printf("unpack stream 0x%x \n",gpu_str);
 	// cudaDeviceSynchronize();
     // HANDLE_LAST_CUDA_ERROR;
 }

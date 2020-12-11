@@ -303,7 +303,7 @@ void poisson_solver_p3m_gpu::solve_async()
     if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {
 	kspace_eng(m_work1);
     }
-    printf("back fft\n");
+    //printf("back fft\n");
     kspace_phi(m_work1);
     // do tuk work1 e tochno
     kspace_Ex(m_work1, m_work2);
@@ -435,5 +435,5 @@ void poisson_solver_p3m_gpu::solve_async()
     //////////////// we do not need this ////////////////////////
     // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
     /////////////////////////////////////////////////////////////
-    printf("end solve async\n");
+    //printf("end solve async\n");
 }

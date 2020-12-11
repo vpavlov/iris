@@ -120,17 +120,6 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 		printf("blocking %d \n",res);
 		exit(555);
 	}
-    
-    unsigned int nDeviceFlagsActual = 0;
-    cudaError_t res1 =  cudaGetDeviceFlags(&nDeviceFlagsActual);
-	if (res1 != cudaSuccess )
-	{
-		printf("get flags %d \n",res1);
-		exit(555);
-	}
-
-    printf("actual flags 0x%x blocking flag 0x%x\n",nDeviceFlagsActual,cudaDeviceBlockingSync);
-
 
     char * psp_cuda_env = getenv("PSP_CUDA");
     if(psp_cuda_env!=NULL){

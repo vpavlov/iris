@@ -347,7 +347,7 @@ void assign_charges1_kernel(iris_real *in_charges, int in_ncharges,
 			for(int j = 0; j < order; j++) {
 				iris_real t2 = t1 * weights[1][j];
 				iris_real t3 = t2 * weights[2][0];
-				iris_real *rho_ptr = &(ptr[(ix+i)*nx*nz+(iy+j)*nz+iz]);
+				iris_real *rho_ptr = &(ptr[(ix+i)*ny*nz+(iy+j)*nz+iz]);
 				for(int k = 1; k < order; k++) {
 				  atomicAdd(rho_ptr, t3);
 				  t3 = t2 * weights[2][k];
