@@ -33,6 +33,7 @@
 
 #include "state_accessor_gpu.h"
 #include "box.h"
+#include "logger_gpu.h"
 
 namespace ORG_NCSA_IRIS {
     
@@ -64,7 +65,61 @@ namespace ORG_NCSA_IRIS {
 		perform_p2p(in_src, in_dest, in_buf);
 	    }
 	}
+
+	void perform_init(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_init(in_src, in_dest, fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
+
+	void perform_pack(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_pack(in_src, in_dest, fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
 	
+	void perform_communicate(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_communicate(fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
+
+	void perform_finalize(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_finalize(in_dest,fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
+
+	void perform_communicate1(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_communicate1(fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
+
+	void perform_finalize1(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate)
+	{
+	    if(m_use_collective) {
+		perform_collective_finalize1(in_dest,fftstate);
+	    }else {
+		m_logger->error("p2p remap not implemented yet!...");
+	    }
+	}
+
     private:
 
 	void perform_p2p(iris_real ***in_src, iris_real *in_desc, iris_real *in_buf);
@@ -73,6 +128,13 @@ namespace ORG_NCSA_IRIS {
 	void perform_p2p(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
 	void perform_collective(iris_real *in_src, iris_real *in_desc, iris_real *in_buf);
 	
+	void perform_collective_init(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate);
+	void perform_collective_pack(iris_real *in_src, iris_real *in_dest, collective_fft3D_state &fftstate);
+	void perform_collective_communicate(collective_fft3D_state &fftstate);
+	void perform_collective_finalize(iris_real *in_dest, collective_fft3D_state &fftstate);
+	void perform_collective_communicate1(collective_fft3D_state &fftstate);
+	void perform_collective_finalize1(iris_real *in_dest, collective_fft3D_state &fftstate);
+
 	char *m_name;
 	box_t<int> m_from;
 	box_t<int> m_to;

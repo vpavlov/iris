@@ -43,6 +43,8 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 	void solve();
+	void solve_async();
+	void solve_sync();
 	void handle_box_resize();
 
     private:
@@ -91,6 +93,8 @@ namespace ORG_NCSA_IRIS {
 	// FFT workspaces
 	iris_real *m_work1;
 	iris_real *m_work2;
+	iris_real *m_work2y;
+	iris_real *m_work2z;
 	iris_real *m_work3;  // temporary, to be removed
     };
 };

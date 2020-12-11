@@ -183,6 +183,23 @@ void mesh_gpu::dump_ascii(const char *fname, iris_real ***data, int nx,int ny,in
     fclose(fp);
 }
 
+void mesh_gpu::dump_ascii(const char *fname, iris_real *data,int nz)
+{
+    char values_fname[256];
+    char header_fname[256];
+    
+    sprintf(values_fname, "%s-%d.data", fname, m_local_comm->m_rank);
+    
+    // 1. write the bov file
+    FILE *fp = fopen(values_fname, "wb");
+    for(int i=0;i<nz;i++) {
+	      //fprintf(fp, "%g\n", data[k][j][i]);
+	      fprintf(fp, "%s[%d] %.15f 0x%x\n", fname, i, data[i], *(int*)&(data[i]));
+
+    }
+    fclose(fp);
+}
+
 void mesh_gpu::dump_log(const char *name, iris_real ***data)
 {
     for(int i=0;i<m_own_size[0];i++) {
@@ -998,7 +1015,7 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 			iris_real t3 = t2 * weights[2][0];
 			iris_real ex = m_Ex_plus[ix+i][iy+j][iz];
 			iris_real ey = m_Ey_plus[ix+i][iy+j][iz];
-			iris_real ez = m_Ey_plus[ix+i][iy+j][iz];
+			iris_real ez = m_Ez_plus[ix+i][iy+j][iz];
 			for(int k = 1; k < m_order; k++) {
 	
 			ekx -= t3 * ex;
@@ -1007,7 +1024,7 @@ void assign_forces1_kernel(iris_real *in_charges, int in_ncharges,
 			t3 = t2 * weights[2][k];
 			ex = m_Ex_plus[ix+i][iy+j][iz+k];
 			ey = m_Ey_plus[ix+i][iy+j][iz+k];
-			ez = m_Ey_plus[ix+i][iy+j][iz+k];
+			ez = m_Ez_plus[ix+i][iy+j][iz+k];
 			// if(ndx==0)
 			// printf("imtract m_Ex_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f m_Ey_plus[%d][%d][%d] %f\n",ix+i,iy+j,iz+k,m_Ex_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ey_plus[ix+i][iy+j][iz+k],ix+i,iy+j,iz+k,m_Ez_plus[ix+i][iy+j][iz+k]);
 			}

@@ -113,6 +113,25 @@ iris_gpu::iris_gpu(int in_client_size, int in_server_size,
 
 void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
+
+    cudaError_t res =  cudaSetDeviceFlags(cudaDeviceBlockingSync); 	
+	if (res != cudaSuccess )
+	{
+		printf("blocking %d \n",res);
+		exit(555);
+	}
+    
+    unsigned int nDeviceFlagsActual = 0;
+    cudaError_t res1 =  cudaGetDeviceFlags(&nDeviceFlagsActual);
+	if (res1 != cudaSuccess )
+	{
+		printf("get flags %d \n",res1);
+		exit(555);
+	}
+
+    printf("actual flags 0x%x blocking flag 0x%x\n",nDeviceFlagsActual,cudaDeviceBlockingSync);
+
+
     char * psp_cuda_env = getenv("PSP_CUDA");
     if(psp_cuda_env!=NULL){
     memory_gpu::m_env_psp_cuda = atoi(psp_cuda_env);
@@ -1280,4 +1299,30 @@ bool iris_gpu::handle_get_global_energy(event_t *in_event)
 	MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
     }
     return false;
+}
+
+void ORG_NCSA_IRIS::free_collective_fft3D_memory(collective_fft3D_state &fftstate)
+{
+//    cudaStreamDestroy(fftstate.gpu_stream);
+	if (memory_gpu::m_env_psp_cuda!=0)
+	{
+		memory_gpu::wfree(fftstate.send_offsets_gpu);
+		memory_gpu::wfree(fftstate.recv_offsets_gpu);
+		memory_gpu::wfree(fftstate.send_counts_gpu);
+		memory_gpu::wfree(fftstate.recv_counts_gpu);
+	} else {
+		//memory::wfree(fftstate.send_buff);
+		//memory::wfree(fftstate.recv_buff);
+        if(fftstate.recv_buff!=NULL)
+            cudaFreeHost(fftstate.send_buff);
+        if(fftstate.recv_buff!=NULL)
+            cudaFreeHost(fftstate.recv_buff);
+	}
+    memory::wfree(fftstate.send_counts);
+    memory::wfree(fftstate.recv_counts);
+    memory::wfree(fftstate.send_offsets);
+    memory::wfree(fftstate.recv_offsets);
+    memory::wfree(fftstate.recv_map);
+    memory_gpu::wfree(fftstate.send_buff_gpu);
+    memory_gpu::wfree(fftstate.recv_buff_gpu);
 }

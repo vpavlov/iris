@@ -55,7 +55,7 @@ poisson_solver_p3m_gpu::poisson_solver_p3m_gpu(class iris_gpu *obj)
       m_denominator_x(NULL), m_denominator_y(NULL), m_denominator_z(NULL), 
       m_kx(NULL), m_ky(NULL), m_kz(NULL), m_vc(NULL),
       m_fft1(NULL), m_fft2(NULL),
-      m_work1(NULL), m_work2(NULL), m_work3(NULL),
+      m_work1(NULL), m_work2(NULL), m_work3(NULL),m_work2y(NULL),m_work2z(NULL),
       m_remap(NULL), m_fft_grid(NULL), m_fft_size { 0, 0, 0 }, m_fft_offset { 0, 0, 0 }
 {
 };
@@ -73,6 +73,9 @@ poisson_solver_p3m_gpu::~poisson_solver_p3m_gpu()
     memory_gpu::destroy_1d(m_work1);
     memory_gpu::destroy_1d(m_work2);
     memory_gpu::destroy_1d(m_work3);
+
+    memory_gpu::destroy_1d(m_work2y);
+    memory_gpu::destroy_1d(m_work2z);
     
     if(m_fft1) { delete m_fft1; }
     if(m_fft2) { delete m_fft2; }
@@ -173,6 +176,12 @@ void poisson_solver_p3m_gpu::commit()
 
     memory_gpu::destroy_1d(m_work3);
     memory_gpu::create_1d(m_work3, n);
+
+    memory_gpu::destroy_1d(m_work2y);
+    memory_gpu::create_1d(m_work2y, n);
+
+    memory_gpu::destroy_1d(m_work2z);
+    memory_gpu::create_1d(m_work2z, n);
     
     m_dirty = false;
 }
@@ -207,7 +216,13 @@ void poisson_solver_p3m_gpu::calculate_green_function()
 
 void poisson_solver_p3m_gpu::solve()
 {
-    m_logger->trace("Solving Poisson's Equation now");
+  solve_async();
+  //solve_sync();
+}
+
+void poisson_solver_p3m_gpu::solve_sync()
+{
+    m_logger->info("Solving Poisson's Equation now");
 
     m_remap->perform(m_mesh->m_rho, m_work2, m_work1);
     m_fft1->compute_fw(m_work2, m_work1);
@@ -236,4 +251,159 @@ void poisson_solver_p3m_gpu::solve()
     //////////////// we do not need this ////////////////////////
     // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
     /////////////////////////////////////////////////////////////
+}
+
+void poisson_solver_p3m_gpu::solve_async()
+{
+
+    m_logger->trace("Solving Poisson's Equation now");
+    m_logger->info("Solving Poisson's Equation now remap async");
+    m_remap->perform(m_mesh->m_rho, m_work2, m_work1);
+    m_fft1->compute_fw(m_work2, m_work1);
+
+    if(m_iris->m_compute_global_energy || m_iris->m_compute_global_virial) {
+	kspace_eng(m_work1);
+    }
+    printf("back fft\n");
+    kspace_phi(m_work1);
+    // do tuk work1 e tochno
+    kspace_Ex(m_work1, m_work2);
+    kspace_Ey(m_work1, m_work2y);
+    kspace_Ez(m_work1, m_work2z);
+    // m_mesh->dump_ascii_from_gpu("work2",m_work2,1,1,2*m_fft1->m_count);
+    // exit(777);
+    //m_fft2->compute_bk(m_work2, m_mesh->m_Ex);
+    
+    collective_fft3D_state statex,statey,statez;
+    cudaError_t res = cudaStreamCreateWithFlags(&(statex.gpu_stream),cudaStreamNonBlocking);
+	if (res != cudaSuccess )
+	{
+		printf("res %d \n",res);
+		exit(555);
+	}
+    res = cudaStreamCreateWithFlags(&(statey.gpu_stream),cudaStreamNonBlocking);
+	if (res != cudaSuccess )
+	{
+		printf("res %d \n",res);
+		exit(555);
+	}
+    res = cudaStreamCreateWithFlags(&(statez.gpu_stream),cudaStreamNonBlocking);
+	if (res != cudaSuccess )
+	{
+		printf("res %d \n",res);
+		exit(555);
+	}
+    cudaEventCreate(&statex.fft_ready);
+    cudaEventCreate(&statey.fft_ready);
+    cudaEventCreate(&statez.fft_ready);
+
+    // cudaEventCreate(&statex.init_remap_ready);
+    // cudaEventCreate(&statey.init_remap_ready);
+    // cudaEventCreate(&statez.init_remap_ready);
+    
+    m_fft2->compute_bk_remap_dir_init(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_init(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_init(0,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_pack(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_pack(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_pack(0,m_work2z,statez);
+    
+    m_fft2->compute_bk_remap_dir_communicate1(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate1(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate1(0,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_communicate(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate(0,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_finalize1(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize1(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize1(0,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_finalize(0,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize(0,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize(0,m_work2z,statez);
+
+    m_fft2->compute_bk_fft_dir(0,m_work2,statex);
+    m_fft2->compute_bk_fft_dir(0,m_work2y,statey);
+    m_fft2->compute_bk_fft_dir(0,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_init(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_init(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_init(1,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_pack(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_pack(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_pack(1,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_communicate1(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate1(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate1(1,m_work2z,statez);
+    
+    m_fft2->compute_bk_remap_dir_communicate(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate(1,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_finalize1(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize1(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize1(1,m_work2z,statez);
+    
+    m_fft2->compute_bk_remap_dir_finalize(1,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize(1,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize(1,m_work2z,statez);
+
+    m_fft2->compute_bk_fft_dir(1,m_work2,statex);
+    m_fft2->compute_bk_fft_dir(1,m_work2y,statey);
+    m_fft2->compute_bk_fft_dir(1,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_init(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_init(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_init(2,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_pack(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_pack(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_pack(2,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_communicate1(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate1(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate1(2,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_communicate(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_communicate(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_communicate(2,m_work2z,statez);
+    
+    m_fft2->compute_bk_remap_dir_finalize1(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize1(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize1(2,m_work2z,statez);
+
+    m_fft2->compute_bk_remap_dir_finalize(2,m_work2,statex);
+    m_fft2->compute_bk_remap_dir_finalize(2,m_work2y,statey);
+    m_fft2->compute_bk_remap_dir_finalize(2,m_work2z,statez);
+
+    m_fft2->compute_bk_fft_dir(2,m_work2,statex);
+    m_fft2->compute_bk_fft_dir(2,m_work2y,statey);
+    m_fft2->compute_bk_fft_dir(2,m_work2z,statez);
+
+    m_fft2->compute_bk_finalize(m_work2,m_mesh->m_Ex,statex);
+    m_fft2->compute_bk_finalize(m_work2y,m_mesh->m_Ey,statey);
+    m_fft2->compute_bk_finalize(m_work2z,m_mesh->m_Ez,statez);
+    free_collective_fft3D_memory(statex);
+    free_collective_fft3D_memory(statey);
+    free_collective_fft3D_memory(statez);
+    // m_mesh->dump_ascii_from_gpu("Ex",m_mesh->m_Ex,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    // exit(777);
+    
+    //m_fft2->compute_bk(m_work2y, m_mesh->m_Ey);
+    // m_mesh->dump_ascii_from_gpu("Ey",m_mesh->m_Ey,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    //exit(777);
+
+    //m_fft2->compute_bk(m_work2z, m_mesh->m_Ez);
+    // m_mesh->dump_ascii_from_gpu("Ez",m_mesh->m_Ez,m_mesh->m_own_size[0],m_mesh->m_own_size[1],m_mesh->m_own_size[2]);
+    // exit(777);
+
+    //////////////// we do not need this ////////////////////////
+    // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
+    /////////////////////////////////////////////////////////////
+    printf("end solve async\n");
 }

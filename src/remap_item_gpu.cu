@@ -112,7 +112,6 @@ void pack_src_1d_kernel(iris_real *src, int src_offset, iris_real *dest, int des
 
 	src = &(src[src_offset]);
 	dest = &(dest[dest_offset]);
-
     for(int i = i_from; i < i_to; i++) {
 	int plane = i * m_stride_plane;
 	int di_i = i*m_ny*m_nz;
@@ -126,6 +125,8 @@ void pack_src_1d_kernel(iris_real *src, int src_offset, iris_real *dest, int des
 	    }
 	}
     }
+	// if(xndx+yndx+zndx==0)
+	// printf("pack!!!\n");
 }
 
 void remap_item_gpu::pack(iris_real *src, int src_offset, iris_real *dest, int dest_offset)
@@ -142,6 +143,25 @@ void remap_item_gpu::pack(iris_real *src, int src_offset, iris_real *dest, int d
 
 	pack_src_1d_kernel<<<blocks,threads>>>
 	(src, src_offset ,dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	// cudaDeviceSynchronize();
+    // HANDLE_LAST_CUDA_ERROR;
+}
+
+void remap_item_gpu::pack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t& gpu_str)
+{
+    int nthreads1 = get_NThreads_X(m_nx);
+	int nthreads2 = get_NThreads_Y(m_ny);
+	int nthreads3 = get_NThreads_Z(m_nz);
+    int nblocks1 = get_NBlocks_X(m_nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(m_ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(m_nz,nthreads3);
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
+
+	pack_src_1d_kernel<<<blocks,threads,0,gpu_str>>>
+	(src, src_offset ,dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	//printf("pack stream 0x%x \n",gpu_str);
 	// cudaDeviceSynchronize();
     // HANDLE_LAST_CUDA_ERROR;
 }
@@ -178,6 +198,8 @@ void unpack_kernel(iris_real *src, int src_offset, iris_real *dest, int dest_off
 	    }
 	}
     }
+	// if(xndx+yndx+zndx==0)
+	// printf("unpack!!!\n");
 }
 
 
@@ -195,6 +217,25 @@ void remap_item_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int
 	
 	unpack_kernel<<<blocks,threads>>>
 	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	// cudaDeviceSynchronize();
+    // HANDLE_LAST_CUDA_ERROR;
+}
+
+void remap_item_gpu::unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t &gpu_str)
+{
+    int nthreads1 = get_NThreads_X(m_nx);
+	int nthreads2 = get_NThreads_Y(m_ny);
+	int nthreads3 = get_NThreads_Z(m_nz);
+    int nblocks1 = get_NBlocks_X(m_nx,nthreads1);
+	int nblocks2 = get_NBlocks_Y(m_ny,nthreads2);
+	int nblocks3 = get_NBlocks_Z(m_nz,nthreads3);
+
+	auto blocks = dim3(nblocks1,nblocks2,nblocks3);
+    auto threads = dim3(nthreads1,nthreads2,nthreads3);
+	
+	unpack_kernel<<<blocks,threads,0,gpu_str>>>
+	(src, src_offset, dest, dest_offset, m_nx, m_ny, m_nz, m_stride_plane, m_stride_line);
+	printf("unpack stream 0x%x \n",gpu_str);
 	// cudaDeviceSynchronize();
     // HANDLE_LAST_CUDA_ERROR;
 }

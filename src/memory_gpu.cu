@@ -492,6 +492,16 @@ int memory_gpu::sync_cpu_buffer(void* dst, const void* src_gpu, size_t count)
 	return cudaMemcpy ( dst, src_gpu, count, cudaMemcpyDeviceToHost);
 }
 
+int memory_gpu::sync_gpu_buffer(void* dst_gpu, const void* src, size_t count, cudaStream_t& gpu_str)
+{
+	return cudaMemcpyAsync( dst_gpu, src, count, cudaMemcpyHostToDevice,gpu_str);
+}
+
+int memory_gpu::sync_cpu_buffer(void* dst, const void* src_gpu, size_t count, cudaStream_t& gpu_str)
+{
+	return cudaMemcpyAsync ( dst, src_gpu, count, cudaMemcpyDeviceToHost,gpu_str);
+}
+
 void * memory_gpu::get_registered_gpu_pointer(void *parent, std::string label)
 {
     auto it = gpu_allocated_pointers.find(parent);

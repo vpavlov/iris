@@ -74,6 +74,16 @@ namespace ORG_NCSA_IRIS {
 	void compute_bk(iris_real *src, iris_real *dest);
 	void compute_bk(iris_real *src, iris_real ***dest);
 
+	void compute_bk_remap_dir_init(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_remap_dir_pack(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_remap_dir_communicate(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_remap_dir_finalize(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_remap_dir_communicate1(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_remap_dir_finalize1(int i, iris_real *src, collective_fft3D_state& fftstate);
+
+	void compute_bk_fft_dir(int i, iris_real *src, collective_fft3D_state& fftstate);
+	void compute_bk_finalize(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate);
+
 	void dump_workspace();
 
     private:

@@ -32,6 +32,7 @@
 #define __IRIS_GPU_REMAP_ITEM_H__
 
 #include "real.h"
+#include <cuda_runtime.h>
 
 namespace ORG_NCSA_IRIS {
 
@@ -43,7 +44,9 @@ namespace ORG_NCSA_IRIS {
 
 	void pack(iris_real ***src, int src_offset, iris_real *dest, int dest_offset);
 	void pack(iris_real *src, int src_offset, iris_real *dest, int dest_offset);
+	void pack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t &gpu_str);
 	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset);
+	virtual void unpack(iris_real *src, int src_offset, iris_real *dest, int dest_offset, cudaStream_t &gpu_str);
 
     public:
 	int m_peer;            // processor to send to/recv from

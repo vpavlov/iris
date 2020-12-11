@@ -56,6 +56,7 @@ namespace ORG_NCSA_IRIS {
 
 	void dump_bov(const char *in_fname, iris_real ***data);
 	void dump_ascii(const char *in_fname, iris_real ***data,int n1,int n2, int n3);
+	void dump_ascii(const char *fname, iris_real *data,int nz);
 	void dump_ascii_from_gpu(const char *fname, iris_real ***data,int n1, int n2, int n3);
 	void dump_ascii_from_gpu(const char *fname, iris_real *data,int n1, int n2, int n3);
 	void dump_log(const char *in_name, iris_real ***data);

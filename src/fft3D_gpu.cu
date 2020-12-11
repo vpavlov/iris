@@ -535,3 +535,89 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real ***dest)
     cudaDeviceSynchronize();
     HANDLE_LAST_CUDA_ERROR;
 }
+
+void fft3d_gpu::compute_bk_remap_dir_init(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+	if (i>0) {
+		cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
+	}
+    tm1[i].start();
+	m_remaps[i]->perform_init(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_remap_dir_pack(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+
+    tm1[i].start();
+	m_remaps[i]->perform_pack(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_remap_dir_communicate1(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+	m_remaps[i]->perform_communicate1(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_remap_dir_communicate(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+	m_remaps[i]->perform_communicate(src,src,fftstate);
+}
+
+void fft3d_gpu::compute_bk_remap_dir_finalize1(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+	m_remaps[i]->perform_finalize1(src,src,fftstate);
+	// cudaStreamDestroy(fftstate.gpu_stream);
+	// m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
+	// m_remaps[i]->perform(src,src,m_scratch);
+	// m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
+	tm1[i].stop();
+	// exit(222);
+}
+
+void fft3d_gpu::compute_bk_remap_dir_finalize(int i, iris_real *src, collective_fft3D_state& fftstate)
+{
+	m_remaps[i]->perform_finalize(src,src,fftstate);
+	// cudaStreamDestroy(fftstate.gpu_stream);
+	// m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
+	// m_remaps[i]->perform(src,src,m_scratch);
+	// m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
+	tm1[i].stop();
+	// exit(222);
+}
+
+
+void fft3d_gpu::compute_bk_fft_dir(int i, iris_real *src ,collective_fft3D_state& fftstate)
+{
+//	cufftSetStream(*(int*)&m_bk_plans[i],fftstate.gpu_stream);
+	cudaStreamSynchronize(fftstate.gpu_stream);
+
+	tm2.start();
+#ifdef IRIS_CUDA
+	FFTW_(execute_dft)(m_bk_plans[i],
+			   (complex_t *)src,
+			   (complex_t *)src);
+#endif
+	tm2.stop();
+	printf("cufftw done dir %d\n",i);
+	cudaEventRecord(fftstate.fft_ready,fftstate.gpu_stream);
+}
+
+void fft3d_gpu::compute_bk_finalize(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)
+{
+	cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
+	printf("start perform finalize\n");
+	m_remaps[3]->perform_init(src,src,fftstate);
+	m_remaps[3]->perform_pack(src,src,fftstate);
+	m_remaps[3]->perform_communicate1(src,src,fftstate);
+	m_remaps[3]->perform_communicate(src,src,fftstate);
+	m_remaps[3]->perform_finalize1(src,src,fftstate);
+	m_remaps[3]->perform_finalize(src,src,fftstate);
+
+	int nthreads = get_NThreads_1D(m_count);
+    int nblocks = get_NBlocks_X(m_count,nthreads);
+
+	send_data_to_mesh_3d_kernel<<<nblocks,nthreads,0,fftstate.gpu_stream>>>(src, m_count, dest);
+    
+	cudaStreamSynchronize(fftstate.gpu_stream);
+	cudaStreamDestroy(fftstate.gpu_stream);
+    HANDLE_LAST_CUDA_ERROR;
+}

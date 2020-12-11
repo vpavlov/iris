@@ -33,6 +33,7 @@
 #include <mpi.h>
 #include <pthread.h>
 #include <map>
+#include <cuda_runtime_api.h>
 #include "real.h"
 #include "box.h"
 #include "event.h"
@@ -270,5 +271,26 @@ namespace ORG_NCSA_IRIS {
 	private:
 	volatile bool m_quit;  // quit the main loop
     };
+	struct collective_fft3D_state_t
+	{
+    	int send_buff_size;
+    	int recv_buff_size;
+		int *send_counts=NULL, *recv_counts=NULL;
+		int *send_offsets=NULL, *recv_offsets=NULL;
+		int *recv_map=NULL;
+		int *send_counts_gpu=NULL, *recv_counts_gpu=NULL;
+		int *send_offsets_gpu=NULL, *recv_offsets_gpu=NULL;
+		iris_real *send_buff_gpu=NULL;
+		iris_real *recv_buff_gpu=NULL;
+		iris_real *send_buff=NULL, *recv_buff=NULL;
+		cudaStream_t gpu_stream;
+		cudaStream_t gpu_mem;
+		cudaEvent_t fft_ready;
+		//cudaEvent_t init_remap_ready;
+	};
+
+	typedef collective_fft3D_state_t collective_fft3D_state;
+
+	void free_collective_fft3D_memory(collective_fft3D_state &fftstate);
 }
 #endif
