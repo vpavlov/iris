@@ -57,7 +57,7 @@ fmm::fmm(iris *obj):
     m_dirty(true), m_border_leafs(NULL), m_border_parts{NULL, NULL},
     m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
-    m_l2l_count(0), m_l2p_count(0)
+    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0)
 {
 }
 
@@ -194,13 +194,13 @@ void fmm::handle_box_resize()
 
 void fmm::solve()
 {
-    m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = 0;
+    m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
     
     upward_pass_in_local_tree();
     exchange_LET();
     dual_tree_traversal();
 
-    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
+    m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
 
     // sort_back_particles(m_particles, m_nparticles);
 
@@ -360,6 +360,9 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
 	    p2m(m_order, x, y, z, q, m_M[i]);
 	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    m_p2m_count++;
+	    if(alien_only) {
+		m_p2m_alien_count++;
+	    }
 	}
     }
 }
@@ -397,6 +400,9 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 		valid_m = true;
 		scellID++;
 		m_m2m_count++;
+		if(invalid_only) {
+		    m_m2m_alien_count++;
+		}
 	    }
 	    if(valid_m) {
 		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
@@ -413,9 +419,25 @@ void fmm::exchange_LET()
     
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     if(m_local_comm->m_size > 1) {
+
+	timer tm1;
+	tm1.start();
 	exchange_p2p_halo();
+	tm1.stop();
+	m_logger->info("FMM: Exchange P2P Halo %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
+	
+	timer tm2;
+	tm2.start();
 	exchange_rest_of_LET();
+	tm2.stop();
+	m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+	
+	timer tm3;
+	tm3.start();
 	recalculate_LET();
+	tm3.stop();
+	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+	
     }
     //print_tree("Xcell", m_xcells, 0);
     
@@ -425,9 +447,23 @@ void fmm::exchange_LET()
 
 void fmm::recalculate_LET()
 {
+    timer tm1;
+    tm1.start();
     relink_parents(m_xcells);
+    tm1.stop();
+    m_logger->info("xx relink_parents %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
+    
+    timer tm2;
+    tm2.start();
     eval_p2m(m_xcells, true);
+    tm2.stop();
+    m_logger->info("xx eval_p2m %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+    
+    timer tm3;
+    tm3.start();
     eval_m2m(m_xcells, true);
+    tm3.stop();
+    m_logger->info("xx eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
 }
 
 void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
@@ -479,6 +515,16 @@ void fmm::dual_tree_traversal()
 	}
     }
 
+    int used = 0;
+    for(int i=0;i<m_tree_size;i++) {
+	if(m_xcells[i].flags & IRIS_FMM_CELL_USED) {
+	    used++;
+	}
+    }
+    
+    m_logger->info("USED: %d/%d", used, m_tree_size);
+    
+    
     eval_l2l(m_cells);
     eval_l2p(m_cells);
     
@@ -553,6 +599,8 @@ void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 {
+    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
+    
     for(int i=0;i<m_cells[destID].num_children;i++) {
 	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
 	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
@@ -622,6 +670,9 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
+    
+    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
+    
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
 
     iris_real sx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
