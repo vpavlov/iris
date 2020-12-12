@@ -159,6 +159,8 @@ namespace ORG_NCSA_IRIS {
 	int m_l2p_count;
 	int m_p2m_alien_count;
 	int m_m2m_alien_count;
+
+	MPI_Win m_Mwin;
     };
 }
 

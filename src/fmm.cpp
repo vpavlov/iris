@@ -57,7 +57,8 @@ fmm::fmm(iris *obj):
     m_dirty(true), m_border_leafs(NULL), m_border_parts{NULL, NULL},
     m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
-    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0)
+    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
+    m_Mwin(MPI_WIN_NULL)
 {
 }
 
@@ -84,6 +85,9 @@ fmm::~fmm()
     memory::destroy_1d(m_senddisp);
     memory::destroy_1d(m_recvcnt);
     memory::destroy_1d(m_recvdisp);
+    if(m_Mwin != MPI_WIN_NULL) {
+	MPI_Win_free(&m_Mwin);
+    }
 }
 
 void fmm::commit()
@@ -121,6 +125,12 @@ void fmm::commit()
 	
 	memory::destroy_2d(m_M);
 	memory::create_2d(m_M, m_tree_size, 2*m_nterms, true);
+
+	if(m_Mwin != MPI_WIN_NULL) {
+	    MPI_Win_free(&m_Mwin);
+	}
+	MPI_Win_create(&(m_M[0][0]), m_tree_size*2*m_nterms*sizeof(iris_real), sizeof(iris_real), MPI_INFO_NULL, m_local_comm->m_comm, &m_Mwin);
+	
 	
 	memory::destroy_2d(m_L);
 	memory::create_2d(m_L, m_tree_size, 2*m_nterms, true);
@@ -231,7 +241,8 @@ void fmm::upward_pass_in_local_tree()
 {
     timer tm;
     tm.start();
-    
+
+    memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);
