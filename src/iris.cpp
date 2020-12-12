@@ -499,9 +499,7 @@ void iris::commit()
     ASSERT_CLIENT("commit");
 
     if(is_both()) {
-        m_logger->trace("colling perform commit");
 	perform_commit();
-	m_logger->trace("colled perform commit");
 	return;
     }
 
@@ -636,7 +634,7 @@ int *iris::stos_fence_pending(MPI_Win *out_win)
 	pending[i] = 0;
     }
 
-    MPI_Win_create(pending, m_server_size, sizeof(int),
+    MPI_Win_create(pending, m_server_size*sizeof(int), sizeof(int),
 		   MPI_INFO_NULL, m_local_comm->m_comm,
 		   out_win);
     MPI_Win_fence(MPI_MODE_NOPRECEDE, *out_win);
@@ -668,8 +666,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     MPI_Isend(in_data, in_size, MPI_BYTE, in_peer, in_tag, in_comm, req);
     if(is_server() && in_pending_win) {
 	int one = 1;
-	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT,
-		in_pending_win);
+	MPI_Put(&one, 1, MPI_INT, in_peer, m_local_comm->m_rank, 1, MPI_INT, in_pending_win);
     }
 }
 
