@@ -231,7 +231,7 @@ void fmm::upward_pass_in_local_tree()
 {
     timer tm;
     tm.start();
-    
+    memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);
