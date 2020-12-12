@@ -98,7 +98,7 @@ namespace ORG_NCSA_IRIS {
 	
 	void exchange_LET();
 	void exchange_p2p_halo();
-	void send_particles_to_neighbour(int rank, struct xparticle_t *&out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req);
+	void send_particles_to_neighbour(int rank, struct xparticle_t *&out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req, int *out_part_count);
 	void recv_particles_from_neighbour(int rank, int alien_idx, int alien_flag);
 	int border_leafs(int rank);
 	void exchange_rest_of_LET();

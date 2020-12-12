@@ -59,7 +59,7 @@ void fmm::exchange_p2p_halo()
     for(int i=0;i<3;i++) {
     	MPI_Request cnt_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
     	MPI_Request data_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
-
+	int send_cnt[2] = { 0, 0 };	
     	for(int j=0;j<2;j++) {
     	    int rank = m_proc_grid->m_hood[i][j];
     	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
@@ -68,7 +68,7 @@ void fmm::exchange_p2p_halo()
     	    {
     		continue;
     	    }
-    	    send_particles_to_neighbour(rank, m_border_parts[j], cnt_req+j, data_req+j);
+    	    send_particles_to_neighbour(rank, m_border_parts[j], cnt_req+j, data_req+j, send_cnt+j);
     	}
 
     	for(int j=0;j<2;j++) {
@@ -88,22 +88,23 @@ void fmm::exchange_p2p_halo()
     	for(int j=0;j<2;j++) {
     	    MPI_Wait(cnt_req+j, MPI_STATUS_IGNORE);
     	    MPI_Wait(data_req+j, MPI_STATUS_IGNORE);
+	    send_cnt[j] = 0;
     	}
     }
 }
 
-void fmm::send_particles_to_neighbour(int rank, xparticle_t *&out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
+void fmm::send_particles_to_neighbour(int rank, xparticle_t *&out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req, int *out_part_count)
 {
     int bl_count = border_leafs(rank);
     
-    int part_count = 0;
+    *out_part_count = 0;
     for(int i=0;i<bl_count;i++) {
-	part_count += m_xcells[m_border_leafs[i]].num_children;
+	(*out_part_count) += m_xcells[m_border_leafs[i]].num_children;
     }
 
-    m_logger->trace("Will be sending %d particles (from %d border leafs) to neighbour %d", part_count, bl_count, rank);
+    m_logger->trace("Will be sending %d particles (from %d border leafs) to neighbour %d", *out_part_count, bl_count, rank);
     
-    MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
+    MPI_Isend(out_part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
 
     int n = 0;
     for(int i=0;i<bl_count;i++) {
@@ -139,7 +140,7 @@ void fmm::send_particles_to_neighbour(int rank, xparticle_t *&out_sendbuf, MPI_R
 	}
     }
     
-    MPI_Isend(out_sendbuf, part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
+    MPI_Isend(out_sendbuf, (*out_part_count)*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
 }
 
 int fmm::border_leafs(int rank)
