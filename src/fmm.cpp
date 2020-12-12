@@ -95,7 +95,7 @@ void fmm::commit()
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);
 	int ncrit = t.i;
     
-	m_depth = (natoms > ncrit) ? int(log(natoms / ncrit)/_LN8) + 1 : 0;
+	m_depth = (natoms > ncrit) ? int(log(natoms / ncrit)/_LN8) + 2 : 0;
 	m_depth = MAX(m_depth, MIN_DEPTH);
 	m_depth = MIN(m_depth, MAX_DEPTH);
 
@@ -200,28 +200,28 @@ void fmm::solve()
     exchange_LET();
     dual_tree_traversal();
 
-    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: ~%d^2, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, (int)sqrt(m_p2p_count*1.0), m_l2l_count, m_l2p_count);
+    m_logger->info("P2M: %d, M2M: %d, M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_m2m_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
 
-    sort_back_particles(m_particles, m_nparticles);
+    // sort_back_particles(m_particles, m_nparticles);
 
-    iris_real ener = 0.0;
-    iris_real fx_sum = 0.0;
-    iris_real fy_sum = 0.0;
-    iris_real fz_sum = 0.0;
-    for(int i=0;i<m_nparticles;i++) {
-	iris_real fx = m_particles[i].tgt[1] * m_particles[i].xyzq[3];
-	iris_real fy = m_particles[i].tgt[2] * m_particles[i].xyzq[3];
-	iris_real fz = m_particles[i].tgt[3] * m_particles[i].xyzq[3];
+    // iris_real ener = 0.0;
+    // iris_real fx_sum = 0.0;
+    // iris_real fy_sum = 0.0;
+    // iris_real fz_sum = 0.0;
+    // for(int i=0;i<m_nparticles;i++) {
+    // 	iris_real fx = m_particles[i].tgt[1] * m_particles[i].xyzq[3];
+    // 	iris_real fy = m_particles[i].tgt[2] * m_particles[i].xyzq[3];
+    // 	iris_real fz = m_particles[i].tgt[3] * m_particles[i].xyzq[3];
 
-	fx_sum += fx;
-	fy_sum += fy;
-	fz_sum += fz;
+    // 	fx_sum += fx;
+    // 	fy_sum += fy;
+    // 	fz_sum += fz;
 	
-	m_logger->info("F[%d] = (%f, %f, %f)", m_particles[i].index, fx, fy, fz);
-	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
-    }
-    m_logger->info("Ftot = (%f, %f, %f)", fx_sum, fy_sum, fz_sum);
-    m_logger->info("FMM Local Energy: %f", ener / 2);
+    // 	m_logger->info("F[%d] = (%f, %f, %f)", m_particles[i].index, fx, fy, fz);
+    // 	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
+    // }
+    // m_logger->info("Ftot = (%f, %f, %f)", fx_sum, fy_sum, fz_sum);
+    // m_logger->info("FMM Local Energy: %f", ener / 2);
     
     MPI_Barrier(m_iris->server_comm());
     exit(-1);
@@ -611,13 +611,13 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 	    sum_ey += ey;
 	    sum_ez += ez;
 	    
-	    m_p2p_count++;
 	}
 	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;
 	m_particles[m_cells[destID].first_child + i].tgt[1] += sum_ex;
 	m_particles[m_cells[destID].first_child + i].tgt[2] += sum_ey;
 	m_particles[m_cells[destID].first_child + i].tgt[3] += sum_ez;
     }
+    m_p2p_count++;
 }
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
