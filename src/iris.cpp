@@ -183,13 +183,12 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_mesh = NULL;
     m_chass = NULL;
     m_solver = NULL;
-    
+
     if(is_server()) {
 	m_domain = new domain(this);
 	m_proc_grid = new proc_grid(this);
 	m_mesh = new mesh(this);
 	m_chass = new charge_assigner(this);
-	m_clients_in_contact = 0;
     }
 
     m_quit = false;
@@ -213,7 +212,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     solver_param_t def_param;
     def_param.i = 1;
     set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
-
 }
 
 iris::~iris()
@@ -381,7 +379,6 @@ void iris::set_solver(int in_which_solver)
 void iris::perform_commit()
 {
     if(is_server()) {
-	m_clients_in_contact = 0;  // no clients has sent any atoms this step
 	if(m_dirty) {
 	    auto_tune_parameters();
 
@@ -563,11 +560,6 @@ MPI_Comm iris::client_comm()
     return is_client()?m_local_comm->m_comm:m_inter_comm->m_comm;
 }
 
-int iris::client_size()
-{
-    return is_client()?m_local_comm->m_size:m_inter_comm->m_size;
-}
-
 int *iris::stos_fence_pending(MPI_Win *out_win)
 {
     if(!is_server()) {
@@ -635,23 +627,32 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
 	}
     }
+    m_logger->trace("send_charges stos_process_pending");
     stos_process_pending(pending, win);
+    m_logger->trace("send_charges MPI_Wait");
     MPI_Wait(&req, MPI_STATUS_IGNORE);
+    m_logger->trace("send_charges ended MPI_Wait");
 }
 
 void iris::commit_charges()
 {
     ASSERT_CLIENT("commit_charges");
 
+    // Make sure all clients have already sent their atoms before notifying
+    // the server that there are no more charges.
+    MPI_Barrier(m_local_comm->m_comm);
+
     MPI_Comm comm = server_comm();
     MPI_Win win;
     int *pending = stos_fence_pending(&win);
 
-    for(int i=0;i<m_server_size;i++) {
-	MPI_Request req;
-	send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
-	if(req != MPI_REQUEST_NULL) {
-	    MPI_Request_free(&req);
+    if(is_leader()) {
+	for(int i=0;i<m_server_size;i++) {
+	    MPI_Request req;
+	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
+	    if(req != MPI_REQUEST_NULL) {
+		MPI_Request_free(&req);
+	    }
 	}
     }
 
@@ -683,15 +684,12 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_clients_in_contact++;
-    m_logger->trace("Server has %d clients in contact", m_clients_in_contact);
-    if(m_clients_in_contact < client_size()) {
-	return false;
-    }
-    m_logger->trace("All clients are in contact; initiating computation...");
-
+    m_logger->trace("Client called 'commit_charges'. Initiating computation...");
+    m_logger->trace("Server called 'assign_charges'. Initiating computation...");
     m_mesh->assign_charges();
+    m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
     m_mesh->exchange_rho_halo();
+    m_logger->trace("Server called 'solve'. Initiating computation...");
     //    m_mesh->dump_ascii("rho", m_mesh->m_rho);
     solve();
     bool ad = false;
@@ -704,7 +702,16 @@ bool iris::handle_commit_charges()
 	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
 
+    // m_mesh->dump_ascii("Ex", m_mesh->m_Ex);
+    // m_mesh->dump_ascii("Ey", m_mesh->m_Ey);
+    // m_mesh->dump_ascii("Ez", m_mesh->m_Ez);
+
+    m_logger->trace("Server called 'assign_forces'. Initiating computation...");
     m_mesh->assign_forces(ad);
+    // m_mesh->dump_ascii("Ex_plus", m_mesh->m_Ex_plus);
+    // m_mesh->dump_ascii("Ey_plus", m_mesh->m_Ey_plus);
+    // m_mesh->dump_ascii("Ez_plus", m_mesh->m_Ez_plus);
+    m_logger->trace("Server ended 'assign_forces'. Initiating computation...");
     return false;  // no need to hodl
 }
 

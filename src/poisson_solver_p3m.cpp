@@ -119,6 +119,7 @@ void poisson_solver_p3m::commit()
     solver_param_t p = m_iris->get_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE);
     bool use_collective = (p.i == 1)?true:false;
         
+    m_iris->m_logger->info("DD Layout: %d", m_iris->m_proc_grid->get_layout());
     switch(m_iris->m_proc_grid->get_layout()) {
 	
     case IRIS_LAYOUT_PLANES_YZ:

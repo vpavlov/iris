@@ -173,7 +173,6 @@ namespace ORG_NCSA_IRIS {
 	// Helpers used in internode communication
 	MPI_Comm server_comm();
 	MPI_Comm client_comm();
-	int client_size();
 	int *stos_fence_pending(MPI_Win *out_win);
 	void stos_process_pending(int *in_pending, MPI_Win in_win);
 	void send_event(MPI_Comm in_comm, int in_peer, int in_tag,
@@ -249,7 +248,6 @@ namespace ORG_NCSA_IRIS {
 	int       m_ny_user;
 	int       m_nz_user;
 	bool      m_dirty;
-	int       m_clients_in_contact;
 
 	solver_param_t m_solver_params[IRIS_SOLVER_PARAM_CNT];
 
