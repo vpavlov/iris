@@ -356,7 +356,7 @@ void remap_gpu::perform_p2p(iris_real ***in_src, iris_real *in_dest, iris_real *
     m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
     for(int i = 0; i < m_nrecv; i++) {
 	remap_item_gpu *xi = &m_recv_plans[i];
-	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
+	MPI_Irecv(in_buf+xi->m_bufloc, xi->m_size, IRIS_REAL, xi->m_peer,
 		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
@@ -530,7 +530,7 @@ void remap_gpu::perform_p2p(iris_real *in_src, iris_real *in_dest, iris_real *in
     m_iris->m_logger->trace("%s m_nrecv = %d", m_name, m_nrecv);
     for(int i = 0; i < m_nrecv; i++) {
 	remap_item_gpu *xi = &m_recv_plans[i];
-	MPI_Irecv(&in_buf[xi->m_bufloc], xi->m_size, IRIS_REAL, xi->m_peer,
+	MPI_Irecv(in_buf+xi->m_bufloc, xi->m_size, IRIS_REAL, xi->m_peer,
 		  IRIS_TAG_REMAP, m_local_comm->m_comm, &req[i]);
     }
 
