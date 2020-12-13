@@ -35,7 +35,8 @@ using namespace ORG_NCSA_IRIS;
 //
 // Determine the center of the cell by using its cellID, the global box and the leaf size
 //
-void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level)
+void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level,
+		      int in_comm_size, int in_local_root_level)
 {
     if(cellID == 0) {
 	center[0] = (in_gbox->xlo + in_gbox->xhi)/2;
@@ -72,6 +73,20 @@ void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *
     }
     
     radius = sqrt(dx*dx + dy*dy + dz*dz) / 2;
+
+    rank = -1;
+    if(level >= in_local_root_level) {
+	int t_id = cellID;
+	int t_level = level;
+	while(t_level > in_local_root_level) {
+	    t_id = parent_of(t_id);
+	    t_level = level_of(t_id);
+	}
+	int idx = t_id - offset_for_level(t_level);
+	int bits = int(log(in_comm_size)/M_LN2);
+	int shift = (3 - bits % 3) % 3;
+	rank = idx >> shift;
+    }
 }
 
 

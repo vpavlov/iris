@@ -65,9 +65,10 @@ namespace ORG_NCSA_IRIS {
     struct cell_meta_t {
 	iris_real center[3];
 	iris_real radius;
-
+	int rank;
+	
 	cell_meta_t(int dummy = 0) {};  // to satisfy the compiler (memory::create_1d)
-	void set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level);
+	void set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level, int in_comm_size, int in_local_root_level);
 
 	static int offset_for_level(int level) { return ((1 << 3 * level)-1) / 7; };
 

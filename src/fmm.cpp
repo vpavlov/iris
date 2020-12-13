@@ -172,7 +172,7 @@ void fmm::generate_cell_meta()
     memory::destroy_1d(m_cell_meta);
     memory::create_1d(m_cell_meta, m_tree_size);
     for(int i=0;i<m_tree_size;i++) {
-	m_cell_meta[i].set(m_cell_meta, i, &m_domain->m_global_box, m_leaf_size, max_level());
+	m_cell_meta[i].set(m_cell_meta, i, &m_domain->m_global_box, m_leaf_size, max_level(), m_local_comm->m_size, m_local_root_level);
     }
 }
 
@@ -431,23 +431,23 @@ void fmm::exchange_LET()
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     if(m_local_comm->m_size > 1) {
 
-	timer tm1;
-	tm1.start();
-	exchange_p2p_halo();
-	tm1.stop();
-	m_logger->info("FMM: Exchange P2P Halo %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
+    	timer tm1;
+    	tm1.start();
+    	exchange_p2p_halo();
+    	tm1.stop();
+    	m_logger->info("FMM: Exchange P2P Halo %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
 	
-	timer tm2;
-	tm2.start();
-	exchange_rest_of_LET();
-	tm2.stop();
-	m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+    	timer tm2;
+    	tm2.start();
+    	exchange_rest_of_LET();
+    	tm2.stop();
+    	m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
 	
-	timer tm3;
-	tm3.start();
-	recalculate_LET();
-	tm3.stop();
-	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+    	timer tm3;
+    	tm3.start();
+    	recalculate_LET();
+    	tm3.stop();
+    	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
 	
     }
     //print_tree("Xcell", m_xcells, 0);
