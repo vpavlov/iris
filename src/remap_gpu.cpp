@@ -323,7 +323,7 @@ remap_gpu::remap_gpu(class iris_gpu *obj,
     }
 
     if(size != 0) {
-	m_sendbuf = (iris_real *)memory::wmalloc(size * sizeof(iris_real));
+	m_sendbuf = (iris_real *)memory_gpu::wmalloc(size * sizeof(iris_real));
     }else {
 	m_sendbuf = NULL;
     }
@@ -342,7 +342,7 @@ remap_gpu::~remap_gpu()
 	delete [] m_recv_plans;
     }
 
-    memory::wfree(m_sendbuf);
+    memory_gpu::wfree(m_sendbuf);
     memory::wfree(m_comm_list);
     if(m_collective_comm != MPI_COMM_NULL) {
 	MPI_Comm_free(&m_collective_comm);
