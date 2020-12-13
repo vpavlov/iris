@@ -40,6 +40,7 @@
 #include "remap_item.h"
 #include "remap_item_complex_permute.h"
 #include "remap_item_complex_permute2.h"
+#include "timer.h"
 
 using namespace ORG_NCSA_IRIS;
 remap::remap(class iris *obj,
@@ -440,10 +441,14 @@ void remap::perform_collective(iris_real *in_src, iris_real *in_dest, iris_real 
 	}
     }
 
+    timer tm;
+    tm.start();
     MPI_Alltoallv(send_buff, send_counts, send_offsets, IRIS_REAL,
 		  recv_buff, recv_counts, recv_offsets, IRIS_REAL,
 		  m_collective_comm);
-
+    tm.stop();
+    m_logger->info("All2All tm %f", tm.read_wall());
+    
     offset = 0;
     for(int i=0;i<m_comm_len;i++) {
 	if(recv_map[i] != -1) {

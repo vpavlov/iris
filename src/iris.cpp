@@ -571,7 +571,7 @@ int *iris::stos_fence_pending(MPI_Win *out_win)
 	pending[i] = 0;
     }
 
-    MPI_Win_create(pending, m_server_size, sizeof(int),
+    MPI_Win_create(pending, m_server_size*sizeof(int), sizeof(int),
 		   MPI_INFO_NULL, m_local_comm->m_comm,
 		   out_win);
     MPI_Win_fence(MPI_MODE_NOPRECEDE, *out_win);
