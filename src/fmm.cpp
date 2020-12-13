@@ -231,6 +231,7 @@ void fmm::upward_pass_in_local_tree()
 {
     timer tm;
     tm.start();
+
     memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     memset(&(m_L[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     load_particles();                                          // creates and sorts the m_particles array
@@ -368,6 +369,42 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
     }
 }
 
+void fmm::eval_p2m_single(cell_t *in_cells, int in_cellID)
+{
+    cell_t *leaf = &in_cells[in_cellID];
+    assert(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF);
+    
+    if(leaf->num_children == 0) {
+	return;
+    }
+
+    for(int j=0;j<leaf->num_children;j++) {
+	xparticle_t *ptr;
+	iris_real x, y, z, q;
+	if(leaf->flags & IRIS_FMM_CELL_ALIEN1) {
+	    ptr = m_xparticles[0];
+	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN2) {
+	    ptr = m_xparticles[1];
+	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN3) {
+	    ptr = m_xparticles[2];
+	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN4) {
+	    ptr = m_xparticles[3];
+	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN5) {
+	    ptr = m_xparticles[4];
+	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN6) {
+	    ptr = m_xparticles[5];
+	}
+	x = ptr[leaf->first_child+j].xyzq[0] - m_cell_meta[in_cellID].center[0];
+	y = ptr[leaf->first_child+j].xyzq[1] - m_cell_meta[in_cellID].center[1];
+	z = ptr[leaf->first_child+j].xyzq[2] - m_cell_meta[in_cellID].center[2];
+	q = ptr[leaf->first_child+j].xyzq[3];
+	p2m(m_order, x, y, z, q, m_M[in_cellID]);
+	in_cells[in_cellID].flags |= IRIS_FMM_CELL_VALID_M;
+	m_p2m_count++;
+	m_p2m_alien_count++;
+    }
+}
+
 void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 {
     int last_level = invalid_only ? 0 : m_local_root_level;
@@ -413,6 +450,34 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
     }
 }
 
+void fmm::eval_m2m_single(cell_t *in_cells, int in_cellID)
+{
+    int level = cell_meta_t::level_of(in_cellID);
+    int this_offset = cell_meta_t::offset_for_level(level);
+    int children_offset = cell_meta_t::offset_for_level(level+1);
+    int offset = children_offset + 8*(in_cellID - this_offset);
+	    
+    iris_real cx = m_cell_meta[in_cellID].center[0];
+    iris_real cy = m_cell_meta[in_cellID].center[1];
+    iris_real cz = m_cell_meta[in_cellID].center[2];
+
+    for(int j=0;j<8;j++) {
+	int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
+	if(!(in_cells[in_cellID].flags & mask)) {
+	    continue;
+	}
+	int scellID = offset + j;
+	iris_real x = m_cell_meta[scellID].center[0] - cx;
+	iris_real y = m_cell_meta[scellID].center[1] - cy;
+	iris_real z = m_cell_meta[scellID].center[2] - cz;
+	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+	m2m(m_order, x, y, z, m_M[scellID], m_M[in_cellID], m_scratch);
+	m_m2m_count++;
+	m_m2m_alien_count++;
+    }
+    in_cells[in_cellID].flags |= IRIS_FMM_CELL_VALID_M;
+}
+
 void fmm::exchange_LET()
 {
     timer tm;
@@ -448,23 +513,19 @@ void fmm::exchange_LET()
 
 void fmm::recalculate_LET()
 {
-    timer tm1;
-    tm1.start();
     relink_parents(m_xcells);
-    tm1.stop();
-    m_logger->info("xx relink_parents %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
     
-    timer tm2;
-    tm2.start();
-    eval_p2m(m_xcells, true);
-    tm2.stop();
-    m_logger->info("xx eval_p2m %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+    // timer tm2;
+    // tm2.start();
+    // //eval_p2m(m_xcells, true);
+    // tm2.stop();
+    // m_logger->info("xx eval_p2m %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
     
-    timer tm3;
-    tm3.start();
-    eval_m2m(m_xcells, true);
-    tm3.stop();
-    m_logger->info("xx eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+    // timer tm3;
+    // tm3.start();
+    // //eval_m2m(m_xcells, true);
+    // tm3.stop();
+    // m_logger->info("xx eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
 }
 
 void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
@@ -516,16 +577,6 @@ void fmm::dual_tree_traversal()
 	}
     }
 
-    int used = 0;
-    for(int i=0;i<m_tree_size;i++) {
-	if(m_xcells[i].flags & IRIS_FMM_CELL_USED) {
-	    used++;
-	}
-    }
-    
-    m_logger->info("USED: %d/%d", used, m_tree_size);
-    
-    
     eval_l2l(m_cells);
     eval_l2p(m_cells);
     
@@ -600,8 +651,6 @@ void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 {
-    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
-    
     for(int i=0;i<m_cells[destID].num_children;i++) {
 	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
 	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
@@ -669,13 +718,36 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
     m_p2p_count++;
 }
 
+void fmm::ensure_valid_M(int cellID)
+{
+    if(m_xcells[cellID].flags & IRIS_FMM_CELL_VALID_M) {
+	return;
+    }
+
+    //m_logger->info("Ensure valid M: %d", cellID);
+
+    int level = cell_meta_t::level_of(cellID);
+    if(level == max_level()) {
+	eval_p2m_single(m_xcells, cellID);
+    }else {
+	int this_offset = cell_meta_t::offset_for_level(level);
+	int children_offset = cell_meta_t::offset_for_level(level+1);
+	int offset = children_offset + 8*(cellID-this_offset);
+	for(int i=0;i<8;i++) {
+	    int mask = IRIS_FMM_CELL_HAS_CHILD1 << i;
+	    if(m_xcells[cellID].flags & mask) {
+		int childID = offset + i;
+		ensure_valid_M(childID);
+	    }
+	}
+	eval_m2m_single(m_xcells, cellID);
+    }
+}
+
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
+    ensure_valid_M(srcID);
     
-    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
-    
-    assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
-
     iris_real sx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
     iris_real sy = m_cell_meta[srcID].center[1] + iy * m_domain->m_global_box.ysize;
     iris_real sz = m_cell_meta[srcID].center[2] + iz * m_domain->m_global_box.zsize;

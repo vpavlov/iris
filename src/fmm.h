@@ -90,7 +90,9 @@ namespace ORG_NCSA_IRIS {
 	void link_parents(cell_t *io_cells);
 	void relink_parents(cell_t *io_cells);
 	void eval_p2m(cell_t *in_cells, bool alien_only);
+	void eval_p2m_single(cell_t *in_cells, int in_cellID);
 	void eval_m2m(cell_t *in_cells, bool alien_only);
+	void eval_m2m_single(cell_t *in_cells, int in_cellID);
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
 	void eval_l2l(cell_t *in_cells);
@@ -110,7 +112,7 @@ namespace ORG_NCSA_IRIS {
 	void dual_tree_traversal();
 	void traverse_queue(int ix, int iy, int iz);
 	void interact(int srcID, int destID, int ix, int iy, int iz);
-
+	void ensure_valid_M(int cellID);
 	/*
 	
 	
