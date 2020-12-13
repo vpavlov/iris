@@ -48,6 +48,9 @@ namespace ORG_NCSA_IRIS {
 	void handle_box_resize();
 
     private:
+	void setup_fft_pencils_z(bool in_use_collective);
+	void setup_fft_planes_yz(bool in_use_collective);
+	
 	void kspace_phi(iris_real *io_rho_phi);
 	void kspace_eng(iris_real *in_rho_phi);
 	void kspace_Ex(iris_real *in_phi, iris_real *out_Ex);
@@ -86,9 +89,7 @@ namespace ORG_NCSA_IRIS {
 
 	int m_fft_size[3];
 	int m_fft_offset[3];
-	class grid_gpu  *m_fft_grid;
-	class remap_gpu *m_remap;
-	class fft3d_gpu *m_fft1, *m_fft2;
+	class fft_base_gpu *m_fft1;
       
 	// FFT workspaces
 	iris_real *m_work1;

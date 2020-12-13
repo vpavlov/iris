@@ -365,16 +365,16 @@ void fft3d_gpu::setup_plans(int in_which)
 __global__
 void get_data_from_mesh_kernel(iris_real* src, int count, iris_real* dest)
 {
-	int rndx = IRIS_CUDA_INDEX(x);
+    int rndx = IRIS_CUDA_INDEX(x);
     int rchunk_size = IRIS_CUDA_CHUNK(x,count);
-
-	int i_from = rndx*rchunk_size, i_to = MIN((rndx+1)*rchunk_size,count);
-	
-	for(int i=i_from;i<i_to;i++) {
-		int j = 2*i;
-		dest[j] = src[i];
-		dest[j+1] = 0.0;
-	}
+    
+    int i_from = rndx*rchunk_size, i_to = MIN((rndx+1)*rchunk_size,count);
+    
+    for(int i=i_from;i<i_to;i++) {
+	int j = 2*i;
+	dest[j] = src[i];
+	dest[j+1] = 0.0;
+    }
 }
 
 iris_real *fft3d_gpu::compute_fw(iris_real *src, iris_real *dest)
@@ -538,67 +538,59 @@ void fft3d_gpu::compute_bk(iris_real *src, iris_real ***dest)
 
 void fft3d_gpu::compute_bk_remap_dir_init(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-	if (i>0) {
-		cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
-	}
-    tm1[i].start();
-	m_remaps[i]->perform_init(src,src,fftstate);
+    if (i>0) {
+	cudaStreamWaitEvent(fftstate.gpu_stream,fftstate.fft_ready,0);
+    }
+    m_remaps[i]->perform_init(src,src,fftstate);
 }
 
 void fft3d_gpu::compute_bk_remap_dir_pack(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-
-    tm1[i].start();
-	m_remaps[i]->perform_pack(src,src,fftstate);
+    m_remaps[i]->perform_pack(src,src,fftstate);
 }
 
 void fft3d_gpu::compute_bk_remap_dir_communicate1(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-	m_remaps[i]->perform_communicate1(src,src,fftstate);
+    m_remaps[i]->perform_communicate1(src,src,fftstate);
 }
 
 void fft3d_gpu::compute_bk_remap_dir_communicate(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-	m_remaps[i]->perform_communicate(src,src,fftstate);
+    m_remaps[i]->perform_communicate(src,src,fftstate);
 }
 
 void fft3d_gpu::compute_bk_remap_dir_finalize1(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-	m_remaps[i]->perform_finalize1(src,src,fftstate);
-	// cudaStreamDestroy(fftstate.gpu_stream);
-	// m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
-	// m_remaps[i]->perform(src,src,m_scratch);
-	// m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
-	tm1[i].stop();
-	// exit(222);
+    m_remaps[i]->perform_finalize1(src,src,fftstate);
+    // cudaStreamDestroy(fftstate.gpu_stream);
+    // m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
+    // m_remaps[i]->perform(src,src,m_scratch);
+    // m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
+    // exit(222);
 }
 
 void fft3d_gpu::compute_bk_remap_dir_finalize(int i, iris_real *src, collective_fft3D_state& fftstate)
 {
-	m_remaps[i]->perform_finalize(src,src,fftstate);
-	// cudaStreamDestroy(fftstate.gpu_stream);
-	// m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
-	// m_remaps[i]->perform(src,src,m_scratch);
-	// m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
-	tm1[i].stop();
-	// exit(222);
+    m_remaps[i]->perform_finalize(src,src,fftstate);
+    // cudaStreamDestroy(fftstate.gpu_stream);
+    // m_mesh->dump_ascii_from_gpu("src-async",src,1,1,2*m_count);
+    // m_remaps[i]->perform(src,src,m_scratch);
+    // m_mesh->dump_ascii_from_gpu("src-sync",src,1,1,2*m_count);
+    tm1[i].stop();
+    // exit(222);
 }
 
 
 void fft3d_gpu::compute_bk_fft_dir(int i, iris_real *src ,collective_fft3D_state& fftstate)
 {
-//	cufftSetStream(*(int*)&m_bk_plans[i],fftstate.gpu_stream);
-	cudaStreamSynchronize(fftstate.gpu_stream);
+    //	cufftSetStream(*(int*)&m_bk_plans[i],fftstate.gpu_stream);
+    cudaStreamSynchronize(fftstate.gpu_stream);
 
-	tm2.start();
 #ifdef IRIS_CUDA
-	FFTW_(execute_dft)(m_bk_plans[i],
-			   (complex_t *)src,
-			   (complex_t *)src);
+    FFTW_(execute_dft)(m_bk_plans[i], (complex_t *)src, (complex_t *)src);
 #endif
-	tm2.stop();
-	//printf("cufftw done dir %d\n",i);
-	cudaEventRecord(fftstate.fft_ready,fftstate.gpu_stream);
+    //printf("cufftw done dir %d\n",i);
+    cudaEventRecord(fftstate.fft_ready,fftstate.gpu_stream);
 }
 
 void fft3d_gpu::compute_bk_finalize_init(iris_real *src, iris_real ***dest, collective_fft3D_state& fftstate)

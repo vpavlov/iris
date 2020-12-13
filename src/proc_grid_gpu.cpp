@@ -64,7 +64,11 @@ void proc_grid_gpu::commit()
     }
 
     bool tmp_dirty = m_dirty;
-
+    
+    if(m_dirty) {
+	figure_out_layout();
+    }
+    
     grid_gpu::commit();
 
     if(tmp_dirty) {
@@ -77,4 +81,33 @@ void proc_grid_gpu::commit()
 	    m_domain->m_dirty = true;
 	}
     }
+}
+
+void proc_grid_gpu::figure_out_layout()
+{
+    if(m_mesh->m_size[0] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_YZ;
+	set_pref(0, 1, 1);
+    }else if(m_mesh->m_size[1] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_ZX;
+	set_pref(1, 0, 1);
+    }else if(m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PLANES_XY;
+	set_pref(1, 1, 0);
+    }else if(m_mesh->m_size[0]*m_mesh->m_size[1] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_Z;
+	set_pref(0, 0, 1);
+    }else if(m_mesh->m_size[0]*m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_Y;
+	set_pref(0, 1, 0);
+    }else if(m_mesh->m_size[1]*m_mesh->m_size[2] >= m_local_comm->m_size) {
+	m_layout = IRIS_LAYOUT_PENCILS_X;
+	set_pref(1, 0, 0);
+    }else {
+	throw std::domain_error("Impossible to hold a whole dimension on a processor, so cannot do even 1D FFT!");
+    }
+
+    // m_layout = IRIS_LAYOUT_PENCILS_Z;
+    // set_pref(0, 0, 1);
+    
 }
