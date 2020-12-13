@@ -48,6 +48,7 @@ namespace ORG_NCSA_IRIS {
     
 #define IRIS_SOLVER_P3M  0x01
 #define IRIS_SOLVER_CG   0x02
+#define IRIS_SOLVER_FMM  0x03
     
     static const iris_real _4PI = 12.566370614359172;
 
@@ -127,6 +128,9 @@ namespace ORG_NCSA_IRIS {
 	// Sets or resets the Ewald splitting parameter (1/distance)
 	void set_alpha(iris_real in_alpha);
 
+	// Set periodicity in X, Y and Z direction
+	void set_pbc(bool pbcx, bool pbcy, bool pbcz);
+	
 	// Set the poisson solver to be used
 	void set_poisson_solver(int in_solver);
 

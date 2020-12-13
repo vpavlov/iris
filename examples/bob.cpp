@@ -418,7 +418,7 @@ int main(int argc, char **argv)
 	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
-	x = new iris(IRIS_SOLVER_FMM, MPI_COMM_WORLD);
+	x = new iris(IRIS_SOLVER_P3M, MPI_COMM_WORLD);
 	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
     }else if(mode == 1) {
 	// split the world communicator in two groups:
@@ -447,15 +447,14 @@ int main(int argc, char **argv)
 	// - the server's remote leader is client's rank 0, which is 0
 	int remote_leader = (role==IRIS_ROLE_SERVER)?0:client_size;
 
-
-	x = new iris(IRIS_SOLVER_FMM, client_size, server_size, role, local_comm,
+	x = new iris(IRIS_SOLVER_P3M, client_size, server_size, role, local_comm,
 		     MPI_COMM_WORLD, remote_leader);
     }else {
 	printf("Unknown mode. Only 0 and 1 are supported\n");
 	exit(-1);
     }
 
-    x->set_pbc(false, false, false);
+    x->set_pbc(true, true, true);
     x->set_units(md);
     x->m_logger->info("Node name = %s; PID = %d", proc_name, getpid());
 

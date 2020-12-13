@@ -395,6 +395,12 @@ void iris::set_global_box(box_t<iris_real> *in_box)
     MPI_Barrier(m_local_comm->m_comm);
 }
 
+void iris::set_pbc(bool x, bool y, bool z)
+{
+    if(is_server()) {
+	m_proc_grid->set_pbc(x, y, z);
+    }
+}
 
 void iris::perform_commit()
 {

@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2019, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
