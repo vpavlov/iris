@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -42,13 +42,14 @@
 #include "proc_grid.h"
 #include "memory.h"
 #include "tags.h"
-#include "poisson_solver.h"
+#include "solver.h"
 #include "poisson_solver_p3m.h"
 #include "poisson_solver_cg.h"
 #include "timer.h"
 #include "utils.h"
 #include "factorizer.h"
 #include "openmp.h"
+#include "fmm.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -75,36 +76,36 @@ using namespace ORG_NCSA_IRIS;
 			       " may only be called from server nodes!"); \
     }
 
-iris::iris(MPI_Comm in_uber_comm)
-    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-      m_remote_leader(0)
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm):
+    m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
+    m_remote_leader(0)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(MPI_Comm in_uber_comm, int in_leader)
-    : m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-      m_remote_leader(in_leader)
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader):
+    m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
+    m_remote_leader(in_leader)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(int in_client_size, int in_server_size,
+iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm,
-	   MPI_Comm in_uber_comm, int in_remote_leader)
-    : m_client_size(in_client_size), m_server_size(in_server_size),
-      m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+	   MPI_Comm in_uber_comm, int in_remote_leader):
+    m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
+    m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
      
 {
     init(in_local_comm, in_uber_comm);
 }
 
-iris::iris(int in_client_size, int in_server_size,
+iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm, int in_local_leader,
-	   MPI_Comm in_uber_comm, int in_remote_leader)
-    : m_client_size(in_client_size), m_server_size(in_server_size),
-      m_role(in_role), m_local_leader(in_local_leader),
-      m_remote_leader(in_remote_leader)
+	   MPI_Comm in_uber_comm, int in_remote_leader):
+    m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
+    m_role(in_role), m_local_leader(in_local_leader),
+    m_remote_leader(in_remote_leader)
 {
     init(in_local_comm, in_uber_comm);
 }
@@ -133,7 +134,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_hx_free = true;
     m_hy_free = true;
     m_hz_free = true;
-    m_which_solver = IRIS_SOLVER_P3M;
     m_dirty = true;
 
     m_compute_global_energy = true;
@@ -183,17 +183,19 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_mesh = NULL;
     m_chass = NULL;
     m_solver = NULL;
-
+    
     if(is_server()) {
 	m_domain = new domain(this);
 	m_proc_grid = new proc_grid(this);
-	m_mesh = new mesh(this);
-	m_chass = new charge_assigner(this);
+	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
+	    m_mesh = new mesh(this);
+	    m_chass = new charge_assigner(this);
+	}
     }
 
     m_quit = false;
 
-    m_logger->trace("Node initialized as %s %d %s",
+    m_logger->info("Node initialized as %s %d %s",
 		    is_server()?(is_client()?"client/server":"server"):"client",
 		   m_local_comm->m_rank,
 		   is_leader()?"(leader)":"");
@@ -205,13 +207,26 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	MPI_Send(&m_local_comm->m_rank, 1, MPI_INT, m_remote_leader, IRIS_TAG_LEADER_EXCHANGE,
 		 m_uber_comm->m_comm);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	m_logger->trace("This node is a leader; other leader's local rank = %d", m_other_leader);
+	m_logger->info("This node is a leader; other leader's local rank = %d", m_other_leader);
     }
 
     // default value for P3M FFT3D remap -- use collective comm
     solver_param_t def_param;
     def_param.i = 1;
     set_solver_param(IRIS_SOLVER_P3M_USE_COLLECTIVE, def_param);
+
+    // default value for FMM NCRIT - 64
+    def_param.i = 64;
+    set_solver_param(IRIS_SOLVER_FMM_NCRIT, def_param);
+
+    // default value for FMM MAC (θ) - 0.5
+    def_param.r = 0.866025404;  // sqrt(3)/2
+    set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
+
+    // default value for FMM MAC LET correction parameter
+    def_param.r = 1.5;
+    set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
+    
 }
 
 iris::~iris()
@@ -222,6 +237,14 @@ iris::~iris()
 
     if(m_chass != NULL) {
 	delete m_chass;
+    }
+
+    for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	memory::wfree(it->second);
+    }
+
+    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	memory::wfree(it->second);
     }
 
     if(m_mesh != NULL) {
@@ -292,9 +315,12 @@ void iris::set_alpha(iris_real in_alpha)
 void iris::set_order(int in_order)
 {
     if(is_server()) {
-	m_chass->set_order(in_order);
 	m_order_free = false;
 	m_dirty = true;
+	m_order = in_order;
+	if(m_which_solver == IRIS_SOLVER_P3M || m_which_solver == IRIS_SOLVER_CG) {
+	    m_chass->set_order(in_order);
+	}
     }
 }
 
@@ -370,18 +396,14 @@ void iris::set_global_box(box_t<iris_real> *in_box)
 }
 
 
-void iris::set_solver(int in_which_solver)
-{
-    m_which_solver = in_which_solver;
-    m_dirty = true;
-}
-
 void iris::perform_commit()
 {
     if(is_server()) {
 	if(m_dirty) {
-	    auto_tune_parameters();
-
+	    if(m_which_solver == IRIS_SOLVER_P3M) {
+		auto_tune_parameters();
+	    }
+	    
 	    if(m_solver != NULL) {
 		delete m_solver;
 	    }
@@ -391,12 +413,33 @@ void iris::perform_commit()
 
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
-	m_chass->commit();      // does not depend on anything
+	if(m_chass != NULL) {
+	    m_chass->commit();      // does not depend on anything
+	}
+	if(m_proc_grid != NULL) {
+	    m_proc_grid->commit();  // does not depend on anything
+	}
+	if(m_domain != NULL) {
+	    m_domain->commit();     // depends on m_proc_grid
+	}
 
-	m_proc_grid->commit();  // does not depend on anything
-	m_domain->commit();     // depends on m_proc_grid
-	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
-	m_solver->commit();     // depends on m_mesh
+	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
+	    memory::wfree(it->second);
+	}
+	
+	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	    memory::wfree(it->second);
+	}
+	m_ncharges.clear();
+	m_charges.clear();
+	m_forces.clear();	
+	
+	if(m_mesh != NULL) {
+	    m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
+	}
+	if(m_solver != NULL) {
+	    m_solver->commit();     // depends on m_mesh
+	}
 	m_quit = false;
     }
 }
@@ -669,8 +712,8 @@ bool iris::handle_charges(event_t *event)
     int ncharges = event->size / unit;
     m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
 
-    m_mesh->m_ncharges[event->peer] = ncharges;
-    m_mesh->m_charges[event->peer] = (iris_real *)event->data;
+    m_ncharges[event->peer] = ncharges;
+    m_charges[event->peer] = (iris_real *)event->data;
 
     if(!is_client()) {
 	MPI_Request req;
@@ -684,13 +727,11 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_logger->trace("Client called 'commit_charges'. Initiating computation...");
-    m_logger->trace("Server called 'assign_charges'. Initiating computation...");
-    m_mesh->assign_charges();
-    m_logger->trace("Server called 'exchange_rho_halo'. Initiating computation...");
-    m_mesh->exchange_rho_halo();
-    m_logger->trace("Server called 'solve'. Initiating computation...");
-    //    m_mesh->dump_ascii("rho", m_mesh->m_rho);
+    m_logger->trace("handle_commit_charges()");
+    if(m_mesh != NULL) {
+	m_mesh->assign_charges();
+	m_mesh->exchange_rho_halo();
+    }
     solve();
     bool ad = false;
     if(m_which_solver == IRIS_SOLVER_P3M) {
@@ -698,20 +739,15 @@ bool iris::handle_commit_charges()
     }else if(m_which_solver == IRIS_SOLVER_CG) {
 	m_mesh->exchange_phi_halo();
 	ad = true;
+    }else if(m_which_solver == IRIS_SOLVER_FMM) {
+	// TODO: what to do with the forces
     }else {
-	throw std::logic_error("Don't know how to handle forces for this solver!");
+       	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
 
-    // m_mesh->dump_ascii("Ex", m_mesh->m_Ex);
-    // m_mesh->dump_ascii("Ey", m_mesh->m_Ey);
-    // m_mesh->dump_ascii("Ez", m_mesh->m_Ez);
-
-    m_logger->trace("Server called 'assign_forces'. Initiating computation...");
-    m_mesh->assign_forces(ad);
-    // m_mesh->dump_ascii("Ex_plus", m_mesh->m_Ex_plus);
-    // m_mesh->dump_ascii("Ey_plus", m_mesh->m_Ey_plus);
-    // m_mesh->dump_ascii("Ez_plus", m_mesh->m_Ez_plus);
-    m_logger->trace("Server ended 'assign_forces'. Initiating computation...");
+    if(m_mesh != NULL) {
+	m_mesh->assign_forces(ad);
+    }
     return false;  // no need to hodl
 }
 
@@ -1143,7 +1179,7 @@ bool iris::good_factor_quality(int n)
     }
 }
 
-poisson_solver *iris::get_solver()
+solver *iris::get_solver()
 {
     switch(m_which_solver) {
     case IRIS_SOLVER_P3M:
@@ -1151,6 +1187,12 @@ poisson_solver *iris::get_solver()
 
     case IRIS_SOLVER_CG:
 	return new poisson_solver_cg(this);
+
+    case IRIS_SOLVER_FMM:
+	return new fmm(this);
+	
+    default:
+	throw new std::logic_error("Unimplemented solver!");
     }
 }
 
@@ -1231,4 +1273,13 @@ bool iris::handle_get_global_energy(event_t *in_event)
 	MPI_Send(tmp, 3, IRIS_REAL, m_other_leader, IRIS_TAG_GGE_DONE, client_comm());
     }
     return false;
+}
+
+int iris::num_local_atoms()
+{
+    int retval = 0;
+    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
+	retval += it->second;
+    }
+    return retval;
 }

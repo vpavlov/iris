@@ -30,11 +30,11 @@
 #ifndef __IRIS_POISSON_SOLVER_CG_H__
 #define __IRIS_POISSON_SOLVER_CG_H__
 
-#include "poisson_solver.h"
+#include "solver.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class poisson_solver_cg : public poisson_solver {
+    class poisson_solver_cg : public solver {
 
     public:
 	poisson_solver_cg(class iris *obj);

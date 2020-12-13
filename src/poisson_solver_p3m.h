@@ -31,11 +31,11 @@
 #define __IRIS_POISSON_SOLVER_P3M_H__
 
 #include "charge_assigner.h"
-#include "poisson_solver.h"
+#include "solver.h"
 
 namespace ORG_NCSA_IRIS {
 
-    class poisson_solver_p3m : public poisson_solver {
+    class poisson_solver_p3m : public solver {
 
     public:
 	poisson_solver_p3m(class iris *obj);
@@ -44,7 +44,6 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 	void handle_box_resize();
-
     private:
 	void kspace_phi(iris_real *io_rho_phi);
 	void kspace_eng(iris_real *in_rho_phi);

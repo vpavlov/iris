@@ -47,6 +47,10 @@ namespace ORG_NCSA_IRIS {
 
 	void commit();
 
+    private:
+	void octsect_dd();
+	void octsect_update_hood();
+	
     public:
 	bool m_dirty;
 	bool m_initialized;

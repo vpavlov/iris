@@ -45,7 +45,7 @@ using namespace std;
 grid::grid(iris *obj, const char *in_name)
     : state_accessor(obj), m_size{0, 0, 0}, m_coords{0, 0, 0},
     m_xsplit(NULL), m_ysplit(NULL), m_zsplit(NULL), m_pref{0, 0, 0},
-    m_ranks(NULL), m_dirty(true)
+      m_ranks(NULL), m_dirty(true), m_pbc{1, 1, 1}
 {
     m_name = strdup(in_name);
 }
@@ -76,6 +76,15 @@ void grid::set_pref(int x, int y, int z)
     m_dirty = true;
 }
 
+
+void grid::set_pbc(bool x, bool y, bool z)
+{
+    m_pbc[0] = (int)x;
+    m_pbc[1] = (int)y;
+    m_pbc[2] = (int)z;
+    m_dirty = true;
+}
+
 void grid::commit()
 {
     if(m_dirty) {
@@ -92,7 +101,9 @@ void grid::select_grid_size()
 {
     int num_factors;
     int **factors = grid_factorizations(m_local_comm->m_size, &num_factors);
-    num_factors = filter_factors_mod(num_factors, factors, m_mesh->m_size);
+    if(m_mesh != NULL) {
+	num_factors = filter_factors_mod(num_factors, factors, m_mesh->m_size);
+    }
     num_factors = filter_factors_exact(num_factors, factors, m_pref);
     if(num_factors == 0) {
 	throw domain_error("Impossible grid processor assignment!");
@@ -139,12 +150,11 @@ int grid::select_best_factor(int n, int **factors, int *out_best)
 void grid::setup_grid_details()
 {
     MPI_Comm cart_comm;
-    int pbc[] = { 1, 1, 1 };
-    MPI_Cart_create(m_local_comm->m_comm, 3, m_size, pbc, 0, &cart_comm);
+    MPI_Cart_create(m_local_comm->m_comm, 3, m_size, m_pbc, 0, &cart_comm);
 
     // This call fills m_coords with the coordinates of the calling
     // process inside the grid (e.g. this proc is 3,1,0)
-    MPI_Cart_get(cart_comm, 3, m_size, pbc, m_coords);
+    MPI_Cart_get(cart_comm, 3, m_size, m_pbc, m_coords);
     MPI_Cart_shift(cart_comm, 0, -1, &m_hood[0][0], &m_hood[0][1]);
     MPI_Cart_shift(cart_comm, 1, -1, &m_hood[1][0], &m_hood[1][1]);
     MPI_Cart_shift(cart_comm, 2, -1, &m_hood[2][0], &m_hood[2][1]);
@@ -191,4 +201,16 @@ void grid::setup_splits()
     }
 
     m_xsplit[m_size[0]] = m_ysplit[m_size[1]] = m_zsplit[m_size[2]] = 1.0;
+}
+
+bool grid::is_neighbour(int rank)
+{
+    for(int i=0;i<3;i++) {
+	for(int j=0;j<2;j++) {
+	    if(m_hood[i][j] == rank) {
+		return true;
+	    }
+	}
+    }
+    return false;
 }

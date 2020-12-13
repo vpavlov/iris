@@ -30,6 +30,8 @@
 #ifndef __IRIS_BOX_H__
 #define __IRIS_BOX_H__
 
+#include <cmath>
+
 namespace ORG_NCSA_IRIS {
 
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
@@ -41,6 +43,8 @@ namespace ORG_NCSA_IRIS {
 	T xhi, yhi, zhi;
 	T xsize, ysize, zsize;
 
+	box_t(int dummy = 0) {}; // to satisfy the compiler for create_1d
+	
 	bool in(iris_real *charge)
 	{
 	    iris_real x = charge[0];
@@ -88,6 +92,14 @@ namespace ORG_NCSA_IRIS {
 		retval.zsize = retval.zhi - retval.zlo + 1;
 	    }
 	    return retval;
+	}
+
+	iris_real distance_to(iris_real x, iris_real y, iris_real z)
+	{
+	    iris_real dx = (x > xhi) * (x - xhi) + (x < xlo) * (xlo - x);
+	    iris_real dy = (y > yhi) * (y - yhi) + (y < ylo) * (ylo - y);
+	    iris_real dz = (z > zhi) * (z - zhi) + (z < zlo) * (zlo - z);
+	    return sqrt(dx*dx + dy*dy + dz*dz);
 	}
     };
 

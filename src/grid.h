@@ -42,7 +42,11 @@ namespace ORG_NCSA_IRIS {
 	~grid();
 
 	void set_pref(int x, int y, int z);
+	void set_pbc(bool x, bool y, bool z);
+	
 	virtual void commit();
+
+	bool is_neighbour(int rank);
 
     protected:
 	void select_grid_size();
@@ -50,12 +54,14 @@ namespace ORG_NCSA_IRIS {
 	void setup_grid_details();
 	void setup_splits();
 
+	
     public:
 
 	char *m_name;      // Name of the grid (used in logging)
 	int m_size[3];     // MxNxK procs in each direction
 	int m_coords[3];   // This process' coords in the grid
 	int m_hood[3][2];  // for each of the 3 directions, top/bottom neighbour
+	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 
 	iris_real *m_xsplit;    // M ranges (rel 0 - 1) for each proc in X dir
 	iris_real *m_ysplit;    // N ranges (rel 0 - 1) for each proc in Y dir
@@ -63,8 +69,10 @@ namespace ORG_NCSA_IRIS {
 
     protected:
 	bool m_dirty;      // if we need to re-calculate upon commit
-	int ***m_ranks;  // = rank of the proc at [i][j][k] point in grid
 	int m_pref[3];   // User preference about procs in each dir
+
+    public:
+	int m_pbc[3];   // Periodic Boundary Conditions in each dir
     };
 }
 

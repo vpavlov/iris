@@ -1,0 +1,303 @@
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\title{FMM Implementation Details}
+\author{Valentin N. Pavlov}
+\maketitle
+\section{General}
+
+In this implementation, following \cite{dehnen}, we use the this definition of {\em surface spherical harmonics} that has non-standard normalization:
+\begin{equation}
+  Y^m_l = (-1)^m \sqrt{\frac{(l-m)!}{(l+m)!}} P^m_l e^{i m \phi}
+\end{equation}
+
+Again, following \cite{dehnen}, we use this non-standard normalization for the {\em regular} and {\em irregular solid harmonics} as the base for multipole and local expansions:
+
+\begin{equation} \label{eq:2}
+  \begin{split}
+    R^m_l & = \frac{1}{\sqrt{(l-m)! (l+m)!}} r^l Y^m_l \\
+    & = (-1)^m \frac{1}{(l+m)!} r^l P^m_l e^{i m \phi}
+  \end{split}
+\end{equation}
+
+and
+
+\begin{equation} \label{eq:3}
+  \begin{split}
+    I^m_l & = \sqrt{(l-m)! (l+m)!} \frac{1}{r^{l+1}} Y^m_l \\
+    & = (-1)^m {(l-m)!} \frac{1}{r^{l+1}} P^m_l e^{i m \phi}
+  \end{split}
+\end{equation}
+
+In all these $P^m_l$ are the associated Legendre polynomials, for which the following apply \cite{alp}:
+
+\begin{equation} \label{eq:4}
+  P^0_0 = 1
+\end{equation}
+
+\begin{equation} \label{eq:5}
+  \begin{split}
+    P^{m+1}_{m+1}(\cos{\theta}) & = -(2m+1) \sqrt{1-\cos^2{\theta}} P^m_m \\
+    & = -(2m+1) \sin{\theta} P^m_m
+  \end{split}
+\end{equation}
+
+\begin{equation} \label{eq:6}
+  \begin{split}
+    P^m_{m+1}(\cos{\theta}) & = (2m+1) \cos{\theta} P^m_m
+  \end{split}
+\end{equation}
+
+\begin{equation} \label{eq:7}
+  P^m_{l+1}(\cos{\theta}) = \frac{(2l+1)\cos{\theta}P^m_l - (l+m)P^m_{l-1}}{l-m+1}
+\end{equation}
+
+The last equation can be re-written as:
+
+\begin{equation} \label{eq:8}
+  P^m_{l+2}(\cos{\theta}) = \frac{(2l+3)\cos{\theta}P^m_{l+1} - (l+m+1)P^m_{l}}{l-m+2}
+\end{equation}
+
+\section{Iterative computation of $R^m_l$}
+
+From (\ref{eq:2}):
+
+\begin{equation}
+  R^{m}_{m} = (-1)^{m} \frac{1}{(2m)!} r^m P^m_m e^{i m \phi}
+\end{equation}
+
+and
+
+\begin{equation}
+  R^{m+1}_{m+1} = (-1)^{m+1} \frac{1}{(2m+2)!} r^{m+1} P^{m+1}_{m+1} e^{i (m+1) \phi}
+\end{equation}
+
+Using (\ref{eq:5}) we have:
+
+\begin{equation}
+  \begin{split}
+    R^{m+1}_{m+1} & = (-1)^{m+1} \frac{1}{(2m+2)!} r^{m+1} [-(2m+1) P^{m}_{m} \sin{\theta}] e^{i (m+1) \phi} \\
+    & = (-1)^m \frac{(2m+1)}{(2m+2)(2m+1)(2m)!} r^m P^m_m e^{im\phi} r \sin{\theta} e^{i\phi} \\
+    & = R^m_m \frac{1}{2m+2} r \sin{\theta} e^{i\phi}
+  \end{split}
+\end{equation}
+
+For standard spherical coordinates we have:
+\begin{equation}
+\begin{split}
+  x & = r \sin{\theta} \cos{\phi} \\
+  y & = r \sin{\theta} \sin{\phi} \\
+  z & = r \cos{\theta}
+\end{split}
+\end{equation}
+
+so
+\begin{equation}
+  \begin{split}
+    r \sin{\theta} e^{i\phi} & = r \sin{\theta} (\cos{\phi} + i \sin{\phi}) \\
+    & = r \sin{\theta} ( \frac{x}{r\sin{\theta}} + i \frac{y}{r\sin{\theta}}) \\
+    & = x+iy
+  \end{split}
+\end{equation}
+
+and finally
+
+\begin{equation} \label{eq:14}
+  \boxed{R^{m+1}_{m+1} = \frac{x+iy}{2(m+1)} R^m_m}
+\end{equation}
+
+Additionally, from (\ref{eq:2}) and (\ref{eq:4}) it trivially follows that:
+
+\begin{equation} \label{eq:15}
+  \boxed{R^0_0 = 1}
+\end{equation}
+
+Together these allow us to calculate iteratively all $R^m_m$.
+
+For $R^m_{m+1}$ similary we have:
+
+\begin{equation}
+  \begin{split}
+    R^m_{m+1} & = (-1)^m \frac{1}{(2m+1)!} r^{m+1} [(2m+1) P^{m}_{m} \cos{\theta}] e^{i m \phi} \\
+    & = (-1)^m \frac{(2m+1)}{(2m+1)(2m)!} r^m P^m_m e^{im\phi} r \cos{\theta} \\
+    & = R^m_m r \cos{\theta}
+  \end{split}
+\end{equation}
+
+The last part is just $z = r \cos{\theta}$, so:
+
+\begin{equation} \label{eq:17}
+  \boxed{R^m_{m+1} = z R^m_m}
+\end{equation}
+
+Next, we have from (\ref{eq:2}):
+
+\begin{equation}
+  \begin{split}
+    R^m_{l+2} & = (-1)^m \frac{1}{(l+m+2)!} r^{l+2} P^m_{l+2} e^{i m \phi}
+  \end{split}
+\end{equation}
+
+Pluggin in (\ref{eq:8}):
+
+\begin{equation}
+  \begin{split} \label{eq:19}
+    R^m_{l+2} & = (-1)^m \frac{1}{(l+m+2)!} r^{l+2} \left[ \frac{(2l+3)\cos{\theta}P^m_{l+1} - (l+m+1)P^m_{l}}{l-m+2} \right] e^{i m \phi} \\
+    R^m_{l+2} & = \left[ (-1)^m \frac{1}{(l+m+2)!} r^{l+2} \frac{(2l+3)\cos{\theta}P^m_{l+1}}{l-m+2} e^{i m \phi} \right] - \\
+    & - \left[ (-1)^m \frac{1}{(l+m+2)!} r^{l+2} \frac{(l+m+1)P^m_l}{l-m+2} e^{i m \phi}\right]
+  \end{split}
+\end{equation}
+
+The first term in (\ref{eq:19}) is:
+
+\begin{equation}
+  \begin{split}
+    A & = (-1)^m \frac{1}{(l+m+2)!} r^{l+2} \frac{(2l+3)\cos{\theta}P^m_{l+1}}{l-m+2} e^{i m \phi} \\
+    & = \frac{(2l+3)}{\left( \left(l+2\right) + m \right)\left( \left(l+2\right) - m \right)} (-1)^m \frac{1}{(l+m+1)!} r^{l+1} P^m_{l+1} e^{im\phi} z \\
+    & = \frac{(2l+3) z R^m_{l+1} }{(l+2)^2 - m^2}
+  \end{split}
+\end{equation}
+
+The second term in (\ref{eq:19}) is:
+
+\begin{equation}
+  \begin{split}
+    B & = (-1)^m \frac{1}{(l+m+2)!} r^{l+2} \frac{(l+m+1)P^m_l}{l-m+2} e^{i m \phi} \\
+    & = \frac{1}{\left( \left(l+2\right) + m \right)\left( \left(l+2\right) - m \right)} (-1)^m \frac{1}{(l+m)!} r^l P^m_l e^{im\phi} r^2\\
+    & = \frac{ r^2 R^m_l }{(l+2)^2 - m^2}
+  \end{split}
+\end{equation}
+
+Finally, we have:
+
+\begin{equation}
+R^m_{l+2} = \frac{1}{(l+2)^2-m^2} \left[ (2l+3) z R^m_{l+1} - r^2 R^m_l \right]
+\end{equation}
+
+We can also rewrite this as
+
+\begin{equation} \label{eq:23}
+\boxed{R^m_l = \frac{1}{l^2-m^2} \left[ (2l-1) z R^m_{l-1} - r^2 R^m_{l-2} \right]}
+\end{equation}
+
+which is the form used in the implementation.
+
+Together the four equations (\ref{eq:14}), (\ref{eq:15}), (\ref{eq:17}) and (\ref{eq:23}) allow us to calculate all needed $R^m_m$ iteratively and efficiently.
+
+
+\section{Iterative computation of $I^m_l$}
+
+From (\ref{eq:3}):
+
+\begin{equation}
+  I^{m}_{m} = (-1)^{m} \frac{1}{r^{m+1}} P^m_m e^{i m \phi}
+\end{equation}
+
+and
+
+\begin{equation}
+  I^{m+1}_{m+1} = (-1)^{m+1} \frac{1}{r^{m+2}} P^{m+1}_{m+1} e^{i (m+1) \phi}
+\end{equation}
+
+Using (\ref{eq:5}) we have:
+
+\begin{equation}
+  \begin{split}
+    I^{m+1}_{m+1} & = (-1)^{m+1} \frac{1}{r^{m+2}} \left[  -(2m+1) \sin{\theta} P^m_m \right] e^{i (m+1) \phi}  \\
+    & = (-1)^m \frac{1}{r^{m+1}} P^m_m e^{i m \phi} (2m+1) \frac{1}{r} \sin{\theta} e^{i\phi} \\
+    & = I^m_m (2m+1) \frac{x+iy}{r^2}
+  \end{split}
+\end{equation}
+
+So
+
+\begin{equation} \label{eq:27}
+  \boxed{I^{m+1}_{m+1} = (2m+1) \frac{x+iy}{r^2} I^m_m}
+\end{equation}
+
+Additionally, from (\ref{eq:3}) and (\ref{eq:4}) it trivially follows that:
+
+\begin{equation} \label{eq:28}
+  \boxed{I^0_0 = \frac{1}{r}}
+\end{equation}
+
+Together these allow us to calculate iteratively all $I^m_m$.
+
+For $I^m_{m+1}$ similary we have:
+
+\begin{equation}
+  \begin{split}
+    I^m_{m+1} & = (-1)^m \frac{1}{r^{m+2}} P^m_{m+1} e^{i m \phi} \\
+    & = (-1)^m \frac{1}{r^{m+2}} \left[   (2m+1) \cos{\theta} P^m_m \right] e^{i m \phi} \\
+    & = (-1)^m \frac{1}{r^{m+1}} P^m_m e^{i m \phi} (2m+1) \cos{\theta} \frac{1}{r}  \\
+  \end{split}
+\end{equation}
+
+So:
+
+\begin{equation} \label{eq:30}
+  \boxed{I^m_{m+1} = (2m+1) \frac{z}{r^2} I^m_m}
+\end{equation}
+
+Next, we have from (\ref{eq:3}):
+
+\begin{equation}
+  \begin{split}
+    I^m_{l+2} & = (-1)^m (l+2-m)! \frac{1}{r^{l+3}} P^m_{l+2} e^{i m \phi}
+  \end{split}
+\end{equation}
+
+Pluggin in (\ref{eq:8}):
+
+\begin{equation}
+  \begin{split} \label{eq:32}
+    I^m_{l+2} & = (-1)^m (l+2-m)! \frac{1}{r^{l+3}} \left[ \frac{(2l+3)\cos{\theta}P^m_{l+1} - (l+m+1)P^m_{l}}{l-m+2} \right] e^{i m \phi} \\
+    I^m_{l+2} & = \left[ (-1)^m (l+2-m)! \frac{1}{r^{l+3}} \frac{(2l+3)\cos{\theta}P^m_{l+1}}{l-m+2} e^{i m \phi} \right] - \\
+    & - \left[ (-1)^m (l+2-m)! \frac{1}{r^{l+3}} \frac{(l+m+1)P^m_l}{l-m+2} e^{i m \phi}\right]
+  \end{split}
+\end{equation}
+
+The first term in (\ref{eq:32}) is:
+
+\begin{equation}
+  \begin{split}
+    C & = (-1)^m (l+2-m)! \frac{1}{r^{l+3}} \frac{(2l+3)\cos{\theta}P^m_{l+1}}{l-m+2} e^{i m \phi} \\
+    & = (-1)^m (l+1-m)! \frac{1}{r^{l+2}} P^m_{l+1} e^{im\phi} (2l+3) \frac{1}{r} \cos{\theta} \\
+    & = (2l+3) \frac{z}{r^2} I^m_{l+1}
+  \end{split}
+\end{equation}
+
+The second term in (\ref{eq:32}) is:
+
+\begin{equation}
+  \begin{split}
+    D & = (-1)^m (l+2-m)! \frac{1}{r^{l+3}} \frac{(l+1+m)P^m_l}{l+2-m} e^{i m \phi} \\
+    & = (-1)^m (l-m)! \frac{1}{r^{l+1}} P^m_l e^{i m \phi} \left[(l+1)^2-m^2\right] \frac{1}{r^2}  \\
+    & = \left[(l+1)^2-m^2\right] \frac{1}{r^2} I^m_l
+  \end{split}
+\end{equation}
+
+Finally, we have:
+
+\begin{equation}
+I^m_{l+2} = \frac{1}{r^2} \left[ (2l+3) z I^m_{l+1} - \left[(l+1)^2-m^2\right] I^m_l \right]
+\end{equation}
+
+We can also rewrite this as
+
+\begin{equation} \label{eq:36}
+\boxed{I^m_l = \frac{1}{r^2} \left[ (2l-1) z I^m_{l-1} - \left[(l-1)^2-m^2\right] I^m_{l-2} \right]}
+\end{equation}
+
+which is the form used in the implementation.
+
+Together the four equations (\ref{eq:27}), (\ref{eq:28}), (\ref{eq:30}) and (\ref{eq:36}) allow us to calculate all needed $I^m_m$ iteratively and efficiently.
+
+
+\begin{thebibliography}{9}
+\bibitem{dehnen} Dehnen, W. \textit{A fast multipole method for stellar dynamics.} Comput. Astrophys. 1, 1 (2014). \texttt{https://doi.org/10.1186/s40668-014-0001-7}
+\bibitem{alp} \texttt{https://en.wikipedia.org/wiki/Associated\_Legendre\_polynomials}  
+\end{thebibliography}
+
+\end{document}
+

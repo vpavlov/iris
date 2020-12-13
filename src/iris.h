@@ -63,21 +63,21 @@ namespace ORG_NCSA_IRIS {
 	//   - distributed mode: every node is either client XOR server
 
 	// Use this constructor when for shared mode and rank 0 is the leader
-	iris(MPI_Comm in_uber_comm);
+	iris(int in_which_solver, MPI_Comm in_uber_comm);
 
 	// Use this constructor when for shared mode and you want to specify
 	// a different leader
-	iris(MPI_Comm in_uber_comm, int in_leader);
+	iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader);
 
 	// Use this constructor when in distributed mode and the local leader
 	// of each group is its respective rank 0
-	iris(int in_client_size, int in_server_size,
+	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
 
 	// Use this constructor when in distributed  mode and you want to
 	// specify a local leader != 0
-	iris(int in_client_size, int in_server_size,
+	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm, int in_local_leader,
 	     MPI_Comm in_uber_comm, int in_remote_leader);
 
@@ -183,6 +183,8 @@ namespace ORG_NCSA_IRIS {
 
 	iris_real alpha() { return m_alpha; };
 
+	int num_local_atoms();
+	
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
 	void process_event(struct event_t *in_event);
@@ -211,11 +213,12 @@ namespace ORG_NCSA_IRIS {
 	void initial_alpha_estimate(iris_real *out_alpha, iris_real *out_eps);
 	int  h_estimate(int dim, iris_real alpha, iris_real eps);
 	bool good_factor_quality(int n);
-	class poisson_solver *get_solver();
+	class solver *get_solver();
 
 	
     public:
 	int m_which_solver;            // P3M, CG, ...
+	int m_order;                   // approximation order (different for different solvers)
 	int m_client_size;             // # of client nodes
 	int m_server_size;             // # of server nodes
 	int m_role;                    // is this node client or server or both
@@ -226,6 +229,10 @@ namespace ORG_NCSA_IRIS {
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 
+	std::map<int, int> m_ncharges;           // per sending rank
+	std::map<int, iris_real *> m_charges;    // per sending rank
+	std::map<int, iris_real *> m_forces;     // per recv rank
+	
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
 	bool                   m_compute_global_virial;  // whether to compute global long-range virial
 	iris_real              m_Ek;  // E(k) contribution to the global energy (from this process only)
@@ -259,7 +266,7 @@ namespace ORG_NCSA_IRIS {
 	class proc_grid       *m_proc_grid;   // MPI Comm related stuff
 	class mesh            *m_mesh;        // Computational mesh
 	class charge_assigner *m_chass;       // Charge assignmen machinery
-	class poisson_solver  *m_solver;      // The Poisson equation solver itself
+	class solver          *m_solver;      // The Poisson equation solver itself
 	class units           *m_units;       // Units system to use
     private:
 	volatile bool m_quit;  // quit the main loop

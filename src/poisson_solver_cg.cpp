@@ -49,7 +49,7 @@ using namespace ORG_NCSA_IRIS;
 #define _DEFAULT_NSIGMAS 6.0  // default total width of Gaussian in # of σ's
 
 poisson_solver_cg::poisson_solver_cg(class iris *obj)
-    : poisson_solver(obj), m_nsigmas(0), m_gauss_width{0, 0, 0},
+    : solver(obj), m_nsigmas(0), m_gauss_width{0, 0, 0},
       m_ext2_size{0, 0, 0}, m_conv1(NULL), m_conv2(NULL),
       m_Gx_haloex(NULL), m_Gy_haloex(NULL), m_Gz_haloex(NULL),
       m_stencil(NULL), 
