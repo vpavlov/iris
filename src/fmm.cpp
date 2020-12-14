@@ -58,7 +58,7 @@ fmm::fmm(iris *obj):
     m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
     m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
-    m_Mwin(MPI_WIN_NULL)
+    m_Mwin(MPI_WIN_NULL),m_one_sided(false)
 {
 }
 
@@ -95,6 +95,11 @@ void fmm::commit()
     if(m_dirty) {
 	m_order = m_iris->m_order;  // if p = 2, we expand multipoles until Y_2^2
 
+	solver_param_t p1 = m_iris->get_solver_param(IRIS_SOLVER_FMM_ONE_SIDED);
+	if(p1.i) {
+	    m_one_sided = true;
+	}
+	
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);
 	int ncrit = t.i;
@@ -126,10 +131,12 @@ void fmm::commit()
 	memory::destroy_2d(m_M);
 	memory::create_2d(m_M, m_tree_size, 2*m_nterms, true);
 
-	if(m_Mwin != MPI_WIN_NULL) {
-	    MPI_Win_free(&m_Mwin);
+	if(m_one_sided) {
+	    if(m_Mwin != MPI_WIN_NULL) {
+		MPI_Win_free(&m_Mwin);
+	    }
+	    MPI_Win_create(&(m_M[0][0]), m_tree_size*2*m_nterms*sizeof(iris_real), sizeof(iris_real), MPI_INFO_NULL, m_local_comm->m_comm, &m_Mwin);
 	}
-	MPI_Win_create(&(m_M[0][0]), m_tree_size*2*m_nterms*sizeof(iris_real), sizeof(iris_real), MPI_INFO_NULL, m_local_comm->m_comm, &m_Mwin);
 	
 	
 	memory::destroy_2d(m_L);
@@ -436,18 +443,20 @@ void fmm::exchange_LET()
     	exchange_p2p_halo();
     	tm1.stop();
     	m_logger->info("FMM: Exchange P2P Halo %lf/%lf (%.2lf%% util)", tm1.read_wall(), tm1.read_cpu(), (tm1.read_cpu() * 100.0) /tm1.read_wall());
-	
-    	timer tm2;
-    	tm2.start();
-    	exchange_rest_of_LET();
-    	tm2.stop();
-    	m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
-	
-    	timer tm3;
-    	tm3.start();
-    	recalculate_LET();
-    	tm3.stop();
-    	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+
+	if(!m_one_sided) {
+	    timer tm2;
+	    tm2.start();
+	    exchange_rest_of_LET();
+	    tm2.stop();
+	    m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+	    
+	    timer tm3;
+	    tm3.start();
+	    recalculate_LET();
+	    tm3.stop();
+	    m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+	}
 	
     }
     //print_tree("Xcell", m_xcells, 0);

@@ -160,6 +160,7 @@ namespace ORG_NCSA_IRIS {
 	int m_p2m_alien_count;
 	int m_m2m_alien_count;
 
+	bool m_one_sided;
 	MPI_Win m_Mwin;
     };
 }

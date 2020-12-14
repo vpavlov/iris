@@ -376,6 +376,7 @@ int main(int argc, char **argv)
 	printf("Usage: %s <path-to-bob-trj dir> <mode>\n", argv[0]);
 	printf("  mode = 0 is all nodes are client/server\n");
 	printf("  mode = 1 is half nodes are clients, half nodes are server\n");
+	printf("  mode = 2 is like 0, but with one-sided LET exchange\n");
 	exit(-1);
     }
 
@@ -410,7 +411,8 @@ int main(int argc, char **argv)
     int client_size;
     int server_size;
 
-    if(mode == 0) {
+    bool one_sided = false;
+    if(mode == 0 || mode == 2) {
 	// In mode 0, all nodes are both client and server.
 	// Thus client_size  = size and local_comm is just MPI_COMM_WORLD
 	client_size = size;
@@ -420,6 +422,9 @@ int main(int argc, char **argv)
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
 	x = new iris(IRIS_SOLVER_FMM, MPI_COMM_WORLD);
 	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
+	if(mode == 2) {
+	    one_sided = true;
+	}
     }else if(mode == 1) {
 	// split the world communicator in two groups:
 	// - client group: the one that "uses" IRIS. It provides charge coords
@@ -451,7 +456,7 @@ int main(int argc, char **argv)
 	x = new iris(IRIS_SOLVER_FMM, client_size, server_size, role, local_comm,
 		     MPI_COMM_WORLD, remote_leader);
     }else {
-	printf("Unknown mode. Only 0 and 1 are supported\n");
+	printf("Unknown mode. Only 0, 1 and 2 are supported\n");
 	exit(-1);
     }
 
@@ -498,6 +503,12 @@ int main(int argc, char **argv)
 
     pade.i = 2;
     x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
+
+    if(one_sided) {
+	solver_param_t one_sided;
+	one_sided.i = 1;
+	x->set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, one_sided);
+    }
     
     x->set_order(6);
     x->set_mesh_size(128, 128, 128);
