@@ -248,8 +248,8 @@ void fmm::upward_pass_in_local_tree()
 {
     timer tm;
     tm.start();
-
     memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+    memset(&(m_L[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);
@@ -534,16 +534,6 @@ void fmm::dual_tree_traversal()
 	    }
 	}
     }
-
-    int used = 0;
-    for(int i=0;i<m_tree_size;i++) {
-	if(m_xcells[i].flags & IRIS_FMM_CELL_USED) {
-	    used++;
-	}
-    }
-    
-    m_logger->info("USED: %d/%d", used, m_tree_size);
-    
     
     eval_l2l(m_cells);
     eval_l2p(m_cells);
@@ -619,8 +609,6 @@ void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 {
-    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
-    
     for(int i=0;i<m_cells[destID].num_children;i++) {
 	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
 	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
@@ -690,9 +678,6 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
-    
-    m_xcells[srcID].flags |= IRIS_FMM_CELL_USED;
-    
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
 
     iris_real sx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
