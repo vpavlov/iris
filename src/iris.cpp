@@ -751,11 +751,14 @@ bool iris::handle_charges(event_t *event)
 bool iris::handle_commit_charges()
 {
     m_logger->trace("handle_commit_charges()");
+    
     if(m_mesh != NULL) {
 	m_mesh->assign_charges();
 	m_mesh->exchange_rho_halo();
     }
-    solve();
+    
+    m_solver->solve();
+    
     bool ad = false;
     if(m_which_solver == IRIS_SOLVER_P3M) {
 	m_mesh->exchange_field_halo();
@@ -763,7 +766,7 @@ bool iris::handle_commit_charges()
 	m_mesh->exchange_phi_halo();
 	ad = true;
     }else if(m_which_solver == IRIS_SOLVER_FMM) {
-	// TODO: what to do with the forces
+	// do nothing -- the FMM solver sends back the forces itself
     }else {
        	throw std::logic_error("Don't know how to handle forces for this solver!");
     }
@@ -790,91 +793,6 @@ void iris::set_rhs(rhs_fn_t fn)
     	}
     }
     
-}
-
-void iris::solve()
-{
-  static int temp_step;
-    if(m_compute_global_energy) {
-	m_Ek = 0.0;
-    }
-
-    if(m_compute_global_virial) {
-	m_virial[0] = m_virial[1] = m_virial[2] =
-	    m_virial[3] = m_virial[4] = m_virial[5] = 0.0;
-    }
-
-    m_logger->trace("Server solve step %d ===", temp_step++);
-
-    m_solver->solve();
-
-    iris_real post_corr = 0.5 *
-	m_domain->m_global_box.xsize *
-	m_domain->m_global_box.ysize *
-	m_domain->m_global_box.zsize *
-	m_units->ecf;
-    
-    if(m_compute_global_energy) {
-	m_Ek *= post_corr;
-    }
-    
-    if(m_compute_global_virial) {
-	for(int i=0;i<6;i++) {
-	    m_virial[i] *= post_corr;
-	}
-    }
-
-    // iris_real phi_sum = 0.0;
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		phi_sum += m_mesh->m_phi[i][j][k];
-    // 	    }
-    // 	}
-    // }
-
-    // phi_sum /= h3;
-
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		m_mesh->m_phi[i][j][k] -= phi_sum;
-    // 	    }
-    // 	}
-    // }
-    
-    // iris_real ener = 0.0;
-    // iris_real h3 = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		ener += m_mesh->m_rho[i][j][k] * h3 * m_mesh->m_phi[i][j][k];
-    // 	    }
-    // 	}
-    // }
-    // m_logger->info("ener = %g | %g [%s]", ener*0.5, ener*0.5*m_units->ecf, m_units->energy_unit);
-
-    // if(m_compute_global_energy) {
-    // 	iris_real etot;
-    // 	iris_real volume =
-    // 	    m_domain->m_global_box.xsize * 
-    // 	    m_domain->m_global_box.ysize *
-    // 	    m_domain->m_global_box.zsize;
-	
-    // 	MPI_Allreduce(&m_Ek, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
-    // 	m_Ek = etot;
-    // 	m_logger->info("etot1 = %g", m_Ek);
-    // 	m_Ek *= 0.5 * volume;
-
-    // 	m_logger->info("E(k) = %g | %g", m_Ek, m_Ek * m_units->ecf);
-    // 	iris_real Es = -m_alpha * m_mesh->m_q2tot / _SQRT_PI;
-    // 	m_logger->info("E(s) = %g", Es);
-    // 	m_Ek += Es + 
-    // 	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
-    // 	m_logger->info("etot3 = %g", m_Ek);
-    // 	m_Ek *= m_units->ecf;
-    // 	m_logger->info("E(total) = %f", m_Ek);
-    // }
 }
 
 void iris::clear_wff()
@@ -968,14 +886,20 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 
 void iris::perform_get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr)
 {
-    iris_real volume =
-	m_domain->m_global_box.xsize * 
-	m_domain->m_global_box.ysize *
-	m_domain->m_global_box.zsize;
-
-    MPI_Allreduce(&m_Ek, out_Ek, 1, IRIS_REAL, MPI_SUM, server_comm());
-    *out_Es = -m_alpha * m_mesh->m_q2tot * m_units->ecf / _SQRT_PI;
-    *out_Ecorr = _PI2 * m_mesh->m_qtot * m_mesh->m_qtot * m_units->ecf / (m_alpha * m_alpha * volume);
+    if(m_which_solver != IRIS_SOLVER_FMM) {
+	iris_real volume =
+	    m_domain->m_global_box.xsize * 
+	    m_domain->m_global_box.ysize *
+	    m_domain->m_global_box.zsize;
+	
+	MPI_Allreduce(&m_Ek, out_Ek, 1, IRIS_REAL, MPI_SUM, server_comm());
+	*out_Es = -m_alpha * m_mesh->m_q2tot * m_units->ecf / _SQRT_PI;
+	*out_Ecorr = _PI2 * m_mesh->m_qtot * m_mesh->m_qtot * m_units->ecf / (m_alpha * m_alpha * volume);
+    }else {
+	MPI_Allreduce(&m_Ek, out_Ek, 1, IRIS_REAL, MPI_SUM, server_comm());
+	*out_Es = 0;
+	*out_Ecorr = 0;
+    }
 }
 
 void iris::get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr)

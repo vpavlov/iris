@@ -209,47 +209,113 @@ void fmm::handle_box_resize()
     generate_cell_meta();
 }
 
+void fmm::compute_energy_and_virial()
+{
+    iris_real ener = 0.0;
+    for(int i=0;i<m_nparticles;i++) {
+    	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
+    }
+    m_iris->m_Ek = ener * 0.5 * m_units->ecf;
+    // TODO: calculate virial in m_iris->m_virial[0..5]
+}
+
+void fmm::send_forces_to(int peer, int start, int end, bool include_energy_virial)
+{
+    MPI_Comm comm = m_iris->client_comm();
+    int ncharges = end - start;
+    int size = 7*sizeof(iris_real) + ncharges*4*sizeof(iris_real);
+    iris_real *forces = (iris_real *)memory::wmalloc(size);
+    
+    if(include_energy_virial) {
+	forces[0] = m_iris->m_Ek;
+	forces[1] = m_iris->m_virial[0];
+	forces[2] = m_iris->m_virial[1];
+	forces[3] = m_iris->m_virial[2];
+	forces[4] = m_iris->m_virial[3];
+	forces[5] = m_iris->m_virial[4];
+	forces[6] = m_iris->m_virial[5];
+    }else {
+	forces[0] = 0.0;
+	forces[1] = 0.0;
+	forces[2] = 0.0;
+	forces[3] = 0.0;
+	forces[4] = 0.0;
+	forces[5] = 0.0;
+	forces[6] = 0.0;
+    }
+    
+    m_iris->m_forces[peer] = forces;
+
+    for(int i=start;i<end;i++) {
+	iris_real factor = m_particles[i].xyzq[3] * m_units->ecf;  // q * 1/4pieps
+
+	forces[7 + i*4 + 0] = m_particles[i].index + 0.33333333;
+	forces[7 + i*4 + 1] = factor * m_particles[i].tgt[1];
+	forces[7 + i*4 + 2] = factor * m_particles[i].tgt[2];
+	forces[7 + i*4 + 3] = factor * m_particles[i].tgt[3];
+    }
+
+    MPI_Request req;
+    m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);
+    MPI_Request_free(&req);
+}
+
+void fmm::send_back_forces()
+{
+    bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
+    
+    sort_back_particles(m_particles, m_nparticles);
+    int prev_rank = m_particles[0].rank;
+    int start = 0;
+    for(int i=0;i<m_nparticles;i++) {
+	if(m_particles[i].rank != prev_rank) {
+	    send_forces_to(prev_rank, start, i, include_energy_virial);
+	    include_energy_virial = false;
+	    start = i;
+	    prev_rank = m_particles[i].rank;
+	}
+    }
+    send_forces_to(prev_rank, start, m_nparticles, include_energy_virial);
+}
+
 void fmm::solve()
 {
+    m_logger->trace("FMM solve() start");
+
+    
+    if(m_iris->m_compute_global_energy) {
+	m_iris->m_Ek = 0.0;
+    }
+
+    if(m_iris->m_compute_global_virial) {
+	m_iris->m_virial[0] =
+	    m_iris->m_virial[1] =
+	    m_iris->m_virial[2] =
+	    m_iris->m_virial[3] =
+	    m_iris->m_virial[4] =
+	    m_iris->m_virial[5] = 0.0;
+    }
+
+    memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+    memset(&(m_L[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
+
     
     upward_pass_in_local_tree();
     exchange_LET();
     dual_tree_traversal();
+    
+    compute_energy_and_virial();
+    send_back_forces();
 
     m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
-
-    // sort_back_particles(m_particles, m_nparticles);
-
-    // iris_real ener = 0.0;
-    // iris_real fx_sum = 0.0;
-    // iris_real fy_sum = 0.0;
-    // iris_real fz_sum = 0.0;
-    // for(int i=0;i<m_nparticles;i++) {
-    // 	iris_real fx = m_particles[i].tgt[1] * m_particles[i].xyzq[3];
-    // 	iris_real fy = m_particles[i].tgt[2] * m_particles[i].xyzq[3];
-    // 	iris_real fz = m_particles[i].tgt[3] * m_particles[i].xyzq[3];
-
-    // 	fx_sum += fx;
-    // 	fy_sum += fy;
-    // 	fz_sum += fz;
-	
-    // 	m_logger->info("F[%d] = (%f, %f, %f)", m_particles[i].index, fx, fy, fz);
-    // 	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
-    // }
-    // m_logger->info("Ftot = (%f, %f, %f)", fx_sum, fy_sum, fz_sum);
-    // m_logger->info("FMM Local Energy: %f", ener / 2);
-    
-    MPI_Barrier(m_iris->server_comm());
-    exit(-1);
 }
 
 void fmm::upward_pass_in_local_tree()
 {
     timer tm;
     tm.start();
-    memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
-    memset(&(m_L[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);

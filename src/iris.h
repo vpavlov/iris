@@ -173,8 +173,6 @@ namespace ORG_NCSA_IRIS {
 	iris_real *receive_forces(int **out_count, iris_real *out_Ek, iris_real *out_virial);
 	void get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
 
-	void solve();
-
 	void quit();
 
 	// Helpers used in internode communication

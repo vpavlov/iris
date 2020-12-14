@@ -110,7 +110,10 @@ namespace ORG_NCSA_IRIS {
 	void dual_tree_traversal();
 	void traverse_queue(int ix, int iy, int iz);
 	void interact(int srcID, int destID, int ix, int iy, int iz);
-
+	void compute_energy_and_virial();
+	void send_forces_to(int peer, int start, int end, bool include_energy_virial);
+	void send_back_forces();
+	
 	/*
 	
 	

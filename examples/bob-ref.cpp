@@ -157,9 +157,9 @@ int main()
 			iris_real e = q * qi / ri;
 			iris_real ee = e / ri2;
 			
-			fx += ee * dx;
-			fy += ee * dy;
-			fz += ee * dz;
+			fx += ee * dx * 138.93545751728743;
+			fy += ee * dy * 138.93545751728743;
+			fz += ee * dz * 138.93545751728743;
 			ener += e;
 		    }
 		}
@@ -171,5 +171,5 @@ int main()
 	fz_tot += fz;
     }
     printf("Ftot = (%f, %f, %f)\n", fx_tot, fy_tot, fz_tot);
-    printf("Ener = %f\n", ener*0.5);
+    printf("Ener = %f [KJ/mol]\n", ener*0.5*138.93545751728743);
 }

@@ -677,8 +677,21 @@ void poisson_solver_p3m::calculate_virial_coeff()
 
 void poisson_solver_p3m::solve()
 {
-    m_logger->trace("Solving Poisson's Equation now");
+    m_logger->trace("P3M solve() start");
 
+    if(m_iris->m_compute_global_energy) {
+	m_iris->m_Ek = 0.0;
+    }
+
+    if(m_iris->m_compute_global_virial) {
+	m_iris->m_virial[0] =
+	    m_iris->m_virial[1] =
+	    m_iris->m_virial[2] =
+	    m_iris->m_virial[3] =
+	    m_iris->m_virial[4] =
+	    m_iris->m_virial[5] = 0.0;
+    }
+    
     m_remap->perform(&(m_mesh->m_rho[0][0][0]), m_work2, m_work1);
     m_fft1->compute_fw(m_work2, m_work1);
 
@@ -700,4 +713,20 @@ void poisson_solver_p3m::solve()
     //////////////// we do not need this ////////////////////////
     // m_fft2->compute_bk(m_work1, &(m_mesh->m_phi[0][0][0])); //
     /////////////////////////////////////////////////////////////
+    
+    iris_real post_corr = 0.5 *
+	m_domain->m_global_box.xsize *
+	m_domain->m_global_box.ysize *
+	m_domain->m_global_box.zsize *
+	m_units->ecf;
+    
+    if(m_iris->m_compute_global_energy) {
+	m_iris->m_Ek *= post_corr;
+    }
+    
+    if(m_iris->m_compute_global_virial) {
+	for(int i=0;i<6;i++) {
+	    m_iris->m_virial[i] *= post_corr;
+	}
+    }
 }
