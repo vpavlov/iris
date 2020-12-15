@@ -2,6 +2,8 @@
   (+ (/ (* l (1+ l)) 2) m))
 
 (defun mult-get (mult l m)
+  (when (> (abs m) l)
+    (return-from mult-get 0))
   (if (< m 0)
       (* (conjugate (nth (mult-idx l (- m)) mult)) (expt -1 m))
       (nth (mult-idx l m) mult)))
@@ -27,7 +29,7 @@
     (when (= m l)
       (return-from I^m_l (* (+ m m -1)
 			    (/ (complex x y) (* r r))
-			    (I^m_l (1- m) (1- m) x y z))))
+			    (I^m_l (- m 1) (- m 1) x y z))))
     (when (= l (1+ m))
       (return-from I^m_l (* (+ m m 1)
 			    (/ z (* r r))
@@ -70,8 +72,11 @@
 	  (loop for m from 0 to n collect
 	       (loop for k from 0 to (- p n) sum
 		    (loop for l from (- k) to k sum
-			 (* (conjugate (mult-get mult k l))
-			    (mult-get tmp (+ n k) (+ m l))))))))))
+			 (progn
+			   (format t "m ~a n ~a k ~a l ~a (n+k) ~a (m+l) ~a: ~a * ~a = ~a~%" n m k l (+ n k) (+ m l) (conjugate (mult-get mult k l)) (mult-get tmp (+ n k) (+ m l)) (* (conjugate (mult-get mult k l))
+			      (mult-get tmp (+ n k) (+ m l))))
+			   (* (conjugate (mult-get mult k l))
+			      (mult-get tmp (+ n k) (+ m l)))))))))))
      
 
 ;; Eq. 3e
@@ -89,3 +94,24 @@
   
 	    
     
+
+(defun p2p (x1 y1 z1 q1 x2 y2 z2 q2)
+  (let* ((dx (- x1 x2))
+	 (dy (- y1 y2))
+	 (dz (- z1 z2))
+	 (ri^2 (+ (* dx dx) (* dy dy) (* dz dz)))
+	 (ri (sqrt ri^2))
+	 (e (/ (* q1 q2) ri))
+	 (ee (/ e ri^2))
+	 (fx (* ee dx))
+	 (fy (* ee dy))
+	 (fz (* ee dz)))
+    (format t "φ = ~a, f = (~a, ~a, ~a)~%" (/ (* e q2) ri) fx fy fz)))
+
+(defun e2e (p)
+  (l2l -0.1435 -0.1435 -0.1435 p
+       (l2l 0.93395 0.093395 0.93395 p
+	    (m2l 9.3395 9.3395 9.3395 p
+		 (m2m -1.8679 -1.8679 -1.8679 p
+		      (m2m -0.93395 -0.93395 -0.93395 p
+			   (p2m -0.43395 -0.43395 -0.43395 -1 p)))))))
