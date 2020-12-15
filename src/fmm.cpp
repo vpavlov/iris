@@ -98,6 +98,7 @@ void fmm::commit()
 	solver_param_t p1 = m_iris->get_solver_param(IRIS_SOLVER_FMM_ONE_SIDED);
 	if(p1.i) {
 	    m_one_sided = true;
+	    throw std::logic_error("One-sided FMM not fully implemented!");
 	}
 	
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
