@@ -263,7 +263,7 @@ void fmm::send_back_forces()
 void fmm::solve()
 {
     m_logger->trace("FMM solve() start");
-    
+
     if(m_iris->m_compute_global_energy) {
 	m_iris->m_Ek = 0.0;
     }

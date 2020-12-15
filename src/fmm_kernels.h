@@ -59,6 +59,11 @@ namespace ORG_NCSA_IRIS {
     inline void multipole_get(iris_real *M, int l, int m, iris_real *out_re, iris_real *out_im) {
 	assert(l >= 0);
 	if(m < 0) {
+	    if(-m > l) {
+		*out_re = 0.0;
+		*out_im = 0.0;
+		return;
+	    }
 	    int i = multipole_index(l, -m);
 	    iris_real a = M[i];
 	    iris_real b = M[i+1];
@@ -70,6 +75,11 @@ namespace ORG_NCSA_IRIS {
 	    *out_re = a;
 	    *out_im = b;
 	}else {
+	    if(m > l) {
+		*out_re = 0.0;
+		*out_im = 0.0;
+		return;
+	    }
 	    int i = multipole_index(l, m);
 	    *out_re = M[i];
 	    *out_im = M[i+1];
