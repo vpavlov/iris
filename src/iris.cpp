@@ -592,7 +592,6 @@ void iris::process_event(event_t *event)
     switch(event->tag) {
 
     case IRIS_TAG_SET_GBOX_FANOUT:
-    case IRIS_TAG_GET_LBOXES_FANOUT:
     case IRIS_TAG_COMMIT_FANOUT:
     case IRIS_TAG_QUIT_FANOUT:
     case IRIS_TAG_GGE_FANOUT:
