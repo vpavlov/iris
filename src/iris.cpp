@@ -210,6 +210,8 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	m_logger->info("This node is a leader; other leader's local rank = %d", m_other_leader);
     }
 
+    memory::create_1d(m_ncharges, m_client_size, true);
+
     // default value for P3M FFT3D remap -- use collective comm
     solver_param_t def_param;
     def_param.i = 1;
@@ -284,6 +286,8 @@ iris::~iris()
 
     delete m_local_comm;
     delete m_uber_comm;
+
+    memory::destroy_1d(m_ncharges);
 }
 
 void iris::config_auto_tune(int in_natoms, iris_real in_qtot2,
@@ -456,7 +460,9 @@ void iris::perform_commit()
 	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
 	    memory::wfree(it->second);
 	}
-	m_ncharges.clear();
+
+	memset(m_ncharges, 0, m_client_size*sizeof(int));
+	
 	m_charges.clear();
 	m_forces.clear();	
 	
@@ -492,6 +498,30 @@ void iris::get_local_boxes(box_t<iris_real> *out_local_boxes)
     }
 
     MPI_Bcast(out_local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
+}
+
+// this one is called by all clients
+void iris::get_ext_boxes(box_t<iris_real> *out_ext_boxes)
+{
+    ASSERT_CLIENT("get_ext_boxes");
+
+    int size = sizeof(box_t<iris_real>) * m_server_size;
+
+    if(is_both()) {
+	memcpy(out_ext_boxes, m_solver->get_ext_boxes(), size);
+	return;
+    }
+ 
+    if(is_leader()) {
+	// the client leader sends to the server leader request to get the local boxes
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_GET_EBOXES, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(out_ext_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_EBOXES_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Bcast(out_ext_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
 }
 
 void iris::commit()
@@ -589,6 +619,10 @@ void iris::process_event(event_t *event)
 	hodl = handle_get_lboxes(event);
 	break;
 
+    case IRIS_TAG_GET_EBOXES:
+	hodl = handle_get_eboxes(event);
+	break;
+	
     case IRIS_TAG_COMMIT:
 	hodl= handle_commit(event);
 	break;
@@ -729,7 +763,7 @@ bool iris::handle_charges(event_t *event)
     }
 
     int ncharges = event->size / unit;
-    m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
+    m_logger->info("Received %d atoms from %d", ncharges, event->peer);
 
     m_ncharges[event->peer] = ncharges;
     m_charges[event->peer] = (iris_real *)event->data;
@@ -1195,6 +1229,13 @@ bool iris::handle_get_lboxes(event_t *in_event)
     return false;
 }
 
+bool iris::handle_get_eboxes(event_t *in_event)
+{
+    MPI_Send(m_solver->get_ext_boxes(), sizeof(box_t<iris_real>) * m_server_size, MPI_BYTE,
+	     m_other_leader, IRIS_TAG_GET_EBOXES_DONE, client_comm());
+    return false;
+}
+
 bool iris::handle_commit(event_t *in_event)
 {
     perform_commit();
@@ -1227,8 +1268,29 @@ bool iris::handle_get_global_energy(event_t *in_event)
 int iris::num_local_atoms()
 {
     int retval = 0;
-    for(auto it = m_ncharges.begin(); it != m_ncharges.end(); it++) {
-	retval += it->second;
+    for(int i=0;i<m_client_size;i++) {
+	int ncharges = m_ncharges[i];
+	iris_real *charges = m_charges[i];
+	for(int i=0;i<ncharges;i++) {
+	    if(charges[i*5+4] > 0) {
+		retval++;
+	    }
+	}
+    }
+    return retval;
+}
+
+int iris::num_halo_atoms()
+{
+    int retval = 0;
+    for(int i=0;i<m_client_size;i++) {
+	int ncharges = m_ncharges[i];
+	iris_real *charges = m_charges[i];
+	for(int i=0;i<ncharges;i++) {
+	    if(charges[i*5+4] < 0) {
+		retval++;
+	    }
+	}
     }
     return retval;
 }

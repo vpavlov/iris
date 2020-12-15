@@ -37,8 +37,8 @@ using namespace ORG_NCSA_IRIS;
 //
 int ORG_NCSA_IRIS::__xcompar_asc(const void *aptr, const void *bptr)
 {
-    xparticle_t *a = (xparticle_t *)aptr;
-    xparticle_t *b = (xparticle_t *)bptr;
+    particle_t *a = (particle_t *)aptr;
+    particle_t *b = (particle_t *)bptr;
     
     if(a->cellID > b->cellID) {
 	return 1;
@@ -54,8 +54,8 @@ int ORG_NCSA_IRIS::__xcompar_asc(const void *aptr, const void *bptr)
 //
 int ORG_NCSA_IRIS::__xcompar_desc(const void *aptr, const void *bptr)
 {
-    xparticle_t *a = (xparticle_t *)aptr;
-    xparticle_t *b = (xparticle_t *)bptr;
+    particle_t *a = (particle_t *)aptr;
+    particle_t *b = (particle_t *)bptr;
     
     if(a->cellID < b->cellID) {
 	return 1;

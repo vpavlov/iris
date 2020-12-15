@@ -45,20 +45,13 @@ namespace ORG_NCSA_IRIS {
     // atom (rank of the sender and its # in that sender's array) and a reference
     // to the cell (leaf) in which this particle resides.
     
-    // for alien particles we don't have rank/index, so just the xyzq[4] and cellID
-    struct xparticle_t {
+    struct particle_t {
 	iris_real xyzq[4];
 	int cellID;
-
-	xparticle_t(int dummy = 0) {}   // to satisfy the compiler (memory::create_1d)
-
-    };
-
-    struct particle_t : public xparticle_t {
 	int rank;           // from which rank this particle came ?
 	int index;          // # in m_charges{rank}
 	iris_real tgt[4];   // φ, Ex, Ey, Ez
-	particle_t(int dummy = 0): xparticle_t(0) {}
+	particle_t(int dummy = 0) {}
 
     };
 

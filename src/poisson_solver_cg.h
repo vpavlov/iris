@@ -43,6 +43,7 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 	void handle_box_resize() {};
+	box_t<iris_real> *get_ext_boxes();
 	
 	void set_stencil_width(int in_width);
 	void set_max_iters(int in_max_iters);

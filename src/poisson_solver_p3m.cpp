@@ -730,3 +730,8 @@ void poisson_solver_p3m::solve()
 	}
     }
 }
+
+box_t<iris_real> *poisson_solver_p3m::get_ext_boxes()
+{
+    return m_domain->m_local_boxes;
+}

@@ -163,6 +163,7 @@ namespace ORG_NCSA_IRIS {
 	// for each of the server's local boxes, in the rank order of the
 	// server's local_comm.
 	void get_local_boxes(box_t<iris_real> *out_local_boxes);
+	void get_ext_boxes(box_t<iris_real> *out_ext_boxes);
 
 	// Use this on a client node to send charges to a server node
 	void send_charges(int in_peer, iris_real *in_charges, int in_count);
@@ -189,6 +190,7 @@ namespace ORG_NCSA_IRIS {
 	iris_real alpha() { return m_alpha; };
 
 	int num_local_atoms();
+	int num_halo_atoms();
 	
     private:
 	void init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm);
@@ -203,6 +205,7 @@ namespace ORG_NCSA_IRIS {
 	bool fanout_event(struct event_t *in_event);
 	bool handle_set_gbox(struct event_t *in_event);
 	bool handle_get_lboxes(struct event_t *in_event);
+	bool handle_get_eboxes(struct event_t *in_event);
 	bool handle_commit(struct event_t *in_event);
 	bool handle_quit(struct event_t *in_event);
 
@@ -233,7 +236,8 @@ namespace ORG_NCSA_IRIS {
 	// which server peers this client is waiting to receive forces from
 	bool *m_wff;
 
-	std::map<int, int> m_ncharges;           // per sending rank
+	int *m_ncharges;
+	//std::map<int, int> m_ncharges;           // per sending rank
 	std::map<int, iris_real *> m_charges;    // per sending rank
 	std::map<int, iris_real *> m_forces;     // per recv rank
 	

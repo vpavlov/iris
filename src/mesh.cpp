@@ -421,13 +421,13 @@ void mesh::assign_charges()
     sendbuf[1] = 0.0;
 
     memset(&(m_rho_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
-	memset(&(m_Ex_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
-	memset(&(m_Ey_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
-	memset(&(m_Ez_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
-
-    for(auto it = m_iris->m_ncharges.begin(); it != m_iris->m_ncharges.end(); it++) {
-	int ncharges = it->second;
-	iris_real *charges = m_iris->m_charges[it->first];
+    memset(&(m_Ex_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+    memset(&(m_Ey_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+    memset(&(m_Ez_plus[0][0][0]), 0, m_ext_size[0]*m_ext_size[1]*m_ext_size[2]*sizeof(iris_real));
+    
+    for(int rank = 0; rank < m_iris->m_client_size; rank++) {
+	int ncharges = m_iris->m_ncharges[rank];
+	iris_real *charges = m_iris->m_charges[rank];
 
 	for(int i = 0; i < ncharges; i++) {
 	    iris_real q = charges[i*5 + 3];
@@ -1073,9 +1073,8 @@ void mesh::assign_forces(bool ad)
     bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
     MPI_Comm comm = m_iris->client_comm();
 
-    for(auto it = m_iris->m_ncharges.begin(); it != m_iris->m_ncharges.end(); it++) {
-	int peer = it->first;
-	int ncharges = it->second;
+    for(int peer = 0; peer < m_iris->m_client_size; peer++) {
+	int ncharges = m_iris->m_ncharges[peer];
 	int size = 7*sizeof(iris_real) +             // 1 real for the E(k) energy + 6 reals for the virial
 	    ncharges * 4 * sizeof(iris_real);        // 4 reals for each charge: id, Fx, Fy, Fz
 	iris_real *forces = (iris_real *)memory::wmalloc(size);
@@ -1100,9 +1099,9 @@ void mesh::assign_forces(bool ad)
 	
 	m_iris->m_forces[peer] = forces;
 	if(ad) {
-	    assign_forces1_ad(ncharges, m_iris->m_charges[it->first], forces);
+	    assign_forces1_ad(ncharges, m_iris->m_charges[peer], forces);
 	}else {
-	    assign_forces1(ncharges, m_iris->m_charges[it->first], forces);
+	    assign_forces1(ncharges, m_iris->m_charges[peer], forces);
 	}
 
 	MPI_Request req;

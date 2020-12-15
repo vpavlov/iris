@@ -56,6 +56,135 @@ namespace ORG_NCSA_IRIS {
 		    (z >= zlo && z < zhi));
 	}
 
+	bool in_periodic(iris_real *charge, box_t<iris_real> *gbox)
+	{
+	    iris_real x = charge[0];
+	    iris_real y = charge[1];
+	    iris_real z = charge[2];
+
+	    if(xlo < 0) {
+		box_t<iris_real> b1;
+		b1.xlo = gbox->xhi + xlo;
+		b1.xhi = gbox->xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = 0;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    if(xhi > gbox->xhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = gbox->xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = 0;
+		b2.xhi = xhi - gbox->xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    if(ylo < 0) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = gbox->yhi + ylo;
+		b1.yhi = gbox->yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = 0;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    if(yhi > gbox->yhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = gbox->yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = 0;
+		b2.yhi = yhi - gbox->yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    if(zlo < 0) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = gbox->zhi + zlo;
+		b1.zhi = gbox->zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = 0;
+		b2.zhi = zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    if(zhi > gbox->zhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = gbox->zhi;
+
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = 0;
+		b2.zhi = zhi - gbox->zhi;
+
+		return b1.in_periodic(charge, gbox) || b2.in_periodic(charge, gbox);
+	    }
+
+	    return in(charge);
+	}
+	
 	// bool in(iris_real *charge)
 	// {
 	//     iris_real x = charge[0];

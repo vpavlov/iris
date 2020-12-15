@@ -44,6 +44,8 @@ namespace ORG_NCSA_IRIS {
 	void commit();
 	void solve();
 	void handle_box_resize();
+	box_t<iris_real> *get_ext_boxes();
+	
     private:
 	void kspace_phi(iris_real *io_rho_phi);
 	void kspace_eng(iris_real *in_rho_phi);

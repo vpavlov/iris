@@ -53,23 +53,25 @@
 #define IRIS_TAG_SET_GBOX           64
 #define IRIS_TAG_SET_GBOX_DONE      65
 
-#define IRIS_TAG_GET_LBOXES_FANOUT  66
-#define IRIS_TAG_GET_LBOXES         67
-#define IRIS_TAG_GET_LBOXES_DONE    68
+#define IRIS_TAG_GET_LBOXES         66
+#define IRIS_TAG_GET_LBOXES_DONE    67
 
-#define IRIS_TAG_COMMIT_FANOUT      69
-#define IRIS_TAG_COMMIT             70
-#define IRIS_TAG_COMMIT_DONE        71
+#define IRIS_TAG_COMMIT_FANOUT      68
+#define IRIS_TAG_COMMIT             69
+#define IRIS_TAG_COMMIT_DONE        70
 
-#define IRIS_TAG_QUIT_FANOUT        72
-#define IRIS_TAG_QUIT               73
-#define IRIS_TAG_QUIT_DONE          74
+#define IRIS_TAG_QUIT_FANOUT        71
+#define IRIS_TAG_QUIT               72
+#define IRIS_TAG_QUIT_DONE          73
 
-#define IRIS_TAG_GGE_FANOUT         75
-#define IRIS_TAG_GGE                76
-#define IRIS_TAG_GGE_DONE           77
+#define IRIS_TAG_GGE_FANOUT         74
+#define IRIS_TAG_GGE                75
+#define IRIS_TAG_GGE_DONE           76
 
-#define IRIS_TAG_FMM_P2P_HALO_CNT   78
-#define IRIS_TAG_FMM_P2P_HALO       79
+#define IRIS_TAG_FMM_P2P_HALO_CNT   77
+#define IRIS_TAG_FMM_P2P_HALO       78
+
+#define IRIS_TAG_GET_EBOXES         79
+#define IRIS_TAG_GET_EBOXES_DONE    80
 
 #endif

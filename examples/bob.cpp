@@ -109,7 +109,7 @@ bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
 		SUBSTR(tmp, line, 55, 61);
 		atom.xyzqi[3] = (iris_real) atof(tmp);
 
-		atom.xyzqi[4] = out_input->natoms * (iris_real) 1.0;
+		atom.xyzqi[4] = (1 + out_input->natoms) * (iris_real) 1.0;
 
 		out_input->atoms.push_back(atom);
 		qtot += atom.xyzqi[3];
@@ -317,15 +317,22 @@ bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_inp
 // This implementation here is just an example and is not optimal. But this is
 // outside IRIS's responsibility and is provided here only as means to execute
 // the example.
-void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes)
+void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes, box_t<iris_real> *in_ext_boxes, box_t<iris_real> in_gbox)
 {
     iris_real *sendbuf = (iris_real *)memory::wmalloc(in_input->atoms.size() * sizeof(atom_t));
     for(int i=0;i<in_iris->m_server_size;i++) {
 	int cnt = 0;
 	for(int j=0;j<in_input->atoms.size();j++) {
-	    if(in_local_boxes[i].in(in_input->atoms[j].xyzqi)) {
-		memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
-		cnt++;
+	    if(in_ext_boxes[i].in_periodic(in_input->atoms[j].xyzqi, &in_gbox)) {
+		if(in_local_boxes[i].in(in_input->atoms[j].xyzqi)) {
+		    memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
+		    cnt++;
+		}else {
+		    in_input->atoms[j].xyzqi[4] *= -1.0;
+		    memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
+		    in_input->atoms[j].xyzqi[4] *= -1.0;
+		    cnt++;
+		}
 	    }
 	}
 	in_iris->send_charges(i, sendbuf, cnt);
@@ -397,7 +404,7 @@ int main(int argc, char **argv)
     // debugging facility
     
     // bool ready = false;
-    // if(rank == 1) {
+    // if(rank == 0) {
     // 	printf("Rank %d is PID %d\n", rank, getpid());
     // 	while (!ready) {
     // 	    sleep(5);
@@ -460,6 +467,7 @@ int main(int argc, char **argv)
 	exit(-1);
     }
 
+    //x->set_pbc(false, false, false);
     x->set_pbc(true, true, true);
     x->set_units(md);
     x->m_logger->info("Node name = %s; PID = %d", proc_name, getpid());
@@ -517,6 +525,7 @@ int main(int argc, char **argv)
 
     int lb_size = sizeof(box_t<iris_real>) * x->m_server_size;
     box_t<iris_real> *local_boxes = (box_t<iris_real> *)memory::wmalloc(lb_size);
+    box_t<iris_real> *ext_boxes = (box_t<iris_real> *)memory::wmalloc(lb_size);
     
     for(int i=1;i<=NSTEPS;i++) {
 	if (x->is_client()) {
@@ -528,10 +537,10 @@ int main(int argc, char **argv)
 	    x->set_global_box(&gbox);
 	    x->commit();
 	    x->get_local_boxes(local_boxes);
-	    //box_t<iris_real> *ext_boxes = x->get_ext_boxes();
+	    x->get_ext_boxes(ext_boxes);
 	    
 	    int *nforces;
-	    send_charges(x, &input, local_boxes);
+	    send_charges(x, &input, local_boxes, ext_boxes, gbox);
 	    x->commit_charges();
 	    
 	    iris_real Ek, Es, Ecorr;
@@ -562,6 +571,7 @@ int main(int argc, char **argv)
     }
 
     memory::wfree(local_boxes);
+    memory::wfree(ext_boxes);
     
     if(x->is_client()) {
 	x->quit();

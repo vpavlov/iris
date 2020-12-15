@@ -40,6 +40,7 @@
 #include "tags.h"
 #include "solver_param.h"
 #include "laplacian3D_pade.h"
+#include "domain.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -677,4 +678,10 @@ void poisson_solver_cg::solve()
     }
 
     axpby(0.0, m_phi, 1.0, m_phi, m_mesh->m_phi, true, true, false);
+}
+
+
+box_t<iris_real> *poisson_solver_cg::get_ext_boxes()
+{
+    return m_domain->m_local_boxes;
 }

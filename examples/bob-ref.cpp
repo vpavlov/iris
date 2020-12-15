@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define iris_real float
+#define iris_real double
 #define IMAGES 1
 
 char **split(char *line, int max)
