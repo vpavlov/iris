@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -185,17 +185,6 @@ namespace ORG_NCSA_IRIS {
 	    return in(charge);
 	}
 	
-	// bool in(iris_real *charge)
-	// {
-	//     iris_real x = charge[0];
-	//     iris_real y = charge[1];
-	//     iris_real z = charge[2];
-	    
-	//     return ((!(x < xlo) && x < xhi) &&
-	// 	    (!(y < ylo) && y < yhi) &&
-	// 	    (!(z < zlo) && z < zhi));
-	// }
-
 	box_t<T> operator && (box_t<T> &other)
 	{
 	    box_t<T> retval;
