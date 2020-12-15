@@ -51,7 +51,7 @@
   
 ;; Eq. 3d
 (defun m2m (dx dy dz p mult)
-  (let ((ips (p2m dx dy dz 1 p)))
+  (let ((ips (p2m dx dy dz 1.0d0 p)))
     (mapcan
      #'identity
      (loop for n from 0 to p collect
@@ -65,23 +65,20 @@
   
 ;; Eq. 3b
 (defun m2l (dx dy dz p mult)
-  (let ((tmp (p2l dx dy dz 1 p)))
+  (let ((tmp (p2l dx dy dz 1.0d0 p)))
     (mapcan
      #'identity
      (loop for n from 0 to p collect
 	  (loop for m from 0 to n collect
 	       (loop for k from 0 to (- p n) sum
 		    (loop for l from (- k) to k sum
-			 (progn
-			   (format t "m ~a n ~a k ~a l ~a (n+k) ~a (m+l) ~a: ~a * ~a = ~a~%" n m k l (+ n k) (+ m l) (conjugate (mult-get mult k l)) (mult-get tmp (+ n k) (+ m l)) (* (conjugate (mult-get mult k l))
-			      (mult-get tmp (+ n k) (+ m l))))
-			   (* (conjugate (mult-get mult k l))
-			      (mult-get tmp (+ n k) (+ m l)))))))))))
+			 (* (conjugate (mult-get mult k l))
+			    (mult-get tmp (+ n k) (+ m l))))))))))
      
 
 ;; Eq. 3e
 (defun l2l (dx dy dz p loc)
-  (let ((tmp (p2m dx dy dz 1 p)))
+  (let ((tmp (p2m dx dy dz 1.0d0 p)))
     (mapcan
      #'identity
      (loop for n from 0 to p collect
@@ -96,9 +93,9 @@
     
 
 (defun p2p (x1 y1 z1 q1 x2 y2 z2 q2)
-  (let* ((dx (- x1 x2))
-	 (dy (- y1 y2))
-	 (dz (- z1 z2))
+  (let* ((dx (- x2 x1))
+	 (dy (- y2 y1))
+	 (dz (- z2 z1))
 	 (ri^2 (+ (* dx dx) (* dy dy) (* dz dz)))
 	 (ri (sqrt ri^2))
 	 (e (/ (* q1 q2) ri))
@@ -106,11 +103,11 @@
 	 (fx (* ee dx))
 	 (fy (* ee dy))
 	 (fz (* ee dz)))
-    (format t "φ = ~a, f = (~a, ~a, ~a)~%" (/ (* e q2) ri) fx fy fz)))
+    (format t "φ = ~a, f = (~a, ~a, ~a)~%" (/ q1 ri) fx fy fz)))
 
 (defun e2e (p)
-  (l2l -0.1435 -0.1435 -0.1435 p
-       (l2l 0.93395 0.093395 0.93395 p
+  (l2l -0.14135 -0.14135 -0.14135 p
+       (l2l 0.93395 0.93395 0.93395 p
 	    (m2l 9.3395 9.3395 9.3395 p
 		 (m2m -1.8679 -1.8679 -1.8679 p
 		      (m2m -0.93395 -0.93395 -0.93395 p
