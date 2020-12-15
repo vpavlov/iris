@@ -50,7 +50,7 @@ using namespace ORG_NCSA_IRIS;
 
 fmm::fmm(iris *obj):
     solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
-    m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), m_local_boxes(NULL),
+    m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), 
     m_scratch(NULL), m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
     m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_particles(NULL),
     m_nxparticles(0), m_xparticles{NULL, NULL, NULL, NULL, NULL, NULL},
@@ -64,7 +64,6 @@ fmm::fmm(iris *obj):
 
 fmm::~fmm()
 {
-    memory::destroy_1d(m_local_boxes);
     memory::destroy_1d(m_scratch);
     memory::destroy_1d(m_cell_meta);
     memory::destroy_2d(m_M);
@@ -173,6 +172,8 @@ void fmm::commit()
 	m_dirty = false;
 	m_logger->info("FMM: order = %d; depth = %d; tree size = %d; local root level = %d", m_order, m_depth, m_tree_size, m_local_root_level);
     }
+    calc_extended_box();  // this is needed every time
+
 }
 
 void fmm::generate_cell_meta()
@@ -193,20 +194,9 @@ void fmm::set_leaf_size()
     m_leaf_size[2] = m_domain->m_global_box.zsize / nd;
 }
 
-void fmm::get_local_boxes()
-{
-    memory::destroy_1d(m_local_boxes);
-    memory::create_1d(m_local_boxes, m_local_comm->m_size);
-    
-    MPI_Allgather(&m_domain->m_local_box, sizeof(box_t<iris_real>), MPI_BYTE,
-		  m_local_boxes, sizeof(box_t<iris_real>), MPI_BYTE,
-		  m_iris->m_local_comm->m_comm);
-}
-
 void fmm::handle_box_resize()
 {
     set_leaf_size();
-    get_local_boxes();
     generate_cell_meta();
 }
 
@@ -250,10 +240,10 @@ void fmm::send_forces_to(int peer, int start, int end, bool include_energy_viria
     for(int i=start;i<end;i++) {
 	iris_real factor = m_particles[i].xyzq[3] * m_units->ecf;  // q * 1/4pieps
 
-	forces[7 + i*4 + 0] = m_particles[i].index + 0.33333333;
-	forces[7 + i*4 + 1] = factor * m_particles[i].tgt[1];
-	forces[7 + i*4 + 2] = factor * m_particles[i].tgt[2];
-	forces[7 + i*4 + 3] = factor * m_particles[i].tgt[3];
+	forces[7 + (i-start)*4 + 0] = m_particles[i].index + 0.33333333;
+	forces[7 + (i-start)*4 + 1] = factor * m_particles[i].tgt[1];
+	forces[7 + (i-start)*4 + 2] = factor * m_particles[i].tgt[2];
+	forces[7 + (i-start)*4 + 3] = factor * m_particles[i].tgt[3];
     }
 
     MPI_Request req;
@@ -833,4 +823,33 @@ void fmm::eval_l2p(cell_t *in_cells)
 	    m_l2p_count++;
     	}
     }
+}
+
+void fmm::calc_extended_box()
+{
+    int leaf_offset = cell_meta_t::offset_for_level(max_level());
+    iris_real R = m_cell_meta[leaf_offset].radius;
+    iris_real r_cut = 2 * R / m_mac;
+    int nx = (int)(r_cut / m_leaf_size[0]);
+    int ny = (int)(r_cut / m_leaf_size[1]);
+    int nz = (int)(r_cut / m_leaf_size[2]);
+
+    m_extended_box.xlo = m_domain->m_local_box.xlo - nx * m_leaf_size[0];
+    m_extended_box.xhi = m_domain->m_local_box.xhi + nx * m_leaf_size[0];
+    m_extended_box.xsize = m_extended_box.xhi - m_extended_box.xlo;
+
+    m_extended_box.ylo = m_domain->m_local_box.ylo - ny * m_leaf_size[1];
+    m_extended_box.yhi = m_domain->m_local_box.yhi + ny * m_leaf_size[1];
+    m_extended_box.ysize = m_extended_box.yhi - m_extended_box.ylo;
+
+    m_extended_box.zlo = m_domain->m_local_box.zlo - nz * m_leaf_size[2];
+    m_extended_box.zhi = m_domain->m_local_box.zhi + nz * m_leaf_size[2];
+    m_extended_box.zsize = m_extended_box.zhi - m_extended_box.zlo;
+
+    m_logger->info("Extended box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+		   m_extended_box.xsize, m_extended_box.ysize,
+		   m_extended_box.zsize,
+		   m_extended_box.xlo, m_extended_box.xhi,
+		   m_extended_box.ylo, m_extended_box.yhi,
+		   m_extended_box.zlo, m_extended_box.zhi);
 }

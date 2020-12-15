@@ -41,12 +41,15 @@
 using namespace ORG_NCSA_IRIS;
 
 domain::domain(iris *obj)
-    :state_accessor(obj), m_initialized(false), m_dirty(true)
+    :state_accessor(obj), m_initialized(false), m_dirty(true), m_local_boxes(NULL)
 {
+    int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
+    m_local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
 }
 
 domain::~domain()
 {
+    memory::wfree(m_local_boxes);
 }
 
 void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
@@ -130,7 +133,11 @@ void domain::commit()
 		       m_local_box.xlo, m_local_box.xhi,
 		       m_local_box.ylo, m_local_box.yhi,
 		       m_local_box.zlo, m_local_box.zhi);
-	    
+
+	MPI_Allgather(&m_local_box, sizeof(box_t<iris_real>), MPI_BYTE,
+		      m_local_boxes, sizeof(box_t<iris_real>), MPI_BYTE,
+		      m_local_comm->m_comm);
+	
 	m_dirty = false;
     }
 }

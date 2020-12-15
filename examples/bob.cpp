@@ -515,6 +515,9 @@ int main(int argc, char **argv)
     x->set_alpha(2.6028443952840625);
     x->set_accuracy(1e-4, true);
 
+    int lb_size = sizeof(box_t<iris_real>) * x->m_server_size;
+    box_t<iris_real> *local_boxes = (box_t<iris_real> *)memory::wmalloc(lb_size);
+    
     for(int i=1;i<=NSTEPS;i++) {
 	if (x->is_client()) {
 	    box_t<iris_real> gbox;
@@ -524,7 +527,8 @@ int main(int argc, char **argv)
 	    gbox.zhi = input.box[2];
 	    x->set_global_box(&gbox);
 	    x->commit();
-	    box_t<iris_real> *local_boxes = x->get_local_boxes();
+	    x->get_local_boxes(local_boxes);
+	    //box_t<iris_real> *ext_boxes = x->get_ext_boxes();
 	    
 	    int *nforces;
 	    send_charges(x, &input, local_boxes);
@@ -557,6 +561,8 @@ int main(int argc, char **argv)
 	}
     }
 
+    memory::wfree(local_boxes);
+    
     if(x->is_client()) {
 	x->quit();
     }

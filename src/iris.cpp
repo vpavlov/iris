@@ -471,31 +471,27 @@ void iris::perform_commit()
 }
 
 // this one is called by all clients
-box_t<iris_real> *iris::get_local_boxes()
+void iris::get_local_boxes(box_t<iris_real> *out_local_boxes)
 {
     ASSERT_CLIENT("get_local_boxes");
 
     int size = sizeof(box_t<iris_real>) * m_server_size;
-    box_t<iris_real> *local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-    
-    if(is_both()) {
-	// clients are also servers; an allgather will do
-	MPI_Allgather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
-		      local_boxes, sizeof(box_t<iris_real>), MPI_BYTE, m_local_comm->m_comm);
-	return local_boxes;
-    }
 
+    if(is_both()) {
+	memcpy(out_local_boxes, m_domain->m_local_boxes, size);
+	return;
+    }
+ 
     if(is_leader()) {
 	// the client leader sends to the server leader request to get the local boxes
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES, 0, NULL, &req, NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
+	MPI_Recv(out_local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
     }
 
-    MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
-    return local_boxes;
+    MPI_Bcast(out_local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
 }
 
 void iris::commit()
@@ -1194,21 +1190,8 @@ bool iris::handle_set_gbox(struct event_t *event)
 
 bool iris::handle_get_lboxes(event_t *in_event)
 {
-    box_t<iris_real> *local_boxes = NULL;
-    int size = sizeof(box_t<iris_real>) * m_server_size;
-    
-    if(is_leader()) {
-	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-    }
-
-    MPI_Gather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
-	       local_boxes,              sizeof(box_t<iris_real>), MPI_BYTE,
-	       m_local_leader,
-	       m_local_comm->m_comm);
-
-    if(is_leader()) {
-	MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
-    }
+    MPI_Send(m_domain->m_local_boxes, sizeof(box_t<iris_real>) * m_server_size, MPI_BYTE,
+	     m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
     return false;
 }
 

@@ -143,6 +143,7 @@ void fmm::send_particles_to_neighbour(int rank, xparticle_t *&out_sendbuf, MPI_R
     MPI_Isend(out_sendbuf, (*out_part_count)*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
 }
 
+
 int fmm::border_leafs(int rank)
 {
     int send_count = 0;
@@ -166,7 +167,7 @@ int fmm::border_leafs(int rank)
 		    iris_real x = cx + ix * m_domain->m_global_box.xsize;
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
-		    iris_real rn = m_local_boxes[rank].distance_to(x, y, z);
+		    iris_real rn = m_iris->m_domain->m_local_boxes[rank].distance_to(x, y, z);
 		    if (m_mac_let_corr * dn/rn < m_mac) {
 			continue;
 		    }
@@ -301,7 +302,7 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 		    iris_real x = cx + ix * m_domain->m_global_box.xsize;
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
-		    iris_real rn = m_local_boxes[rank].distance_to(x, y, z);
+		    iris_real rn = m_iris->m_domain->m_local_boxes[rank].distance_to(x, y, z);
 
 		    if (m_mac_let_corr * dn/rn < m_mac) {
 			continue;

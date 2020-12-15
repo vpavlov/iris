@@ -58,7 +58,6 @@ namespace ORG_NCSA_IRIS {
 	void generate_cell_meta();
 	
 	void set_leaf_size();
-	void get_local_boxes();
 
 	void upward_pass_in_local_tree();
 	void load_particles();
@@ -113,12 +112,9 @@ namespace ORG_NCSA_IRIS {
 	void compute_energy_and_virial();
 	void send_forces_to(int peer, int start, int end, bool include_energy_virial);
 	void send_back_forces();
+
+	void calc_extended_box();
 	
-	/*
-	
-	
-	void print_multipoles(int cellID, iris_real *m);
-	*/
 	
     private:
 	int                 m_order;             // order of expansion (p)
@@ -128,7 +124,6 @@ namespace ORG_NCSA_IRIS {
 	int                 m_nterms;            // number of items in the multipole expansions
 	int                 m_local_root_level;  // the level of the local root (contains all subnodes here)
 	iris_real           m_leaf_size[3];      // size of leaf cells
-	box_t<iris_real>   *m_local_boxes;       // Local boxes from all ranks
 	iris_real          *m_scratch;           // M2M/M2L scratch space
 	int                *m_border_leafs;      // scratch buffer for P2P halo exchange (cell counts)
 	struct xparticle_t *m_border_parts[2];   // scratch buffer (send) for P2P halo exchange (bodies) - to left and right neighbours
@@ -165,6 +160,9 @@ namespace ORG_NCSA_IRIS {
 
 	bool m_one_sided;
 	MPI_Win m_Mwin;
+	
+	box_t<iris_real> m_extended_box;
+	
     };
 }
 

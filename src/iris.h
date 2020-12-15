@@ -162,7 +162,7 @@ namespace ORG_NCSA_IRIS {
 	// The client nodes receive an array of xlo,ylo,zlo,xhi,yhi,zhi
 	// for each of the server's local boxes, in the rank order of the
 	// server's local_comm.
-	box_t<iris_real> *get_local_boxes();
+	void get_local_boxes(box_t<iris_real> *out_local_boxes);
 
 	// Use this on a client node to send charges to a server node
 	void send_charges(int in_peer, iris_real *in_charges, int in_count);
