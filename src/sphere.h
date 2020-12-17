@@ -45,7 +45,7 @@ namespace ORG_NCSA_IRIS {
 	    iris_real dz = p.r[2] - c.r[2];
 	    return dx*dx + dy*dy + dz*dz - r*r <= (iris_real)1e-7;
 	}
-	
+
     };
 }
     

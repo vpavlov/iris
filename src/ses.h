@@ -36,6 +36,7 @@
 namespace ORG_NCSA_IRIS {
 
     void ses_of_points(point_t *P, int np, sphere_t *out_ses);
+    void ses_of_spheres(sphere_t *S, int ns, sphere_t *out_ses);
 }
 
 #endif

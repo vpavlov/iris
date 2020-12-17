@@ -40,6 +40,7 @@
 #include "openmp.h"
 #include "proc_grid.h"
 #include "tags.h"
+#include "ses.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -407,10 +408,14 @@ void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_fl
 
 void fmm::relink_parents(cell_t *io_cells)
 {
-    // first, clear the num_children of all non-leaf cells
+    // first, clear the num_children and ses of all non-leaf cells
     int end = cell_meta_t::offset_for_level(max_level());
     for(int i=0;i<end;i++) {
 	io_cells[i].flags & ~IRIS_FMM_CELL_HAS_CHILDREN;
+	io_cells[i].ses.c.r[0] = 0.0;
+	io_cells[i].ses.c.r[1] = 0.0;
+	io_cells[i].ses.c.r[2] = 0.0;
+	io_cells[i].ses.r = 0.0;
     }
 
     // now, link all leafs upwards
@@ -429,6 +434,28 @@ void fmm::link_parents(cell_t *io_cells)
 		int parent = cell_meta_t::parent_of(j);
 		io_cells[parent].flags |= (IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
 	    }
+	}
+    }
+    
+    // calculate ses of non-leafs
+    for(int i=max_level()-1;i>=0;i--) {
+	int start = cell_meta_t::offset_for_level(i);
+	int end = cell_meta_t::offset_for_level(i+1);
+	for(int j=start;j<end;j++) {
+	    sphere_t S[8];
+	    int ns = 0;
+	    for(int k = 0;k<8;k++) {
+		int mask = IRIS_FMM_CELL_HAS_CHILD1 << k;
+		if(io_cells[j].flags & mask) {
+		    int childID = end + 8*(j-start) + k;
+		    S[ns].c.r[0] = io_cells[childID].ses.c.r[0];
+		    S[ns].c.r[1] = io_cells[childID].ses.c.r[1];
+		    S[ns].c.r[2] = io_cells[childID].ses.c.r[2];
+		    S[ns].r = io_cells[childID].ses.r;
+		    ns++;
+		}
+	    }
+	    ses_of_spheres(S, ns, &(io_cells[j].ses));
 	}
     }
 }
@@ -564,7 +591,12 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 {
     int level = cell_meta_t::level_of(cellID);
     if(level == max_level()) {
-	m_logger->info("%*s%s %d (L%d) has %d particles starting from %d and flags 0x%x; M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].num_children, in_cells[cellID].first_child, in_cells[cellID].flags, m_M[cellID][0]);
+	m_logger->info("%*s%s %d (L%d) N=%d F=0x%x C=(%f,%f,%f) R=%f M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].num_children, in_cells[cellID].flags,
+		       in_cells[cellID].ses.c.r[0],
+		       in_cells[cellID].ses.c.r[1],
+		       in_cells[cellID].ses.c.r[2],
+		       in_cells[cellID].ses.r,
+		       m_M[cellID][0]);
     }else {
 	int num_children = 0;
 	int mask = IRIS_FMM_CELL_HAS_CHILD1;
@@ -575,7 +607,12 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 	    mask <<= 1;
 	}
 	
-	m_logger->info("%*s%s %d (L%d) has %d children and flags 0x%x; M[0] = %f", level+1, " ", label, cellID, level, num_children, in_cells[cellID].flags, m_M[cellID][0]);
+	m_logger->info("%*s%s %d (L%d) N=%d F=0x%x C=(%f,%f,%f) R=%f M[0] = %f", level+1, " ", label, cellID, level, num_children, in_cells[cellID].flags,
+		       in_cells[cellID].ses.c.r[0],
+		       in_cells[cellID].ses.c.r[1],
+		       in_cells[cellID].ses.c.r[2],
+		       in_cells[cellID].ses.r,
+		       m_M[cellID][0]);
     }
     if(level < max_level()) {
 	int this_offset = cell_meta_t::offset_for_level(level);

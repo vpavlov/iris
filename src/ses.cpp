@@ -163,3 +163,94 @@ void ORG_NCSA_IRIS::ses_of_points(point_t *P, int np, sphere_t *out_ses)
 	out_ses->r *= 1.0001;
     }
 }
+
+static bool find_farthest(sphere_t *S, int ns, sphere_t *out_ses, int *out_i)
+{
+    iris_real max_dist = 0.0;
+    int max_idx = 0;
+    bool covers_max = false;
+    for(int i=0;i<ns;i++) {
+	iris_real dx = out_ses->c.r[0] - S[i].c.r[0];
+	iris_real dy = out_ses->c.r[1] - S[i].c.r[1];
+	iris_real dz = out_ses->c.r[2] - S[i].c.r[2];
+	iris_real dist = sqrt(dx*dx + dy*dy + dz*dz);
+	if(dist > max_dist) {
+	    max_dist = dist;
+	    max_idx = i;
+	    if(dist + S[i].r <= out_ses->r) {
+		covers_max = true;
+	    }else {
+		covers_max = false;
+	    }
+	}
+    }
+    *out_i = max_idx;
+    return covers_max;
+}
+
+static void enlarge_ses(sphere_t *S, sphere_t *out_ses)
+{
+    point_t x = S->c.minus(&(out_ses->c));
+    iris_real xlen = sqrt(x.dot(&x));
+    point_t xhat;
+    xhat.r[0] = x.r[0]/xlen;
+    xhat.r[1] = x.r[1]/xlen;
+    xhat.r[2] = x.r[2]/xlen;
+    iris_real R = (S->r + out_ses->r + xlen) * (iris_real)0.5;
+
+    point_t tmp;
+    iris_real rr = R - out_ses->r;
+    tmp.r[0] = xhat.r[0] * rr;
+    tmp.r[1] = xhat.r[1] * rr;
+    tmp.r[2] = xhat.r[2] * rr;
+
+    point_t c = out_ses->c.plus(&tmp);
+    out_ses->c.r[0] = c.r[0];
+    out_ses->c.r[1] = c.r[1];
+    out_ses->c.r[2] = c.r[2];
+    out_ses->r = R;
+}
+
+static void do_sess(sphere_t *S, int ns, sphere_t *out_ses)
+{
+    if(ns == 0) {
+	return;
+    }
+
+    // find the farthest from current SES and put it in front
+    int i;
+    bool covered = find_farthest(S, ns, out_ses, &i);
+    sphere_t tmp;
+    tmp = S[i];
+    S[i] = S[0];
+    S[0] = tmp;
+    
+    if(!covered) {
+	enlarge_ses(S, out_ses);
+    }
+    do_sess(S+1, ns-1, out_ses);
+}
+
+void ORG_NCSA_IRIS::ses_of_spheres(sphere_t *S, int ns, sphere_t *out_ses)
+{
+    if(ns == 0) {
+	out_ses->c.r[0] = 0.0;
+	out_ses->c.r[1] = 0.0;
+	out_ses->c.r[2] = 0.0;
+	out_ses->r = 0.0;
+	return;
+    }
+
+    // start with setting the SES to the first sphere
+    out_ses->c.r[0] = S[0].c.r[0];
+    out_ses->c.r[1] = S[0].c.r[1];
+    out_ses->c.r[2] = S[0].c.r[2];
+    out_ses->r = S[0].r;
+
+    do_sess(S+1, ns-1, out_ses);
+    
+    if(out_ses->r != 0) {
+	out_ses->r *= 1.0001;
+    }
+    
+}
