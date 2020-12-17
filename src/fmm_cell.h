@@ -33,6 +33,7 @@
 #include "memory.h"
 #include "real.h"
 #include "box.h"
+#include "sphere.h"
 
 namespace ORG_NCSA_IRIS {
 
@@ -56,9 +57,9 @@ namespace ORG_NCSA_IRIS {
     
     // Once tree parameters (depth, etc.) are known, these can be calculated only once
     struct cell_meta_t {
-	iris_real center[3];
-	iris_real radius;
 	int rank;
+	iris_real geomc[3];  // geometrical center
+	iris_real maxr;      // maximum theoretical radius (1/2 cell diagonal)
 	
 	cell_meta_t(int dummy = 0) {};  // to satisfy the compiler (memory::create_1d)
 	void set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level, int in_comm_size, int in_local_root_level);
@@ -91,10 +92,13 @@ namespace ORG_NCSA_IRIS {
     };
     
     struct cell_t {
+	sphere_t ses;      // smallest sphere enclosing all particles
 	int num_children;  // only for leafs: number of particles
 	int first_child;   // only for leafs: index in particles/xparticles1..6
 	int flags;         // IRIS_FMM_CELL_*
 	cell_t(int dummy = 0) {};  // to satisfy the compiler
+
+	void compute_ses(struct particle_t *in_particles);
     };
 
 

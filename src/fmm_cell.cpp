@@ -29,6 +29,8 @@
 //==============================================================================
 #include <cmath>
 #include "fmm_cell.h"
+#include "fmm_particle.h"
+#include "ses.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -41,10 +43,10 @@ void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *
     int level = level_of(cellID);
     
     if(cellID == 0) {
-	center[0] = (in_gbox->xlo + in_gbox->xhi)/2;
-	center[1] = (in_gbox->ylo + in_gbox->yhi)/2;
-	center[2] = (in_gbox->zlo + in_gbox->zhi)/2;
-	radius = sqrt(in_gbox->xsize*in_gbox->xsize + in_gbox->ysize*in_gbox->ysize + in_gbox->zsize*in_gbox->zsize) / 2;
+	geomc[0] = (in_gbox->xlo + in_gbox->xhi)/2;
+	geomc[1] = (in_gbox->ylo + in_gbox->yhi)/2;
+	geomc[2] = (in_gbox->zlo + in_gbox->zhi)/2;
+	maxr = sqrt(in_gbox->xsize*in_gbox->xsize + in_gbox->ysize*in_gbox->ysize + in_gbox->zsize*in_gbox->zsize) / 2;
     }else {
 	int seq = (cellID - offset_for_level(level)) & 0x07;  // last 3 bits 
 	int parentID = parent_of(cellID);
@@ -56,22 +58,22 @@ void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *
 	iris_real dz = fact * in_leaf_size[2];
 	
 	if(seq & 0x01) {
-	    center[0] = in_meta[parentID].center[0] + dx / 2;
+	    geomc[0] = in_meta[parentID].geomc[0] + dx / 2;
 	}else {
-	    center[0] = in_meta[parentID].center[0] - dx / 2;
+	    geomc[0] = in_meta[parentID].geomc[0] - dx / 2;
 	}
 	if(seq & 0x02) {
-	    center[1] = in_meta[parentID].center[1] + dy / 2;
+	    geomc[1] = in_meta[parentID].geomc[1] + dy / 2;
 	}else {
-	    center[1] = in_meta[parentID].center[1] - dy / 2;
+	    geomc[1] = in_meta[parentID].geomc[1] - dy / 2;
 	}
 	if(seq & 0x04) {
-	    center[2] = in_meta[parentID].center[2] + dz / 2;
+	    geomc[2] = in_meta[parentID].geomc[2] + dz / 2;
 	}else {
-	    center[2] = in_meta[parentID].center[2] - dz / 2;
+	    geomc[2] = in_meta[parentID].geomc[2] - dz / 2;
 	}
 	
-	radius = sqrt(dx*dx + dy*dy + dz*dz) / 2;
+	maxr = sqrt(dx*dx + dy*dy + dz*dz) / 2;
     }
 
     rank = -1;
@@ -87,4 +89,17 @@ void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *
 	int shift = (3 - bits % 3) % 3;
 	rank = idx >> shift;
     }
+}
+
+void cell_t::compute_ses(particle_t *in_particles)
+{
+    // TODO: maybe do this without memory alloc (e.g. use m_ncrit as maximum and put assert that it's enough)
+    point_t *points = (point_t *)memory::wmalloc(num_children * sizeof(point_t));
+    for(int i=0;i<num_children;i++) {
+	points[i].r[0] = in_particles[first_child+i].xyzq[0];
+	points[i].r[1] = in_particles[first_child+i].xyzq[1];
+	points[i].r[2] = in_particles[first_child+i].xyzq[2];
+    }
+    ses_of_points(points, num_children, &ses);
+    memory::wfree(points);
 }

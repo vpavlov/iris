@@ -125,10 +125,10 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	
 	bool is_close = (level < m_local_root_level);  // all cells above local root level are to be drilled-down
 	
-	iris_real dn = m_cell_meta[childID].radius;
-	iris_real cx = m_cell_meta[childID].center[0];
-	iris_real cy = m_cell_meta[childID].center[1];
-	iris_real cz = m_cell_meta[childID].center[2];
+	iris_real dn = m_cells[childID].ses.r;
+	iris_real cx = m_cells[childID].ses.c.r[0];
+	iris_real cy = m_cells[childID].ses.c.r[1];
+	iris_real cz = m_cells[childID].ses.c.r[2];
 	
 	for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 	    if(is_close) { break; }

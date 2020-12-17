@@ -392,6 +392,7 @@ void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_fl
 	    out_target[last].first_child = first_child;
 	    out_target[last].num_children = num_children;
 	    out_target[last].flags = in_flags;
+	    out_target[last].compute_ses(in_particles);
 	    first_child = i;
 	    num_children = 0;
 	    last = in_particles[i].cellID;
@@ -401,6 +402,7 @@ void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_fl
     out_target[last].first_child = first_child;
     out_target[last].num_children = num_children;
     out_target[last].flags = in_flags;
+    out_target[last].compute_ses(in_particles);
 };
 
 void fmm::relink_parents(cell_t *io_cells)
@@ -445,14 +447,14 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
 	for(int j=0;j<leaf->num_children;j++) {
 	    iris_real x, y, z, q;
 	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		x = m_xparticles[leaf->first_child+j].xyzq[0] - m_cell_meta[i].center[0];
-		y = m_xparticles[leaf->first_child+j].xyzq[1] - m_cell_meta[i].center[1];
-		z = m_xparticles[leaf->first_child+j].xyzq[2] - m_cell_meta[i].center[2];
+		x = m_xparticles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		y = m_xparticles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		z = m_xparticles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
 		q = m_xparticles[leaf->first_child+j].xyzq[3];
 	    }else {
-		x = m_particles[leaf->first_child+j].xyzq[0] - m_cell_meta[i].center[0];
-		y = m_particles[leaf->first_child+j].xyzq[1] - m_cell_meta[i].center[1];
-		z = m_particles[leaf->first_child+j].xyzq[2] - m_cell_meta[i].center[2];
+		x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
 		q = m_particles[leaf->first_child+j].xyzq[3];
 	    }
 	    p2m(m_order, x, y, z, q, m_M[i]);
@@ -479,9 +481,9 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 		continue;
 	    }
 	    
-	    iris_real cx = m_cell_meta[tcellID].center[0];
-	    iris_real cy = m_cell_meta[tcellID].center[1];
-	    iris_real cz = m_cell_meta[tcellID].center[2];
+	    iris_real cx = in_cells[tcellID].ses.c.r[0];
+	    iris_real cy = in_cells[tcellID].ses.c.r[1];
+	    iris_real cz = in_cells[tcellID].ses.c.r[2];
 
 	    bool valid_m = false;
 	    for(int j=0;j<8;j++) {
@@ -490,9 +492,9 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 		    scellID++;
 		    continue;
 		}
-		iris_real x = m_cell_meta[scellID].center[0] - cx;
-		iris_real y = m_cell_meta[scellID].center[1] - cy;
-		iris_real z = m_cell_meta[scellID].center[2] - cz;
+		iris_real x = in_cells[scellID].ses.c.r[0] - cx;
+		iris_real y = in_cells[scellID].ses.c.r[1] - cy;
+		iris_real z = in_cells[scellID].ses.c.r[2] - cz;
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 		m2m(m_order, x, y, z, m_M[scellID], m_M[tcellID], m_scratch);
 		valid_m = true;
@@ -619,7 +621,7 @@ void fmm::traverse_queue(int ix, int iy, int iz)
     while(!m_queue.empty()) {
 	pair_t pair = m_queue.front();
 	m_queue.pop_front();
-	if(m_cell_meta[pair.sourceID].radius > m_cell_meta[pair.targetID].radius) {
+	if(m_xcells[pair.sourceID].ses.r > m_cells[pair.targetID].ses.r) {
 	    cell_t *src = m_xcells + pair.sourceID;
 	    int level = cell_meta_t::level_of(pair.sourceID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
@@ -651,20 +653,20 @@ void fmm::traverse_queue(int ix, int iy, int iz)
 
 void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
 {
-    iris_real src_cx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
-    iris_real src_cy = m_cell_meta[srcID].center[1] + iy * m_domain->m_global_box.ysize;
-    iris_real src_cz = m_cell_meta[srcID].center[2] + iz * m_domain->m_global_box.zsize;
+    iris_real src_cx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
+    iris_real src_cy = m_xcells[srcID].ses.c.r[1] + iy * m_domain->m_global_box.ysize;
+    iris_real src_cz = m_xcells[srcID].ses.c.r[2] + iz * m_domain->m_global_box.zsize;
 
-    iris_real dest_cx = m_cell_meta[destID].center[0];
-    iris_real dest_cy = m_cell_meta[destID].center[1];
-    iris_real dest_cz = m_cell_meta[destID].center[2];
+    iris_real dest_cx = m_cells[destID].ses.c.r[0];
+    iris_real dest_cy = m_cells[destID].ses.c.r[1];
+    iris_real dest_cz = m_cells[destID].ses.c.r[2];
 
     iris_real dx = dest_cx - src_cx;
     iris_real dy = dest_cy - src_cy;
     iris_real dz = dest_cz - src_cz;
     
     iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
-    iris_real dn = m_cell_meta[srcID].radius + m_cell_meta[destID].radius;
+    iris_real dn = m_xcells[srcID].ses.r + m_cells[destID].ses.r;
     if(dn/rn < m_mac) {
 	eval_m2l(srcID, destID, ix, iy, iz);
     }else if(cell_meta_t::level_of(srcID) == max_level() &&
@@ -738,13 +740,13 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
 
-    iris_real sx = m_cell_meta[srcID].center[0] + ix * m_domain->m_global_box.xsize;
-    iris_real sy = m_cell_meta[srcID].center[1] + iy * m_domain->m_global_box.ysize;
-    iris_real sz = m_cell_meta[srcID].center[2] + iz * m_domain->m_global_box.zsize;
+    iris_real sx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
+    iris_real sy = m_xcells[srcID].ses.c.r[1] + iy * m_domain->m_global_box.ysize;
+    iris_real sz = m_xcells[srcID].ses.c.r[2] + iz * m_domain->m_global_box.zsize;
 
-    iris_real tx = m_cell_meta[destID].center[0];
-    iris_real ty = m_cell_meta[destID].center[1];
-    iris_real tz = m_cell_meta[destID].center[2];
+    iris_real tx = m_cells[destID].ses.c.r[0];
+    iris_real ty = m_cells[destID].ses.c.r[1];
+    iris_real tz = m_cells[destID].ses.c.r[2];
 
     iris_real x = tx - sx;
     iris_real y = ty - sy;
@@ -769,9 +771,9 @@ void fmm::eval_l2l(cell_t *in_cells)
 		continue;
 	    }
 	    
-	    iris_real cx = m_cell_meta[scellID].center[0];
-	    iris_real cy = m_cell_meta[scellID].center[1];
-	    iris_real cz = m_cell_meta[scellID].center[2];
+	    iris_real cx = m_xcells[scellID].ses.c.r[0];
+	    iris_real cy = m_xcells[scellID].ses.c.r[1];
+	    iris_real cz = m_xcells[scellID].ses.c.r[2];
 
 	    bool valid_l = false;
 	    for(int j=0;j<8;j++) {
@@ -780,9 +782,9 @@ void fmm::eval_l2l(cell_t *in_cells)
 		    tcellID++;
 		    continue;
 		}
-		iris_real x = cx - m_cell_meta[tcellID].center[0];
-		iris_real y = cy - m_cell_meta[tcellID].center[1];
-		iris_real z = cz - m_cell_meta[tcellID].center[2];
+		iris_real x = cx - m_cells[tcellID].ses.c.r[0];
+		iris_real y = cy - m_cells[tcellID].ses.c.r[1];
+		iris_real z = cz - m_cells[tcellID].ses.c.r[2];
 
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 		l2l(m_order, x, y, z, m_L[scellID], m_L[tcellID], m_scratch);
@@ -807,9 +809,9 @@ void fmm::eval_l2p(cell_t *in_cells)
     	    continue;
     	}
     	for(int j=0;j<leaf->num_children;j++) {
-	    iris_real x = m_cell_meta[i].center[0] - m_particles[leaf->first_child+j].xyzq[0];
-	    iris_real y = m_cell_meta[i].center[1] - m_particles[leaf->first_child+j].xyzq[1];
-	    iris_real z = m_cell_meta[i].center[2] - m_particles[leaf->first_child+j].xyzq[2];
+	    iris_real x = m_cells[i].ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
+	    iris_real y = m_cells[i].ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
+	    iris_real z = m_cells[i].ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 	    iris_real phi, Ex, Ey, Ez;
 	    
@@ -829,7 +831,7 @@ void fmm::eval_l2p(cell_t *in_cells)
 void fmm::calc_ext_boxes()
 {
     int leaf_offset = cell_meta_t::offset_for_level(max_level());
-    iris_real R = m_cell_meta[leaf_offset].radius;
+    iris_real R = m_cell_meta[leaf_offset].maxr;
     iris_real r_cut = 2 * R / m_mac;
     int nx = (int)(r_cut / m_leaf_size[0]);
     int ny = (int)(r_cut / m_leaf_size[1]);
