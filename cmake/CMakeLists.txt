@@ -137,6 +137,9 @@ target_link_libraries(bob iris)
 add_executable(bob-ref ${IRIS_SOURCE_DIR}/../examples/bob-ref.cpp)
 target_link_libraries(bob-ref iris)
 
+add_executable(ses-test ${IRIS_SOURCE_DIR}/../examples/ses-test.cpp)
+target_link_libraries(ses-test iris)
+
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)
 

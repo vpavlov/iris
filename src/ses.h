@@ -2,7 +2,7 @@
 //==============================================================================
 // IRIS - Long-range Interaction Solver Library
 //
-// Copyright (c) 2017-2018, the National Center for Supercomputing Applications
+// Copyright (c) 2017-2021, the National Center for Supercomputing Applications
 //
 // Primary authors:
 //     Valentin Pavlov <vpavlov@rila.bg>
@@ -27,46 +27,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_UTILS_H__
-#define __IRIS_UTILS_H__
+#ifndef __IRIS_SES_H__
+#define __IRIS_SES_H__
 
-#include <stdlib.h>
 #include "real.h"
+#include "sphere.h"
 
 namespace ORG_NCSA_IRIS {
-    
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
 
-#define ROW_MAJOR_OFFSET(x, y, z, ny, nz) ((z) + (nz)*((y) + (ny)*(x)))
-
-    typedef iris_real (*simple_fn)(iris_real x, void *obj);
-
-    iris_real *gauss(int n, iris_real **a, iris_real *b);
-    void pade_approximant(int m, int n, iris_real *input,
-			  iris_real *&out_nom,
-			  iris_real *&out_denom);
-
-    int binom(int n, int k);
-
-    iris_real root_of(simple_fn fn, iris_real x0, void *obj);  // using secant method
-
-    void qsort_int(int *in_data, size_t in_num);
-
-    inline bool is_power_of_2(int x) { return (x & (x - 1)) == 0; };
-
-    inline int rand_int(int from, int to) { return (rand() % (to-from+1)) + from; };
-    
-    template <typename T>
-    void shuffle(T *a, int n) {
-	T tmp;
-	for(int i=n-1;i>0;i--) {
-	    int j = rand_int(0, i);
-	    tmp = a[j];
-	    a[j] = a[i];
-	    a[i] = tmp;
-	}
-    }
+    void ses_of_points(point_t *P, int np, sphere_t *out_ses);
 }
 
 #endif

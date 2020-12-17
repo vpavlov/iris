@@ -7,7 +7,20 @@
    (- (* (nth 2 a) (nth 0 b)) (* (nth 0 a) (nth 2 b)))
    (- (* (nth 0 a) (nth 1 b)) (* (nth 1 a) (nth 0 b)))))
    
-
+(defun sphere3 (a b c)
+  (let* ((a1 (mapcar #'- a c))
+	 (b1 (mapcar #'- b c))
+	 (a1^2 (dot a1 a1))
+	 (b1^2 (dot b1 b1))
+	 (a2xb (mapcar #'(lambda (x) (* a1^2 x)) b1))
+	 (b2xa (mapcar #'(lambda (x) (* b1^2 x)) a1))
+	 (t1 (mapcar #'- a2xb b2xa))
+	 (axb (cross a1 b1))
+	 (t2 (cross t1 axb))
+	 (denom (* 2 (dot axb axb))))
+    (mapcar #'+ (mapcar #'(lambda (x) (/ x denom)) t2)
+	    c)))
+    
 (defun sphere (a b c d)
   (let* ((b1 (mapcar #'- b a))
 	 (c1 (mapcar #'- c a))

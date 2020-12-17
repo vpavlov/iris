@@ -112,7 +112,8 @@ iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
-
+    srand(time(NULL));
+    
 #if defined _OPENMP
 #pragma omp parallel default(none)
     m_nthreads = omp_get_num_threads();
