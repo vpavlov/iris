@@ -222,24 +222,21 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     def_param.i = 64;
     set_solver_param(IRIS_SOLVER_FMM_NCRIT, def_param);
 
-    // // default value for FMM MAC (θ) - 0.5
-    def_param.r = 0.5;
-    set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
-
-    // default value for FMM MAC LET correction parameter
-    def_param.r = 2;
-    set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
-
-    
-    // default value for FMM MAC (θ) - 0.5
-    // def_param.r = 0.866025404;  // sqrt(3)/2
+    // // // default value for FMM MAC (θ) - 0.5
+    // def_param.r = 0.5;
     // set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
 
     // // default value for FMM MAC LET correction parameter
-    // def_param.r = 1.5;
+    // def_param.r = 2;
     // set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
+    
+    def_param.r = 0.866025404;  // sqrt(3)/2
+    set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
 
-    // default value for FMM one sided LET exchange
+    def_param.r = 1.5;
+    set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
+
+    
     def_param.i = 0;
     set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, def_param);    
 }

@@ -646,8 +646,8 @@ void fmm::dual_tree_traversal()
 	}
     }
     
-    eval_l2l(m_cells);
-    eval_l2p(m_cells);
+    eval_l2l();
+    eval_l2p();
     
     tm.stop();
     m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
@@ -658,7 +658,11 @@ void fmm::traverse_queue(int ix, int iy, int iz)
     while(!m_queue.empty()) {
 	pair_t pair = m_queue.front();
 	m_queue.pop_front();
-	if(m_xcells[pair.sourceID].ses.r > m_cells[pair.targetID].ses.r) {
+
+	int src_level = cell_meta_t::level_of(pair.sourceID);
+	int tgt_level = cell_meta_t::level_of(pair.targetID);
+	
+	if((tgt_level == max_level()) || (src_level != max_level() && m_xcells[pair.sourceID].ses.r > m_cells[pair.targetID].ses.r)) {
 	    cell_t *src = m_xcells + pair.sourceID;
 	    int level = cell_meta_t::level_of(pair.sourceID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
@@ -791,13 +795,14 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 
     memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
     m2l(m_order, x, y, z, m_M[srcID], m_L[destID], m_scratch);
+
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
     m_m2l_count++;
 }
 
-void fmm::eval_l2l(cell_t *in_cells)
+void fmm::eval_l2l()
 {
-    for(int level = 1; level < m_depth; level++) {
+    for(int level = 0; level < m_depth-1; level++) {
 	int scellID = cell_meta_t::offset_for_level(level);
 	int tcellID = cell_meta_t::offset_for_level(level+1);
 	int nscells = tcellID - scellID;
@@ -808,14 +813,13 @@ void fmm::eval_l2l(cell_t *in_cells)
 		continue;
 	    }
 	    
-	    iris_real cx = m_xcells[scellID].ses.c.r[0];
-	    iris_real cy = m_xcells[scellID].ses.c.r[1];
-	    iris_real cz = m_xcells[scellID].ses.c.r[2];
+	    iris_real cx = m_cells[scellID].ses.c.r[0];
+	    iris_real cy = m_cells[scellID].ses.c.r[1];
+	    iris_real cz = m_cells[scellID].ses.c.r[2];
 
-	    bool valid_l = false;
 	    for(int j=0;j<8;j++) {
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
-		if(!(in_cells[scellID].flags & mask)) {
+		if(!(m_cells[scellID].flags & mask)) {
 		    tcellID++;
 		    continue;
 		}
@@ -825,30 +829,27 @@ void fmm::eval_l2l(cell_t *in_cells)
 
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
 		l2l(m_order, x, y, z, m_L[scellID], m_L[tcellID], m_scratch);
-		valid_l = true;
+		m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 		tcellID++;
 		m_l2l_count++;
-	    }
-	    if(valid_l) {
-		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 	    }
 	    scellID++;
 	}
     }
 }
 
-void fmm::eval_l2p(cell_t *in_cells)
+void fmm::eval_l2p()
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {
-    	cell_t *leaf = &in_cells[i];
+    	cell_t *leaf = m_cells + i;
     	if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
     	    continue;
     	}
     	for(int j=0;j<leaf->num_children;j++) {
-	    iris_real x = m_cells[i].ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
-	    iris_real y = m_cells[i].ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
-	    iris_real z = m_cells[i].ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
+	    iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
+	    iris_real y = leaf->ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
+	    iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 	    iris_real phi, Ex, Ey, Ez;
 	    
@@ -856,7 +857,7 @@ void fmm::eval_l2p(cell_t *in_cells)
 	    l2p(m_order, x, y, z, q, m_L[i], m_scratch, &phi, &Ex, &Ey, &Ez);
 	    
 	    m_particles[leaf->first_child+j].tgt[0] += phi;
-	    m_particles[leaf->first_child+j].tgt[1] += Ex;
+ 	    m_particles[leaf->first_child+j].tgt[1] += Ex;
 	    m_particles[leaf->first_child+j].tgt[2] += Ey;
 	    m_particles[leaf->first_child+j].tgt[3] += Ez;
 	    

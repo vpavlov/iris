@@ -71,8 +71,8 @@ namespace ORG_NCSA_IRIS {
 	void eval_m2m(cell_t *in_cells, bool alien_only);
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
-	void eval_l2l(cell_t *in_cells);
-	void eval_l2p(cell_t *in_cells);
+	void eval_l2l();
+	void eval_l2p();
 	
 	void exchange_LET();
 	void exchange_rest_of_LET();
