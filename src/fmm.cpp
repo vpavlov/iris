@@ -263,8 +263,11 @@ void fmm::send_back_forces()
 
 void fmm::solve()
 {
+    timer tm;
     m_logger->trace("FMM solve() start");
 
+    tm.start();
+    
     if(m_iris->m_compute_global_energy) {
 	m_iris->m_Ek = 0.0;
     }
@@ -291,6 +294,9 @@ void fmm::solve()
     compute_energy_and_virial();
     send_back_forces();
 
+    tm.stop();
+    m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    
     m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
 }
 
@@ -554,23 +560,25 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 
 void fmm::exchange_LET()
 {
-    timer tm;
+    timer tm, tm3;
     tm.start();
     
     memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
+    
     if(m_local_comm->m_size > 1) {
 
+	tm3.start();
 	sort_particles(m_xparticles, m_nxparticles, false);
 	distribute_particles(m_xparticles, m_nxparticles, IRIS_FMM_CELL_ALIEN_LEAF, m_xcells);  // distribute particles into leaf cells
+	tm3.stop();
 	
 	if(!m_one_sided) {
 	    timer tm2;
 	    tm2.start();
 	    exchange_rest_of_LET();
 	    tm2.stop();
-	    m_logger->info("FMM: Exchange rest of LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+	    m_logger->info("FMM: Comm LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
 	    
-	    timer tm3;
 	    tm3.start();
 	    recalculate_LET();
 	    tm3.stop();
@@ -580,7 +588,7 @@ void fmm::exchange_LET()
     //print_tree("Xcell", m_xcells, 0);
     
     tm.stop();
-    m_logger->info("FMM: Exchange LET wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::recalculate_LET()
