@@ -39,12 +39,12 @@
 using namespace ORG_NCSA_IRIS;
 
 void fmm::exchange_rest_of_LET()
-{
-    
-    // we're sending cell-in-transits, which are just
+{    
+    // we're sending cell-in-transits, which are:
     //   - cellID (int)
+    //   - ses (3 coordinates of centre + 1 radius)
     //   - m_nterms complex numbers for the multipole expansions
-    int unit_size = sizeof(int) + 2*m_nterms*sizeof(iris_real);
+    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
     
     // create the buffer for the first rank
     unsigned char *sendbuf;
@@ -156,7 +156,8 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	    get_LET(rank, childID, sendbuf, unit_size, out_cits);
 	}else { // orig: not close OR close but leaf; BUT second option we already sent with partices ?!?
 	    memcpy(sendbuf + (*out_cits)*unit_size, &childID, sizeof(int));
-	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), m_M[childID], 2*m_nterms*sizeof(iris_real));
+	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(m_cells[childID].ses), sizeof(sphere_t));
+	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), m_M[childID], 2*m_nterms*sizeof(iris_real));
 	    *out_cits = *out_cits + 1;
 	}
     }
@@ -165,11 +166,12 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 
 void fmm::inhale_xcells(unsigned char *recvbuf, int in_count)
 {
-    int unit_size = sizeof(int) + 2*m_nterms*sizeof(iris_real);
+    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
 
     for(int i=0;i<in_count;i++) {
     	int cellID = *(int *)(recvbuf + unit_size * i);
-	memcpy(m_M[cellID], recvbuf + unit_size * i + sizeof(int), 2*m_nterms*sizeof(iris_real));
+	memcpy(&(m_xcells[cellID].ses), recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
+	memcpy(m_M[cellID], recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }

@@ -467,8 +467,8 @@ int main(int argc, char **argv)
 	exit(-1);
     }
 
-    x->set_pbc(false, false, false);
-    //x->set_pbc(true, true, true);
+    //x->set_pbc(false, false, false);
+    x->set_pbc(true, true, true);
     x->set_units(md);
     x->m_logger->info("Node name = %s; PID = %d", proc_name, getpid());
 

@@ -301,7 +301,7 @@ void fmm::local_tree_construction()
 
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells	
-    link_parents(m_cells);
+    link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
@@ -412,9 +412,11 @@ void fmm::relink_parents(cell_t *io_cells)
     int end = cell_meta_t::offset_for_level(max_level());
     for(int i=0;i<end;i++) {
 	io_cells[i].flags & ~IRIS_FMM_CELL_HAS_CHILDREN;
-	io_cells[i].ses.c.r[0] = 0.0;
-	io_cells[i].ses.c.r[1] = 0.0;
-	io_cells[i].ses.c.r[2] = 0.0;
+    }
+
+    // second, for all shared cells (above local root level) recalculate ses
+    end = cell_meta_t::offset_for_level(m_local_root_level);
+    for(int i=0;i<end;i++) {
 	io_cells[i].ses.r = 0.0;
     }
 
@@ -436,12 +438,14 @@ void fmm::link_parents(cell_t *io_cells)
 	    }
 	}
     }
-    
-    // calculate ses of non-leafs
+
     for(int i=max_level()-1;i>=0;i--) {
 	int start = cell_meta_t::offset_for_level(i);
 	int end = cell_meta_t::offset_for_level(i+1);
 	for(int j=start;j<end;j++) {
+	    if(io_cells[j].ses.r != 0.0) {
+		continue;
+	    }
 	    sphere_t S[8];
 	    int ns = 0;
 	    for(int k = 0;k<8;k++) {
@@ -465,10 +469,19 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {
 	cell_t *leaf = &in_cells[i];
+	
+	// no particles here -- continue
 	if(leaf->num_children == 0) {
 	    continue;
 	}
+	
+	// we only want alien cells, but this one is local -- continue
 	if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+	    continue;
+	}
+
+	// it has been send from exchange_LET AND from halo exchange -- continue
+	if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
 	    continue;
 	}
 	for(int j=0;j<leaf->num_children;j++) {
