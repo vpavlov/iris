@@ -188,7 +188,8 @@ void fmm::set_leaf_size()
 void fmm::handle_box_resize()
 {
     set_leaf_size();
-    generate_cell_meta();
+    // Cell meta is no longer needed, except for one-sided comm, which is not implemented yet (maybe never)
+    //generate_cell_meta();  
 }
 
 void fmm::compute_energy_and_virial()
@@ -889,8 +890,8 @@ void fmm::eval_l2p()
 
 void fmm::calc_ext_boxes()
 {
-    int leaf_offset = cell_meta_t::offset_for_level(max_level());
-    iris_real R = m_cell_meta[leaf_offset].maxr;
+    iris_real R = sqrt(m_leaf_size[0]*m_leaf_size[0] + m_leaf_size[1]*m_leaf_size[1] + m_leaf_size[2]*m_leaf_size[2]);
+
     iris_real r_cut = 2 * R / m_mac;
     int nx = (int)(r_cut / m_leaf_size[0]);
     int ny = (int)(r_cut / m_leaf_size[1]);
