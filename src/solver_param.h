@@ -44,6 +44,7 @@ union solver_param_t
 #define IRIS_SOLVER_FMM_MAC            5  // FMM: Multipole Acceptance Criteria θ
 #define IRIS_SOLVER_FMM_MAC_CORR       6  // FMM: Correction to θ for estimating distance for LET
 #define IRIS_SOLVER_FMM_ONE_SIDED      7  // FMM: One-sided communication of LET
-#define IRIS_SOLVER_PARAM_CNT          8  // number of different parameters
+#define IRIS_SOLVER_FMM_CUDA           8  // FMM: Use cuda version
+#define IRIS_SOLVER_PARAM_CNT          9  // number of different parameters
 
 #endif

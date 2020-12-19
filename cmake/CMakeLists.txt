@@ -32,7 +32,7 @@ cmake_minimum_required(VERSION 2.8)
 project(iris)
 set(SOVERSION 0)
 
-enable_language(CXX)
+enable_language(CXX CUDA)
 set(CMAKE_CXX_STANDARD 11)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
@@ -65,6 +65,17 @@ include(GNUInstallDirs)
 find_package(MPI REQUIRED)
 include_directories(${MPI_C_INCLUDE_PATH})
 list(APPEND IRIS_LINK_LIBS ${MPI_CXX_LIBRARIES})
+
+################################################################################
+# Find CUDA
+################################################################################
+option(IRIS_CUDA "Build CUDA version" ON)
+if(IRIS_CUDA)
+  find_package(CUDA REQUIRED)
+  add_definitions(-DIRIS_CUDA)
+  list(APPEND IRIS_LINK_LIBS -lcudart)
+  set(CMAKE_CUDA_ARCHITECTURES  50 70 72)
+endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
 if(IRIS_OPENMP)

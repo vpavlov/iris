@@ -237,7 +237,10 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
 
     def_param.i = 0;
-    set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, def_param);    
+    set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, def_param);
+
+    def_param.i = 0;
+    set_solver_param(IRIS_SOLVER_FMM_CUDA, def_param);
 }
 
 iris::~iris()

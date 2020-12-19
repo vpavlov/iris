@@ -42,6 +42,10 @@
 #include "tags.h"
 #include "ses.h"
 
+#ifdef IRIS_CUDA
+#include "cuda_runtime_api.h"
+#endif
+
 using namespace ORG_NCSA_IRIS;
 
 #define _LN8 2.0794415416798357  // natural logarithm of 8
