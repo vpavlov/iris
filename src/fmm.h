@@ -39,9 +39,15 @@
 #include "fmm_particle.h"
 #include "assert.h"
 #include "logger.h"
-
+#ifdef IRIS_CUDA
+#include "cuda_runtime_api.h"
+#endif
 namespace ORG_NCSA_IRIS {
-	
+
+#ifdef IRIS_CUDA
+#define IRIS_CUDA_FMM_NUM_STREAMS 4
+#endif
+    
     class fmm : public solver {
 
     public:
@@ -62,6 +68,12 @@ namespace ORG_NCSA_IRIS {
 
 	void local_tree_construction();
 	void load_particles();
+	void load_particles_cpu();
+#ifdef IRIS_CUDA
+	void load_particles_gpu();
+	void send_charges_to_gpu();
+#endif
+	
 	
 	void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 
@@ -109,13 +121,15 @@ namespace ORG_NCSA_IRIS {
 	// THE "TREE"
 	int                 m_tree_size;         // Pre-computed tree size
 	struct cell_meta_t *m_cell_meta;         // Static cell data (e.g. center, radius)
-	iris_real         **m_M;                 // Multipole expansions, one per cell
-	iris_real         **m_L;                 // Local expansions, one per cell
+	iris_real          *m_M;                 // Multipole expansions, one per cell
+	iris_real          *m_L;                 // Local expansions, one per cell
 	struct cell_t      *m_cells;             // Local tree (actually cell_t *)
 	struct cell_t      *m_xcells;            // Local essential tree (cell_t *, local tree + needed parts from other ranks)
 	int                 m_nparticles;        // number of particle
+	int                 m_npart_cap;         // capacity of the allocated array of particles
 	struct particle_t  *m_particles;         // array of particles themselves
-	int                 m_nxparticles;       // number of alien particles
+	int                 m_nxpart_cap;        // capacity of the allocated array of halo particles
+	int                 m_nxparticles;       // number of halo particles
 	struct particle_t  *m_xparticles;        // halo particles
 	bool                m_dirty;
 
@@ -131,11 +145,21 @@ namespace ORG_NCSA_IRIS {
 	int m_p2m_alien_count;
 	int m_m2m_alien_count;
 
-	bool m_one_sided;
-	MPI_Win m_Mwin;
-	
 	box_t<iris_real> m_ext_box;
 	box_t<iris_real> *m_ext_boxes;
+
+#ifdef IRIS_CUDA
+	std::map<int, iris_real *> m_charges_gpu;
+	std::map<int, int> m_charges_gpu_cap;
+	cudaStream_t m_streams[IRIS_CUDA_FMM_NUM_STREAMS];
+
+	int *m_atom_types;
+	int m_at_cap;
+	
+	int *m_cellID_keys;
+	int m_cellID_keys_cap;
+	
+#endif
     };
 }
 

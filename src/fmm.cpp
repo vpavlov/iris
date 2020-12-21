@@ -44,6 +44,7 @@
 
 #ifdef IRIS_CUDA
 #include "cuda_runtime_api.h"
+#include "cuda.h"
 #endif
 
 using namespace ORG_NCSA_IRIS;
@@ -57,47 +58,76 @@ fmm::fmm(iris *obj):
     solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
     m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), 
     m_scratch(NULL), m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
-    m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_particles(NULL),
-    m_nxparticles(0), m_xparticles(NULL),
+    m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_npart_cap(0), m_particles(NULL),
+    m_nxparticles(0), m_nxpart_cap(0), m_xparticles(NULL),
     m_dirty(true), m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
-    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
-    m_Mwin(MPI_WIN_NULL),m_one_sided(false)
+    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0)
+#ifdef IRIS_CUDA
+    ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0)
+#endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
     m_ext_boxes = (box_t<iris_real> *)memory::wmalloc(size);
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	    cudaStreamCreate(&m_streams[i]);
+	}
+    }    
+#endif
+    
 }
 
 fmm::~fmm()
 {
-    memory::wfree(m_ext_boxes);
-    memory::destroy_1d(m_scratch);
-    memory::destroy_1d(m_cell_meta);
-    memory::destroy_2d(m_M);
-    memory::destroy_2d(m_L);
-    memory::destroy_1d(m_cells);
-    memory::destroy_1d(m_xcells);
-    memory::destroy_1d(m_particles);
-    memory::destroy_1d(m_xparticles);
-    memory::destroy_1d(m_sendcnt);
-    memory::destroy_1d(m_senddisp);
-    memory::destroy_1d(m_recvcnt);
-    memory::destroy_1d(m_recvdisp);
-    if(m_Mwin != MPI_WIN_NULL) {
-	MPI_Win_free(&m_Mwin);
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	    cudaStreamDestroy(m_streams[i]);
+	}
+	memory::wfree(m_ext_boxes);
+	memory::destroy_1d_gpu(m_scratch);
+	memory::destroy_1d_gpu(m_M);
+	memory::destroy_1d_gpu(m_L);
+	if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
+	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
+	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
+	if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }
+	if(m_sendcnt != NULL) { memory::wfree_gpu(m_sendcnt); }
+	if(m_senddisp != NULL) { memory::wfree_gpu(m_senddisp); }
+	if(m_recvcnt != NULL) { memory::wfree_gpu(m_recvcnt); }
+	if(m_recvdisp != NULL) { memory::wfree_gpu(m_recvdisp); }
+	for(auto it = m_charges_gpu.begin(); it != m_charges_gpu.end(); it++) {
+	    memory::wfree_gpu(it->second);
+	}
+	if(m_atom_types != NULL) { memory::wfree_gpu(m_atom_types); }
+	if(m_cellID_keys != NULL) { memory::wfree_gpu(m_cellID_keys); }
+    }else 
+#endif
+    {
+	memory::wfree(m_ext_boxes);
+	memory::destroy_1d(m_scratch);
+	memory::destroy_1d(m_cell_meta);
+	memory::destroy_1d(m_M);
+	memory::destroy_1d(m_L);
+	if(m_cells != NULL) { memory::wfree(m_cells); }
+	if(m_xcells != NULL) { memory::wfree(m_xcells); }
+	if(m_particles != NULL) { memory::wfree(m_particles); }
+	if(m_xparticles != NULL)  { memory::wfree(m_xparticles); }
+	if(m_sendcnt != NULL) { memory::wfree(m_sendcnt); }
+	if(m_senddisp != NULL) { memory::wfree(m_senddisp); }
+	if(m_recvcnt != NULL) { memory::wfree(m_recvcnt); }
+	if(m_recvdisp != NULL) { memory::wfree(m_recvdisp); }
     }
 }
 
 void fmm::commit()
 {
     if(m_dirty) {
+	
 	m_order = m_iris->m_order;  // if p = 2, we expand multipoles until Y_2^2
-
-	solver_param_t p1 = m_iris->get_solver_param(IRIS_SOLVER_FMM_ONE_SIDED);
-	if(p1.i) {
-	    m_one_sided = true;
-	    throw std::logic_error("One-sided FMM not fully implemented!");
-	}
 	
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);
@@ -124,49 +154,68 @@ void fmm::commit()
 	
 	handle_box_resize();
 
-	memory::destroy_1d(m_scratch);
-	memory::create_1d(m_scratch, 2*m_nterms);
-	
-	memory::destroy_2d(m_M);
-	memory::create_2d(m_M, m_tree_size, 2*m_nterms, true);
+#ifdef IRIS_CUDA
+	if(m_iris->m_cuda) {
+	    memory::destroy_1d_gpu(m_scratch);
+	    memory::create_1d_gpu(m_scratch, 2*m_nterms);
+	    memory::destroy_1d_gpu(m_M);
+	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
+	    memory::destroy_1d_gpu(m_L);
+	    memory::create_1d_gpu(m_L, m_tree_size*2*m_nterms);
 
-	if(m_one_sided) {
-	    if(m_Mwin != MPI_WIN_NULL) {
-		MPI_Win_free(&m_Mwin);
-	    }
-	    MPI_Win_create(&(m_M[0][0]), m_tree_size*2*m_nterms*sizeof(iris_real), sizeof(iris_real), MPI_INFO_NULL, m_local_comm->m_comm, &m_Mwin);
+	    if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
+	    m_cells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
+
+	    if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
+	    m_xcells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
+
+	    if(m_sendcnt != NULL) { memory::wfree_gpu(m_sendcnt); }
+	    m_sendcnt = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
+
+	    if(m_senddisp != NULL) { memory::wfree_gpu(m_senddisp); }
+	    m_senddisp = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
+
+	    if(m_recvcnt != NULL) { memory::wfree_gpu(m_recvcnt); }
+	    m_recvcnt = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
+
+	    if(m_recvdisp != NULL) { memory::wfree_gpu(m_recvdisp); }
+	    m_recvdisp = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
+	    
+	}else
+#endif
+	{
+	    memory::destroy_1d(m_scratch);
+	    memory::create_1d(m_scratch, 2*m_nterms);
+	    memory::destroy_1d(m_M);
+	    memory::create_1d(m_M, m_tree_size*2*m_nterms);
+	    memory::destroy_1d(m_L);
+	    memory::create_1d(m_L, m_tree_size*2*m_nterms);
+	    
+	    memory::destroy_1d(m_cells);
+	    memory::create_1d(m_cells, m_tree_size);
+	    
+	    memory::destroy_1d(m_xcells);
+	    memory::create_1d(m_xcells, m_tree_size);
+
+	    memory::destroy_1d(m_sendcnt);
+	    memory::create_1d(m_sendcnt, m_local_comm->m_size);
+	    
+	    memory::destroy_1d(m_senddisp);
+	    memory::create_1d(m_senddisp, m_local_comm->m_size);
+	    
+	    memory::destroy_1d(m_recvcnt);
+	    memory::create_1d(m_recvcnt, m_local_comm->m_size);
+	    
+	    memory::destroy_1d(m_recvdisp);
+	    memory::create_1d(m_recvdisp, m_local_comm->m_size);
 	}
-	
-	
-	memory::destroy_2d(m_L);
-	memory::create_2d(m_L, m_tree_size, 2*m_nterms, true);
-	
-	memory::destroy_1d(m_cells);
-	memory::destroy_1d(m_xcells);
-	
-	memory::create_1d(m_cells, m_tree_size);
-	memset(m_cells, 0, m_tree_size*sizeof(cell_t));  // make sure num_children are 0
 
-	memory::create_1d(m_xcells, m_tree_size);
-	
-	// particles/xparticles will be re-created in solve, since
-	// they depend on the number of local particles, which might not be
-	// known at commit time...
-
-	memory::destroy_1d(m_sendcnt);
-	memory::create_1d(m_sendcnt, m_local_comm->m_size);
-	
-	memory::destroy_1d(m_senddisp);
-	memory::create_1d(m_senddisp, m_local_comm->m_size);
-	
-	memory::destroy_1d(m_recvcnt);
-	memory::create_1d(m_recvcnt, m_local_comm->m_size);
-	
-	memory::destroy_1d(m_recvdisp);
-	memory::create_1d(m_recvdisp, m_local_comm->m_size);
-	
 	m_dirty = false;
-	m_logger->info("FMM: order = %d; depth = %d; tree size = %d; local root level = %d", m_order, m_depth, m_tree_size, m_local_root_level);
+	if(m_iris->m_cuda) {
+	    m_logger->info("FMM/GPU: order = %d; depth = %d; tree size = %d; local root level = %d", m_order, m_depth, m_tree_size, m_local_root_level);
+	}else {
+	    m_logger->info("FMM: order = %d; depth = %d; tree size = %d; local root level = %d", m_order, m_depth, m_tree_size, m_local_root_level);
+	}
     }
     calc_ext_boxes();  // this is needed every time
 }
@@ -286,9 +335,18 @@ void fmm::solve()
 	    m_iris->m_virial[5] = 0.0;
     }
 
-    memset(&(m_M[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
-    memset(&(m_L[0][0]), 0, m_tree_size*2*m_nterms*sizeof(iris_real));
-    memset(m_cells, 0, m_tree_size*sizeof(cell_t));
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+       	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[0]);
+	cudaMemsetAsync(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[1]);
+	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[2]);	
+    }else
+#endif
+    {
+	memset(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+	memset(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+	memset(m_cells, 0, m_tree_size*sizeof(cell_t));
+    }
     
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
 
@@ -311,17 +369,32 @@ void fmm::local_tree_construction()
     tm.start();
 
     load_particles();                                          // creates and sorts the m_particles array
+
+    tm.stop();
+    m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    exit(-1);
+    
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells	
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
-    tm.stop();
-    m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
     //print_tree("Cell", m_cells, 0);
 }
 
 void fmm::load_particles()
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	load_particles_gpu();
+    }else 
+#endif
+    {
+	load_particles_cpu();
+    }
+}
+
+void fmm::load_particles_cpu()
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     int nd = 1 << max_level();
@@ -330,12 +403,9 @@ void fmm::load_particles()
     m_nxparticles = m_iris->num_halo_atoms();
     m_logger->info("FMM: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
 
-    memory::destroy_1d(m_particles);
-    memory::create_1d(m_particles, m_nparticles);
-
-    memory::destroy_1d(m_xparticles);
-    memory::create_1d(m_xparticles, m_nxparticles);
-    
+    m_particles = (particle_t *)memory::wmalloc_cap((void *)m_particles, m_nparticles, sizeof(particle_t), &m_npart_cap);
+    m_xparticles = (particle_t *)memory::wmalloc_cap((void *)m_xparticles, m_nxparticles, sizeof(particle_t), &m_nxpart_cap);
+        
     box_t<iris_real> *gbox = &m_domain->m_global_box;
     
     int n_own = 0;
@@ -385,6 +455,7 @@ void fmm::load_particles()
 
     // sort the final lists by cellID
     sort_particles(m_particles, m_nparticles, false);
+    sort_particles(m_xparticles, m_nxparticles, false);
 }
 
 void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
@@ -508,7 +579,7 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
 		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
 		q = m_particles[leaf->first_child+j].xyzq[3];
 	    }
-	    p2m(m_order, x, y, z, q, m_M[i]);
+	    p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
 	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    m_p2m_count++;
 	    if(alien_only) {
@@ -547,7 +618,7 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 		iris_real y = in_cells[scellID].ses.c.r[1] - cy;
 		iris_real z = in_cells[scellID].ses.c.r[2] - cz;
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-		m2m(m_order, x, y, z, m_M[scellID], m_M[tcellID], m_scratch);
+		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, m_M + tcellID * 2 * m_nterms, m_scratch);
 		valid_m = true;
 		scellID++;
 		m_m2m_count++;
@@ -573,22 +644,19 @@ void fmm::exchange_LET()
     if(m_local_comm->m_size > 1) {
 
 	tm3.start();
-	sort_particles(m_xparticles, m_nxparticles, false);
 	distribute_particles(m_xparticles, m_nxparticles, IRIS_FMM_CELL_ALIEN_LEAF, m_xcells);  // distribute particles into leaf cells
 	tm3.stop();
 	
-	if(!m_one_sided) {
-	    timer tm2;
-	    tm2.start();
-	    exchange_rest_of_LET();
-	    tm2.stop();
-	    m_logger->info("FMM: Comm LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
-	    
-	    tm3.start();
-	    recalculate_LET();
-	    tm3.stop();
-	    m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
-	}
+	timer tm2;
+	tm2.start();
+	exchange_rest_of_LET();
+	tm2.stop();
+	m_logger->info("FMM: Comm LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
+	
+	tm3.start();
+	recalculate_LET();
+	tm3.stop();
+	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
     }
     //print_tree("Xcell", m_xcells, 0);
     
@@ -622,7 +690,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       m_M[cellID][0]);
+		       m_M[cellID*2*m_nterms]);
     }else {
 	int num_children = 0;
 	int mask = IRIS_FMM_CELL_HAS_CHILD1;
@@ -638,7 +706,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       m_M[cellID][0]);
+		       m_M[cellID*2*m_nterms]);
     }
     if(level < max_level()) {
 	int this_offset = cell_meta_t::offset_for_level(level);
@@ -820,7 +888,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real z = tz - sz;
 
     memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M[srcID], m_L[destID], m_scratch);
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch);
 
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
     m_m2l_count++;
@@ -854,7 +922,7 @@ void fmm::eval_l2l()
 		iris_real z = cz - m_cells[tcellID].ses.c.r[2];
 
 		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-		l2l(m_order, x, y, z, m_L[scellID], m_L[tcellID], m_scratch);
+		l2l(m_order, x, y, z, m_L + scellID * 2 * m_nterms, m_L + tcellID * 2 * m_nterms, m_scratch);
 		m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 		tcellID++;
 		m_l2l_count++;
@@ -880,7 +948,7 @@ void fmm::eval_l2p()
 	    iris_real phi, Ex, Ey, Ez;
 	    
 	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	    l2p(m_order, x, y, z, q, m_L[i], m_scratch, &phi, &Ex, &Ey, &Ez);
+	    l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, m_scratch, &phi, &Ex, &Ey, &Ez);
 	    
 	    m_particles[leaf->first_child+j].tgt[0] += phi;
  	    m_particles[leaf->first_child+j].tgt[1] += Ex;

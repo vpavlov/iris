@@ -64,23 +64,23 @@ namespace ORG_NCSA_IRIS {
 	//   - distributed mode: every node is either client XOR server
 
 	// Use this constructor when for shared mode and rank 0 is the leader
-	iris(int in_which_solver, MPI_Comm in_uber_comm);
+	iris(int in_which_solver, MPI_Comm in_uber_comm, bool in_cuda = false);
 
 	// Use this constructor when for shared mode and you want to specify
 	// a different leader
-	iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader);
+	iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader, bool in_cuda = false);
 
 	// Use this constructor when in distributed mode and the local leader
 	// of each group is its respective rank 0
 	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm,
-	     MPI_Comm in_uber_comm, int in_remote_leader);
+	     MPI_Comm in_uber_comm, int in_remote_leader, bool in_cuda = false);
 
 	// Use this constructor when in distributed  mode and you want to
 	// specify a local leader != 0
 	iris(int in_which_solver, int in_client_size, int in_server_size,
 	     int in_role, MPI_Comm in_local_comm, int in_local_leader,
-	     MPI_Comm in_uber_comm, int in_remote_leader);
+	     MPI_Comm in_uber_comm, int in_remote_leader, bool in_cuda = false);
 
 	~iris();
 
@@ -224,6 +224,7 @@ namespace ORG_NCSA_IRIS {
 	class solver *get_solver();
 
     public:
+	bool m_cuda;                   // CUDA version
 	int m_which_solver;            // P3M, CG, ...
 	int m_order;                   // approximation order (different for different solvers)
 	int m_client_size;             // # of client nodes
@@ -238,8 +239,8 @@ namespace ORG_NCSA_IRIS {
 
 	int *m_ncharges;
 	//std::map<int, int> m_ncharges;           // per sending rank
-	std::map<int, iris_real *> m_charges;    // per sending rank
-	std::map<int, iris_real *> m_forces;     // per recv rank
+	std::map<int, iris_real *> m_charges;      // per sending rank
+	std::map<int, iris_real *> m_forces;       // per recv rank
 	
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
 	bool                   m_compute_global_virial;  // whether to compute global long-range virial

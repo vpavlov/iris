@@ -27,65 +27,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <stdlib.h>
-#include <string.h>
-#include <malloc.h>
-#include <new>
-#include <cstdint>
-#include "memory.h"
-#include "utils.h"
+#ifndef __IRIS_CUDA_H__
+#define __IRIS_CUDA_H__
 
-using namespace ORG_NCSA_IRIS;
+#ifdef IRIS_CUDA
 
-void *memory::wmalloc(size_t nbytes)
-{
-    void *retval;
-    int res = posix_memalign(&retval, IRIS_MEMALIGN, nbytes);
-    if(res != 0) {
-	throw std::bad_alloc();
+#define IRIS_CUDA_NTHREADS 256
+#define IRIS_CUDA_NBLOCKS(N, NT) (((N) + (NT) - 1)/(NT))
+#define IRIS_CUDA_TID (blockIdx.x * blockDim.x + threadIdx.x)
+#define IRIS_CUDA_CHUNK(N) (((N) + gridDim.x*blockDim.x - 1)/(gridDim.x*blockDim.x))
+
+#define IRIS_CUDA_SETUP_WS(N)			\
+    int tid = IRIS_CUDA_TID;			\
+    int chunk_size = IRIS_CUDA_CHUNK((N));	\
+    int from = tid * chunk_size;		\
+    int to = from + chunk_size;			\
+    to = MIN(to, (N))
+
+#endif
+
+#define IRIS_CUDA_HANDLE_ERROR(res)					\
+    if(res != cudaSuccess) {						\
+	m_logger->error("CUDA Error: %s - %s", cudaGetErrorName(res), cudaGetErrorString(res)); \
+	throw std::runtime_error("CUDA Exception occured");		\
     }
-
-    return retval;
-}
-
-void *memory::wrealloc(void *ptr, size_t nbytes)
-{
-    if(nbytes == 0) {
-	wfree(ptr);
-	return NULL;
-    }
-
-    ptr = realloc(ptr, nbytes);
-    if(ptr == NULL) {
-	throw std::bad_alloc();
-    }
-
-    if((uintptr_t)ptr % IRIS_MEMALIGN != 0) {
-	void *tmp = wmalloc(nbytes);
-	memcpy(tmp, ptr, MIN(nbytes, malloc_usable_size(ptr)));
-	free(ptr);
-	return tmp;
-    }else {
-	return ptr;
-    }
-}
-
-void memory::wfree(void *ptr)
-{
-    free(ptr);
-}
-
-#define CPU_EXTRA_CAP 1.05
-
-void *memory::wmalloc_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity)
-{
-    if(in_array != NULL && in_new_size > *io_capacity) {
-	memory::wfree(in_array);
-    }
-
-    if(in_array == NULL || in_new_size > *io_capacity) {
-	*io_capacity = in_new_size * CPU_EXTRA_CAP;
-	return memory::wmalloc(*io_capacity * in_unit_size);
-    }
-    return in_array;
-}
+#endif

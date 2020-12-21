@@ -31,6 +31,7 @@
 #define __IRIS_MEMORY_H__
 
 #include <stdlib.h>
+#include "real.h"
 
 namespace ORG_NCSA_IRIS {
 
@@ -39,13 +40,25 @@ namespace ORG_NCSA_IRIS {
     public:
 
 	static void *wmalloc(size_t nbytes);
+	static void *wmalloc_cap(void *io_array, int in_new_size, int in_unit_size, int *io_capacity);
+	
+#ifdef IRIS_CUDA
+	static void *wmalloc_gpu(int nbytes, bool clear = false, bool host = false);
+	static void *wmalloc_gpu_cap(void *io_array, int in_new_size, int in_unit_size, int *io_capacity);
+#endif
+	
 	static void *wrealloc(void *ptr, size_t nbytes);
+	
 	static void wfree(void *ptr);
-
+	
+#ifdef IRIS_CUDA
+	static void wfree_gpu(void *ptr);
+#endif
+	
 	//**********************************************************************
 	// 1D Arrays
 	//**********************************************************************
-
+	
 	template <typename T>
 	static T *create_1d(T *&array, int n1, bool clear = false)
 	{
@@ -58,6 +71,10 @@ namespace ORG_NCSA_IRIS {
 	    return array;
 	}
 
+#ifdef IRIS_CUDA
+	static void create_1d_gpu(iris_real *&array, int n, bool clear = false);
+#endif
+	
 	template <typename T>
 	static void destroy_1d(T *&array)
 	{
@@ -68,6 +85,10 @@ namespace ORG_NCSA_IRIS {
 	    wfree(array);
 	    array = NULL;
 	}
+
+#ifdef IRIS_CUDA
+	static void destroy_1d_gpu(iris_real *&array);
+#endif
 	
 	//**********************************************************************
 	// 2D Arrays
@@ -94,6 +115,10 @@ namespace ORG_NCSA_IRIS {
 	    return array;
 	}
 
+#ifdef IRIS_CUDA
+	static iris_real **create_2d_gpu(iris_real **&array, int n1, int n2, bool clear = false);
+#endif
+	
 	template <typename T>
 	static void destroy_2d(T **&array)
 	{
@@ -106,6 +131,10 @@ namespace ORG_NCSA_IRIS {
 	    array = NULL;
 	}
 
+#ifdef IRIS_CUDA
+	static void destroy_2d_gpu(iris_real **&array);
+#endif
+	
 	//**********************************************************************
 	// 3D Arrays
 	//**********************************************************************

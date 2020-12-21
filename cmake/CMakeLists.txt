@@ -75,6 +75,7 @@ if(IRIS_CUDA)
   add_definitions(-DIRIS_CUDA)
   list(APPEND IRIS_LINK_LIBS -lcudart)
   set(CMAKE_CUDA_ARCHITECTURES  50 70 72)
+  file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.c*)
 endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
@@ -148,8 +149,11 @@ target_link_libraries(bob iris)
 add_executable(bob-ref ${IRIS_SOURCE_DIR}/../examples/bob-ref.cpp)
 target_link_libraries(bob-ref iris)
 
-add_executable(ses-test ${IRIS_SOURCE_DIR}/../examples/ses-test.cpp)
-target_link_libraries(ses-test iris)
+add_executable(sort-test ${IRIS_SOURCE_DIR}/../examples/sort-test.cu)
+target_link_libraries(sort-test iris)
+
+# add_executable(ses-test ${IRIS_SOURCE_DIR}/../examples/ses-test.cpp)
+# target_link_libraries(ses-test iris)
 
 # add_executable(poisson ${IRIS_SOURCE_DIR}/../examples/poisson.cpp)
 # target_link_libraries(poisson iris)

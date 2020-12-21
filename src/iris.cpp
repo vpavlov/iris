@@ -51,6 +51,11 @@
 #include "openmp.h"
 #include "fmm.h"
 
+#ifdef IRIS_CUDA
+#include "cuda_runtime_api.h"
+#include "cuda.h"
+#endif
+
 using namespace ORG_NCSA_IRIS;
 
 #define _SQRT_PI  1.772453850905516027298167483341
@@ -76,25 +81,25 @@ using namespace ORG_NCSA_IRIS;
 			       " may only be called from server nodes!"); \
     }
 
-iris::iris(int in_which_solver, MPI_Comm in_uber_comm):
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm, bool in_cuda):
     m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(0),
-    m_remote_leader(0)
+    m_remote_leader(0), m_cuda(in_cuda)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
-iris::iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader):
+iris::iris(int in_which_solver, MPI_Comm in_uber_comm, int in_leader, bool in_cuda):
     m_which_solver(in_which_solver), m_role(IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER), m_local_leader(in_leader),
-    m_remote_leader(in_leader)
+    m_remote_leader(in_leader), m_cuda(in_cuda)
 {
     init(in_uber_comm, in_uber_comm);
 }
 
 iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm,
-	   MPI_Comm in_uber_comm, int in_remote_leader):
+	   MPI_Comm in_uber_comm, int in_remote_leader, bool in_cuda):
     m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
-    m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader)
+    m_role(in_role), m_local_leader(0), m_remote_leader(in_remote_leader), m_cuda(in_cuda)
      
 {
     init(in_local_comm, in_uber_comm);
@@ -102,10 +107,10 @@ iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 
 iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 	   int in_role, MPI_Comm in_local_comm, int in_local_leader,
-	   MPI_Comm in_uber_comm, int in_remote_leader):
+	   MPI_Comm in_uber_comm, int in_remote_leader, bool in_cuda):
     m_which_solver(in_which_solver), m_client_size(in_client_size), m_server_size(in_server_size),
     m_role(in_role), m_local_leader(in_local_leader),
-    m_remote_leader(in_remote_leader)
+    m_remote_leader(in_remote_leader), m_cuda(in_cuda)
 {
     init(in_local_comm, in_uber_comm);
 }
@@ -113,6 +118,12 @@ iris::iris(int in_which_solver, int in_client_size, int in_server_size,
 void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 {
     srand(time(NULL));
+
+#ifndef IRIS_CUDA
+    if(m_cuda == true) {
+	throw std::logic_error("CUDA version required, but CUDA support not compiled in!");
+    }
+#endif
     
 #if defined _OPENMP
 #pragma omp parallel default(none)
@@ -235,12 +246,6 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     def_param.r = 1.5;
     set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
-
-    def_param.i = 0;
-    set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, def_param);
-
-    def_param.i = 0;
-    set_solver_param(IRIS_SOLVER_FMM_CUDA, def_param);
 }
 
 iris::~iris()
@@ -254,9 +259,16 @@ iris::~iris()
     }
 
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	memory::wfree(it->second);
+#ifdef IRIS_CUDA
+	if(m_cuda) {
+	    memory::wfree_gpu(it->second); // this is pinned memory
+	}else
+#endif
+	{
+	    memory::wfree(it->second);
+	}
     }
-
+    
     for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
 	memory::wfree(it->second);
     }
@@ -454,7 +466,14 @@ void iris::perform_commit()
 	}
 
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
-	    memory::wfree(it->second);
+#ifdef IRIS_CUDA
+	    if(m_cuda) {
+		memory::wfree_gpu(it->second); // this is pinned memory
+	    }else
+#endif
+	    {
+		memory::wfree(it->second);
+	    }
 	}
 	
 	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
@@ -765,7 +784,15 @@ bool iris::handle_charges(event_t *event)
     m_logger->info("Received %d atoms from %d", ncharges, event->peer);
 
     m_ncharges[event->peer] = ncharges;
-    m_charges[event->peer] = (iris_real *)event->data;
+#ifdef IRIS_CUDA
+    if(m_cuda) {
+	m_charges[event->peer] = (iris_real *)memory::wmalloc_gpu(ncharges * unit, false, true);  // copy to pinned memory
+	memcpy(m_charges[event->peer], event->data, ncharges * unit);
+    }else
+#endif
+    {
+	m_charges[event->peer] = (iris_real *)event->data;
+    }
 
     if(!is_client()) {
 	MPI_Request req;
@@ -774,6 +801,12 @@ bool iris::handle_charges(event_t *event)
 	MPI_Request_free(&req);
     }
 
+#ifdef IRIS_CUDA
+    if(m_cuda) {
+	return false;  // in the cuda version, we already copied it to pinned memory
+    }
+#endif
+	
     return true;  // hold on to dear life; we need the charges for later
 }
 

@@ -383,7 +383,8 @@ int main(int argc, char **argv)
 	printf("Usage: %s <path-to-bob-trj dir> <mode>\n", argv[0]);
 	printf("  mode = 0 is all nodes are client/server\n");
 	printf("  mode = 1 is half nodes are clients, half nodes are server\n");
-	printf("  mode = 2 is like 0, but with one-sided LET exchange\n");
+	printf("  mode = 2 is like 0, but with CUDA FMM\n");
+	printf("  mode = 3 is like 1, but with CUDA FMM\n");
 	exit(-1);
     }
 
@@ -418,8 +419,12 @@ int main(int argc, char **argv)
     int client_size;
     int server_size;
 
-    bool one_sided = false;
+    bool cuda = false;
     if(mode == 0 || mode == 2) {
+	if(mode == 2) {
+	    cuda = true;
+	}
+	
 	// In mode 0, all nodes are both client and server.
 	// Thus client_size  = size and local_comm is just MPI_COMM_WORLD
 	client_size = size;
@@ -427,12 +432,12 @@ int main(int argc, char **argv)
 	MPI_Comm_dup(MPI_COMM_WORLD, &local_comm);
 
 	role = IRIS_ROLE_CLIENT | IRIS_ROLE_SERVER;
-	x = new iris(IRIS_SOLVER_FMM, MPI_COMM_WORLD);
+	x = new iris(IRIS_SOLVER_FMM, MPI_COMM_WORLD, cuda);
 	//x->set_grid_pref(0, 1, 1);  // to match our X-based domain decomposition
-	if(mode == 2) {
-	    one_sided = true;
+    }else if(mode == 1 || mode == 3) {
+	if(mode == 3) {
+	    cuda = true;
 	}
-    }else if(mode == 1) {
 	// split the world communicator in two groups:
 	// - client group: the one that "uses" IRIS. It provides charge coords
 	//                 and values to IRIS and receives forces, energies,
@@ -447,7 +452,7 @@ int main(int argc, char **argv)
 	//   0 - client
 	//   1 - server
 	//   2 - server
-	client_size = size/2;
+	client_size = size/2 + size%2;
 	server_size = size - client_size;
 	role = (rank < client_size)?IRIS_ROLE_CLIENT:IRIS_ROLE_SERVER;
 	MPI_Comm_split(MPI_COMM_WORLD, role, rank, &local_comm);
@@ -461,7 +466,7 @@ int main(int argc, char **argv)
 
 
 	x = new iris(IRIS_SOLVER_FMM, client_size, server_size, role, local_comm,
-		     MPI_COMM_WORLD, remote_leader);
+		     MPI_COMM_WORLD, remote_leader, cuda);
     }else {
 	printf("Unknown mode. Only 0, 1 and 2 are supported\n");
 	exit(-1);
@@ -511,12 +516,6 @@ int main(int argc, char **argv)
 
     pade.i = 2;
     x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
-
-    if(one_sided) {
-	solver_param_t one_sided;
-	one_sided.i = 1;
-	x->set_solver_param(IRIS_SOLVER_FMM_ONE_SIDED, one_sided);
-    }
     
     x->set_order(6);
     x->set_mesh_size(128, 128, 128);
