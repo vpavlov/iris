@@ -94,7 +94,7 @@ fmm::~fmm()
 	if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
 	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
-	if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }
+	// if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }  // xparticles is at the end of particles
 	if(m_sendcnt != NULL) { memory::wfree_gpu(m_sendcnt); }
 	if(m_senddisp != NULL) { memory::wfree_gpu(m_senddisp); }
 	if(m_recvcnt != NULL) { memory::wfree_gpu(m_recvcnt); }
@@ -369,12 +369,15 @@ void fmm::local_tree_construction()
     tm.start();
 
     load_particles();                                          // creates and sorts the m_particles array
+    
+    distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
 
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    MPI_Barrier(m_local_comm->m_comm);
     exit(-1);
+
     
-    distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells	
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
@@ -469,6 +472,7 @@ void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_fl
     int last = in_particles[0].cellID;
     int first_child = 0;
     int num_children = 0;
+    
     for(int i=0;i<in_count;i++) {
 	if(in_particles[i].cellID != last) {
 	    assert(out_target[last].num_children == 0);  // no case in which two leafs overlap
