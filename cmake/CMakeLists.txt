@@ -73,9 +73,12 @@ option(IRIS_CUDA "Build CUDA version" ON)
 if(IRIS_CUDA)
   find_package(CUDA REQUIRED)
   add_definitions(-DIRIS_CUDA)
-  list(APPEND IRIS_LINK_LIBS -lcudart)
-  set(CMAKE_CUDA_ARCHITECTURES  50 70 72)
+  #set(CMAKE_CUDA_ARCHITECTURES  61)
   file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.c*)
+  include_directories("${CUDA_TOOLKIT_ROOT_DIR}/include")
+  list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/ses.cpp")
+  list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/point.cpp")
+  list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/sphere.cpp")
 endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)
@@ -135,7 +138,9 @@ include_directories(${IRIS_SOURCE_DIR})
 add_library(iris ${IRIS_SOURCES})
 target_link_libraries(iris ${IRIS_LINK_LIBS})
 set_target_properties(iris PROPERTIES OUTPUT_NAME iris${IRIS_SUFFIX})
-
+if(IRIS_CUDA)
+  set_target_properties(iris PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+endif()
 if(BUILD_SHARED_LIBS)
   set_target_properties(iris PROPERTIES SOVERSION ${SOVERSION})
 endif()
@@ -149,8 +154,10 @@ target_link_libraries(bob iris)
 add_executable(bob-ref ${IRIS_SOURCE_DIR}/../examples/bob-ref.cpp)
 target_link_libraries(bob-ref iris)
 
-add_executable(sort-test ${IRIS_SOURCE_DIR}/../examples/sort-test.cu)
-target_link_libraries(sort-test iris)
+if(IRIS_CUDA)
+  cuda_add_executable(sort-test ${IRIS_SOURCE_DIR}/../examples/sort-test.cu)
+  target_link_libraries(sort-test iris)
+endif()
 
 # add_executable(ses-test ${IRIS_SOURCE_DIR}/../examples/ses-test.cpp)
 # target_link_libraries(ses-test iris)
@@ -179,18 +186,3 @@ foreach (_inc ${IRIS_INCLUDES})
 endforeach()
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BTYPE)
-message(STATUS "<<< Build configuration >>>
-   Version          ${IRIS_VERSION_STRING}
-   Build type       ${CMAKE_BUILD_TYPE}
-   Precision        ${IRIS_DATA_PRECISION}
-   Install path     ${CMAKE_INSTALL_PREFIX}
-   Compilers and Flags:
-   C++ Compiler     ${CMAKE_CXX_COMPILER}
-       Type         ${CMAKE_CXX_COMPILER_ID}
-   C++ Flags        ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BTYPE}}")
-if(BUILD_SHARED_LIBS)
-  message(STATUS "Shared libries  ${CMAKE_SHARED_LINKER_FLAGS}")
-else()
-  message(STATUS "Static libries  ${CMAKE_STATIC_LINKER_FLAGS}")
-endif()
-message(STATUS "Link libraries: ${IRIS_LINK_LIBS}")

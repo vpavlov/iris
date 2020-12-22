@@ -44,11 +44,28 @@
     int to = from + chunk_size;			\
     to = MIN(to, (N))
 
-#endif
-
 #define IRIS_CUDA_HANDLE_ERROR(res)					\
     if(res != cudaSuccess) {						\
 	m_logger->error("CUDA Error: %s - %s", cudaGetErrorName(res), cudaGetErrorString(res)); \
 	throw std::runtime_error("CUDA Exception occured");		\
     }
+
+#define IRIS_CUDA_CHECK_ERROR {						\
+    cudaError_t err = cudaGetLastError();				\
+    if(err != cudaSuccess) {						\
+	m_logger->error("CUDA Error: %s - %s", cudaGetErrorName(err), cudaGetErrorString(err)); \
+	throw std::runtime_error("CUDA Exception occured");		\
+    }									\
+    }
+
+#undef IRIS_CUDA_DEVICE_HOST
+#define IRIS_CUDA_DEVICE_HOST __device__ __host__
+
+#else
+
+#undef IRIS_CUDA_DEVICE_HOST
+#define IRIS_CUDA_DEVICE_HOST
+
+#endif
+
 #endif

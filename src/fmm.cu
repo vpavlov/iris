@@ -28,14 +28,22 @@
 // THE SOFTWARE.
 //==============================================================================
 #ifdef IRIS_CUDA
+#include <assert.h>
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
+#include "cuda.h"
 #include "comm_rec.h"
 #include "fmm.h"
 #include "real.h"
-#include "cuda.h"
+#include "ses.h"
 
 using namespace ORG_NCSA_IRIS;
+
+
+////////////////////
+// Load Particles //
+////////////////////
+
 
 __global__ void k_load_charges(iris_real *charges, int ncharges, int hwm,
 			       iris_real xlo, iris_real ylo, iris_real zlo,
@@ -142,7 +150,8 @@ void fmm::load_particles_gpu()
     // Now the first part of m_particles contains local atoms; second contains halo atoms
     // Number of local particles can be taken from iris: num_local_atoms
     // Number of halo particles is total_local_charges - num_local_atoms
-    m_nparticles = m_iris->num_local_atoms();
+    //m_nparticles = m_iris->num_local_atoms();
+    m_nparticles = thrust::count(keys, keys+total_local_charges, 0);
     m_nxparticles = total_local_charges - m_nparticles;
     m_xparticles = m_particles + m_nparticles;
 
@@ -160,6 +169,64 @@ void fmm::load_particles_gpu()
     
     cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
     m_logger->info("FMM/GPU: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
+}
+
+
+//////////////////////////
+// Distribute particles //
+//////////////////////////
+
+__device__ void d_compute_ses(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
+{
+    point_t points[2*IRIS_MAX_NCRIT];
+    if(num_points > 2*IRIS_MAX_NCRIT) {
+	asm("trap;");
+    }
+    for(int i=0;i<num_points;i++) {
+    	points[i].r[0] = in_particles[first_child+i].xyzq[0];
+    	points[i].r[1] = in_particles[first_child+i].xyzq[1];
+    	points[i].r[2] = in_particles[first_child+i].xyzq[2];
+    }
+    ses_of_points(points, num_points, &(out_target->ses));
+}
+
+__global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int nleafs)
+{
+    if(in_count == 0) {
+	return;
+    }
+    
+    int tid = IRIS_CUDA_TID;
+    int cellID = offset + tid;
+    float fract = (1.0*in_count)/nleafs;
+    int from = (int)(fract * tid);
+    int to = MIN((int)(fract * (tid + 1)), in_count-1);
+
+    while(from > 0 && in_particles[from].cellID >= cellID)       { from--; }
+    while(from < in_count && in_particles[from].cellID < cellID) { from++; }
+    while(to < in_count-1 && in_particles[to].cellID <= cellID)  { to++; }
+    while(to >= 0 && in_particles[to].cellID > cellID)           { to--; }
+
+    int num_children = (to - from + 1);
+    if(num_children <= 0) {
+	return;
+    }
+
+    out_target[cellID].first_child = from;
+    out_target[cellID].num_children = num_children;
+    out_target[cellID].flags = in_flags;
+    d_compute_ses(in_particles, num_children, from, out_target+cellID);
+}
+
+void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+{
+    int nleafs = (1 << 3 * max_level());
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks IRIS_CUDA_NBLOCKS(nleafs, nthreads);
+    k_distribute_particles<<<nblocks, nthreads>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
+    cudaDeviceSynchronize();
+    IRIS_CUDA_CHECK_ERROR;  // this here is important -- stack size is dubious, so let's see if it actually worked
 }
 
 #endif

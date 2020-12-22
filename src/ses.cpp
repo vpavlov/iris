@@ -29,11 +29,13 @@
 //==============================================================================
 #include <math.h>
 #include <stdexcept>
+#include "cuda.h"
 #include "ses.h"
 #include "utils.h"
 
 using namespace ORG_NCSA_IRIS;
 
+IRIS_CUDA_DEVICE_HOST
 static void sphere_through(point_t *R, int nr, sphere_t *out_ses)
 {
     if(nr == 0) {
@@ -137,33 +139,36 @@ static void sphere_through(point_t *R, int nr, sphere_t *out_ses)
     }
 }
 
+IRIS_CUDA_DEVICE_HOST
 static void welzl(point_t *P, int np, point_t *R, int nr, sphere_t *out_ses)
 {
     if(np == 0 || nr == 4) {
-	sphere_through(R, nr, out_ses);
-	return;
+    	sphere_through(R, nr, out_ses);
+    	return;
     }
 
     welzl(P+1, np-1, R, nr, out_ses);
     if(out_ses->contains(P[0])) {
-	return;
+    	return;
     }
 
     R[nr] = P[0];
     welzl(P+1, np-1, R, nr+1, out_ses);
 }
 
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::ses_of_points(point_t *P, int np, sphere_t *out_ses)
 {
     point_t R[4];
     
-    shuffle(P, np);
+    //shuffle(P, np);
     welzl(P, np, R, 0, out_ses);
     if(out_ses->r != 0) {
-	out_ses->r *= 1.0001;
+    	out_ses->r *= 1.0001;
     }
 }
 
+IRIS_CUDA_DEVICE_HOST
 static bool find_farthest(sphere_t *S, int ns, sphere_t *out_ses, int *out_i)
 {
     iris_real max_dist = 0.0;
@@ -188,6 +193,7 @@ static bool find_farthest(sphere_t *S, int ns, sphere_t *out_ses, int *out_i)
     return covers_max;
 }
 
+IRIS_CUDA_DEVICE_HOST
 static void enlarge_ses(sphere_t *S, sphere_t *out_ses)
 {
     point_t x = S->c.minus(&(out_ses->c));
@@ -211,6 +217,7 @@ static void enlarge_ses(sphere_t *S, sphere_t *out_ses)
     out_ses->r = R;
 }
 
+IRIS_CUDA_DEVICE_HOST
 static void do_sess(sphere_t *S, int ns, sphere_t *out_ses)
 {
     if(ns == 0) {
@@ -231,6 +238,7 @@ static void do_sess(sphere_t *S, int ns, sphere_t *out_ses)
     do_sess(S+1, ns-1, out_ses);
 }
 
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::ses_of_spheres(sphere_t *S, int ns, sphere_t *out_ses)
 {
     if(ns == 0) {

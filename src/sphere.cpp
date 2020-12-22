@@ -27,25 +27,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POINT_H__
-#define __IRIS_POINT_H__
+#include "cuda.h"
+#include "sphere.h"
 
-#include "real.h"
+using namespace ORG_NCSA_IRIS;
 
-#ifndef IRIS_CUDA_DEVICE_HOST
-#define IRIS_CUDA_DEVICE_HOST
-#endif
-
-namespace ORG_NCSA_IRIS {
-
-    struct point_t {
-	iris_real r[3];
-
-	IRIS_CUDA_DEVICE_HOST iris_real dot(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t cross(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t minus(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t plus(point_t *b);
-    };
+IRIS_CUDA_DEVICE_HOST bool sphere_t::contains(point_t p)
+{
+    iris_real dx = p.r[0] - c.r[0];
+    iris_real dy = p.r[1] - c.r[1];
+    iris_real dz = p.r[2] - c.r[2];
+    return dx*dx + dy*dy + dz*dz - r*r <= (iris_real)1e-7;
 }
-    
-#endif

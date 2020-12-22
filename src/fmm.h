@@ -44,8 +44,16 @@
 #endif
 namespace ORG_NCSA_IRIS {
 
+
+    // In order to avoid run-time memory allocation (VERY SLOW on CUDA), we
+    // set the maximum # of particles per cell in compile time. This should
+    // be more than enough (e.g. if NCRIT=64 - the default - there are about
+    // 10 particles per cell)
+#define IRIS_MAX_NCRIT 64
+    
 #ifdef IRIS_CUDA
 #define IRIS_CUDA_FMM_NUM_STREAMS 4
+
 #endif
     
     class fmm : public solver {
@@ -71,11 +79,13 @@ namespace ORG_NCSA_IRIS {
 	void load_particles_cpu();
 #ifdef IRIS_CUDA
 	void load_particles_gpu();
-	void send_charges_to_gpu();
 #endif
 	
-	
 	void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	void distribute_particles_cpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+#ifdef IRIS_CUDA
+	void distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+#endif
 
 	void link_parents(cell_t *io_cells);
 	void relink_parents(cell_t *io_cells);

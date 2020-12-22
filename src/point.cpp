@@ -27,25 +27,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#ifndef __IRIS_POINT_H__
-#define __IRIS_POINT_H__
+#include "cuda.h"
+#include "point.h"
 
-#include "real.h"
+using namespace ORG_NCSA_IRIS;
 
-#ifndef IRIS_CUDA_DEVICE_HOST
-#define IRIS_CUDA_DEVICE_HOST
-#endif
-
-namespace ORG_NCSA_IRIS {
-
-    struct point_t {
-	iris_real r[3];
-
-	IRIS_CUDA_DEVICE_HOST iris_real dot(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t cross(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t minus(point_t *b);
-	IRIS_CUDA_DEVICE_HOST point_t plus(point_t *b);
-    };
+IRIS_CUDA_DEVICE_HOST iris_real point_t::dot(point_t *b)
+{
+    return r[0]*b->r[0] + r[1]*b->r[1] + r[2]*b->r[2];
 }
-    
-#endif
+
+IRIS_CUDA_DEVICE_HOST point_t point_t::cross(point_t *b)
+{
+    point_t rr;
+    rr.r[0] = this->r[1] * b->r[2] - this->r[2] * b->r[1];
+    rr.r[1] = this->r[2] * b->r[0] - this->r[0] * b->r[2];
+    rr.r[2] = this->r[0] * b->r[1] - this->r[1] * b->r[0];
+    return rr;
+}
+
+IRIS_CUDA_DEVICE_HOST point_t point_t::minus(point_t *b)
+{
+    point_t rr;
+    rr.r[0] = this->r[0] - b->r[0];
+    rr.r[1] = this->r[1] - b->r[1];
+    rr.r[2] = this->r[2] - b->r[2];
+    return rr;
+}
+
+IRIS_CUDA_DEVICE_HOST point_t point_t::plus(point_t *b)
+{
+    point_t rr;
+    rr.r[0] = this->r[0] + b->r[0];
+    rr.r[1] = this->r[1] + b->r[1];
+    rr.r[2] = this->r[2] + b->r[2];
+    return rr;
+}

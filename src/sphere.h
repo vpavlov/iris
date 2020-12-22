@@ -30,22 +30,16 @@
 #ifndef __IRIS_SPHERE_H__
 #define __IRIS_SPHERE_H__
 
+#include "real.h"
 #include "point.h"
 
 namespace ORG_NCSA_IRIS {
 
     struct sphere_t {
-	point_t   c;  // center
+	point_t c;  // center
 	iris_real r;  // radius
 
-	bool contains(point_t p)
-	{
-	    iris_real dx = p.r[0] - c.r[0];
-	    iris_real dy = p.r[1] - c.r[1];
-	    iris_real dz = p.r[2] - c.r[2];
-	    return dx*dx + dy*dy + dz*dz - r*r <= (iris_real)1e-7;
-	}
-
+	IRIS_CUDA_DEVICE_HOST bool contains(point_t p);
     };
 }
     

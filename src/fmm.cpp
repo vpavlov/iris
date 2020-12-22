@@ -75,7 +75,9 @@ fmm::fmm(iris *obj):
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamCreate(&m_streams[i]);
 	}
-    }    
+    }
+    cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
+    IRIS_CUDA_CHECK_ERROR;
 #endif
     
 }
@@ -132,7 +134,9 @@ void fmm::commit()
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);
 	int ncrit = t.i;
-    
+
+	ncrit = MIN(ncrit, IRIS_MAX_NCRIT);
+	
 	m_depth = (natoms > ncrit) ? int(log(natoms / ncrit)/_LN8) + 2 : 0;
 	m_depth = MAX(m_depth, MIN_DEPTH);
 	m_depth = MIN(m_depth, MAX_DEPTH);
@@ -462,6 +466,19 @@ void fmm::load_particles_cpu()
 }
 
 void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
+    }else 
+#endif
+    {
+	distribute_particles_cpu(in_particles, in_count, in_flags, out_target);
+    }
+}
+
+// TODO: implement openmp version of this similar to the CUDA version
+void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
     if(in_count == 0) {
 	return;
