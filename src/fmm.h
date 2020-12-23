@@ -75,19 +75,25 @@ namespace ORG_NCSA_IRIS {
 	void set_leaf_size();
 
 	void local_tree_construction();
-	void load_particles();
+	
+	inline void load_particles();
 	void load_particles_cpu();
 #ifdef IRIS_CUDA
 	void load_particles_gpu();
 #endif
 	
-	void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	inline void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 	void distribute_particles_cpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 #ifdef IRIS_CUDA
 	void distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 #endif
 
-	void link_parents(cell_t *io_cells);
+	inline void link_parents(cell_t *io_cells);
+	void link_parents_cpu(cell_t *io_cells);
+#ifdef IRIS_CUDA
+	void link_parents_gpu(cell_t *io_cells);
+#endif
+	
 	void relink_parents(cell_t *io_cells);
 	void eval_p2m(cell_t *in_cells, bool alien_only);
 	void eval_m2m(cell_t *in_cells, bool alien_only);
@@ -102,6 +108,10 @@ namespace ORG_NCSA_IRIS {
 	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits);
 	void inhale_xcells(unsigned char *recvbuf, int in_count);
 	void print_tree(const char *label, cell_t *in_cells, int in_level);
+
+#ifdef IRIS_CUDA
+	void print_tree_gpu(const char *label, cell_t *in_cells);
+#endif
 
 	void dual_tree_traversal();
 	void traverse_queue(int ix, int iy, int iz);

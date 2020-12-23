@@ -246,7 +246,7 @@ void fmm::handle_box_resize()
 {
     set_leaf_size();
     // Cell meta is no longer needed, except for one-sided comm, which is not implemented yet (maybe never)
-    //generate_cell_meta();  
+    generate_cell_meta();  
 }
 
 void fmm::compute_energy_and_virial()
@@ -373,16 +373,19 @@ void fmm::local_tree_construction()
     tm.start();
 
     load_particles();                                          // creates and sorts the m_particles array
-    
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
-
+    link_parents(m_cells);                                     // link parents and calculate parent's SES
+    
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+
+    if(m_iris->m_cuda) {
+	cudaDeviceSynchronize();
+	IRIS_CUDA_CHECK_ERROR;
+    }
     MPI_Barrier(m_local_comm->m_comm);
     exit(-1);
-
     
-    link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
@@ -496,7 +499,13 @@ void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int i
 	    out_target[last].first_child = first_child;
 	    out_target[last].num_children = num_children;
 	    out_target[last].flags = in_flags;
+
+	    // out_target[last].ses.c.r[0] = m_cell_meta[last].geomc[0];
+	    // out_target[last].ses.c.r[1] = m_cell_meta[last].geomc[1];
+	    // out_target[last].ses.c.r[2] = m_cell_meta[last].geomc[2];
+	    // out_target[last].ses.r = m_cell_meta[last].maxr;
 	    out_target[last].compute_ses(in_particles);
+	    
 	    first_child = i;
 	    num_children = 0;
 	    last = in_particles[i].cellID;
@@ -506,6 +515,11 @@ void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int i
     out_target[last].first_child = first_child;
     out_target[last].num_children = num_children;
     out_target[last].flags = in_flags;
+    
+    // out_target[last].ses.c.r[0] = m_cell_meta[last].geomc[0];
+    // out_target[last].ses.c.r[1] = m_cell_meta[last].geomc[1];
+    // out_target[last].ses.c.r[2] = m_cell_meta[last].geomc[2];
+    // out_target[last].ses.r = m_cell_meta[last].maxr;
     out_target[last].compute_ses(in_particles);
 };
 
@@ -528,6 +542,18 @@ void fmm::relink_parents(cell_t *io_cells)
 }
 
 void fmm::link_parents(cell_t *io_cells)
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	link_parents_gpu(io_cells);
+    }else
+#endif
+    {
+	link_parents_cpu(io_cells);
+    }
+}
+
+void fmm::link_parents_cpu(cell_t *io_cells)
 {
     for(int i=max_level();i>0;i--) {
 	int start = cell_meta_t::offset_for_level(i);
@@ -700,6 +726,14 @@ void fmm::recalculate_LET()
     eval_m2m(m_xcells, true);
     tm3.stop();
     m_logger->info("    eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
+}
+
+void fmm::print_tree_gpu(const char *label, cell_t *in_cells)
+{
+    cell_t *tmp = (cell_t *)memory::wmalloc(m_tree_size * sizeof(cell_t));
+    cudaMemcpy(tmp, in_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault);
+    print_tree(label, tmp, 0);
+    memory::wfree(tmp);
 }
 
 void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)

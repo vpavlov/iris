@@ -129,7 +129,7 @@ void fmm::load_particles_gpu()
 	cudaMemcpyAsync(m_charges_gpu[rank], charges, ncharges * 5 * sizeof(iris_real), cudaMemcpyDefault, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]);
 	
 	int nthreads = IRIS_CUDA_NTHREADS;
-	int nblocks IRIS_CUDA_NBLOCKS(ncharges, nthreads);
+	int nblocks = IRIS_CUDA_NBLOCKS(ncharges, nthreads);
 	k_load_charges<<<nblocks, nthreads, 0, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]>>>(m_charges_gpu[rank], ncharges, hwm,
 											      m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
 											      m_leaf_size[0], m_leaf_size[1], m_leaf_size[2],
@@ -139,8 +139,10 @@ void fmm::load_particles_gpu()
 	IRIS_CUDA_HANDLE_ERROR(err);
 	hwm += ncharges;
     }
-    cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
+    
         
+    cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
+
     // At this point we have the m_particles filled up, with mixed halo/own atoms, etc.
     // We need to sort them according to the m_atom_type keys array and split into m_particles and m_xparticles
     thrust::device_ptr<int>         keys(m_atom_types);
@@ -157,7 +159,7 @@ void fmm::load_particles_gpu()
 
     // Get the cellIDs in the reordered array
     int nthreads = IRIS_CUDA_NTHREADS;
-    int nblocks IRIS_CUDA_NBLOCKS(total_local_charges, nthreads);
+    int nblocks = IRIS_CUDA_NBLOCKS(total_local_charges, nthreads);
     k_extract_cellID<<<nblocks, nthreads>>>(m_particles, total_local_charges, m_cellID_keys);
 
     // We now need to sort the m_particles and m_xparticles arrays by cellID
@@ -167,7 +169,6 @@ void fmm::load_particles_gpu()
     thrust::sort_by_key(keys2, keys2+m_nparticles, part);
     thrust::sort_by_key(keys2+m_nparticles, keys2+total_local_charges, xpart);
     
-    cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
     m_logger->info("FMM/GPU: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
 }
 
@@ -175,6 +176,7 @@ void fmm::load_particles_gpu()
 //////////////////////////
 // Distribute particles //
 //////////////////////////
+
 
 __device__ void d_compute_ses(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
 {
@@ -223,10 +225,82 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = IRIS_CUDA_NTHREADS;
-    int nblocks IRIS_CUDA_NBLOCKS(nleafs, nthreads);
+    int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
     k_distribute_particles<<<nblocks, nthreads>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
+
+    // stack size is dubious, so let's see if it actually worked
+    // cudaDeviceSynchronize();
+    // IRIS_CUDA_CHECK_ERROR;
+}
+
+
+//////////////////
+// Link parents //
+//////////////////
+
+
+__global__ void k_link_parents_proper(cell_t *io_cells, int start, int end)
+{
+    IRIS_CUDA_SETUP_WS(end-start);
+    
+    for(int j=start+from;j<start+to;j++) {
+	if((io_cells[j].num_children != 0) ||                   // cell is a non-empty leaf
+	   (io_cells[j].flags & IRIS_FMM_CELL_HAS_CHILDREN) ||  // or cell is a non-leaf and has some children
+	   (io_cells[j].flags & IRIS_FMM_CELL_ALIEN_NL)) {        // or is an alien cell
+	    int parent = cell_meta_t::parent_of(j);
+	    atomicAdd(&io_cells[parent].flags, IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
+	}
+    }
+}
+
+__global__ void k_compute_ses_nl(cell_t *io_cells, int start, int end)
+{
+    IRIS_CUDA_SETUP_WS(end-start);
+    for(int j=start+from;j<start+to;j++) {
+	if(io_cells[j].ses.r != 0.0) {
+	    continue;
+	}
+	sphere_t S[8];
+	int ns = 0;
+	for(int k = 0;k<8;k++) {
+	    int mask = IRIS_FMM_CELL_HAS_CHILD1 << k;
+	    if(io_cells[j].flags & mask) {
+		int childID = end + 8*(j-start) + k;
+		S[ns].c.r[0] = io_cells[childID].ses.c.r[0];
+		S[ns].c.r[1] = io_cells[childID].ses.c.r[1];
+		S[ns].c.r[2] = io_cells[childID].ses.c.r[2];
+		S[ns].r = io_cells[childID].ses.r;
+		ns++;
+	    }
+	}
+	ses_of_spheres(S, ns, &(io_cells[j].ses));
+    }
+}
+    
+void fmm::link_parents_gpu(cell_t *io_cells)
+{
     cudaDeviceSynchronize();
-    IRIS_CUDA_CHECK_ERROR;  // this here is important -- stack size is dubious, so let's see if it actually worked
+
+    //stack size is dubious, so let's see if it distribute_particles actually worked
+    IRIS_CUDA_CHECK_ERROR;
+    
+    for(int i=max_level();i>0;i--) {
+	int start = cell_meta_t::offset_for_level(i);
+	int end = cell_meta_t::offset_for_level(i+1);
+	int n = end - start;
+	int nthreads = IRIS_CUDA_NTHREADS;
+	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+	k_link_parents_proper<<<nthreads, nblocks>>>(io_cells, start, end);
+    }
+
+    for(int i=max_level()-1;i>=0;i--) {
+    	int start = cell_meta_t::offset_for_level(i);
+    	int end = cell_meta_t::offset_for_level(i+1);
+    	int n = end - start;
+    	int nthreads = IRIS_CUDA_NTHREADS;
+    	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+	k_compute_ses_nl<<<nthreads, nblocks>>>(io_cells, start, end);
+    }
 }
 
 #endif

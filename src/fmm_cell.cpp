@@ -28,6 +28,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <cmath>
+#include "cuda.h"
 #include "fmm_cell.h"
 #include "fmm_particle.h"
 #include "ses.h"
@@ -102,4 +103,33 @@ void cell_t::compute_ses(particle_t *in_particles)
     }
     ses_of_points(points, num_children, &ses);
     memory::wfree(points);
+}
+
+IRIS_CUDA_DEVICE_HOST int cell_meta_t::offset_for_level(int level)
+{
+    return ((1 << 3 * level)-1) / 7;
+}
+
+//
+// Given a cellID, determine the level of the cell
+//
+IRIS_CUDA_DEVICE_HOST int cell_meta_t::level_of(int in_cellID)
+{
+    int retval = -1;
+    for(int i=in_cellID;i>=0;i-=(1 << 3 * retval)) {
+	retval++;
+    }
+    return retval;
+}
+
+//
+// Given a cellID, find the cellID of its parent
+//
+IRIS_CUDA_DEVICE_HOST int cell_meta_t::parent_of(int in_cellID)
+{
+    int level = level_of(in_cellID);
+    int curr_off = offset_for_level(level);
+    int parent_off = offset_for_level(level-1);
+    int retval = ((in_cellID - curr_off) >> 3) + parent_off;
+    return retval;
 }

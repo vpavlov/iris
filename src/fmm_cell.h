@@ -64,30 +64,9 @@ namespace ORG_NCSA_IRIS {
 	cell_meta_t(int dummy = 0) {};  // to satisfy the compiler (memory::create_1d)
 	void set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *in_gbox, iris_real *in_leaf_size, int in_max_level, int in_comm_size, int in_local_root_level);
 
-	static int offset_for_level(int level) { return ((1 << 3 * level)-1) / 7; };
-
-	//
-	// Given a cellID, determine the level of the cell
-	//
-	static int level_of(int in_cellID) {
-	    int retval = -1;
-	    for(int i=in_cellID;i>=0;i-=(1 << 3 * retval)) {
-		retval++;
-	    }
-	    return retval;
-	}
-
-	//
-	// Given a cellID, find the cellID of its parent
-	//
-	static int parent_of(int in_cellID)
-	{
-	    int level = level_of(in_cellID);
-	    int curr_off = offset_for_level(level);
-	    int parent_off = offset_for_level(level-1);
-	    int retval = ((in_cellID - curr_off) >> 3) + parent_off;
-	    return retval;
-	}
+	IRIS_CUDA_DEVICE_HOST static int offset_for_level(int level);
+	IRIS_CUDA_DEVICE_HOST static int level_of(int in_cellID);
+	IRIS_CUDA_DEVICE_HOST static int parent_of(int in_cellID);
 	
     };
     
