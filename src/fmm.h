@@ -102,7 +102,12 @@ namespace ORG_NCSA_IRIS {
 	void eval_p2m_gpu(cell_t *in_cells, bool alien_only);
 #endif
 	
-	void eval_m2m(cell_t *in_cells, bool alien_only);
+	inline void eval_m2m(cell_t *in_cells, bool alien_only);
+	void eval_m2m_cpu(cell_t *in_cells, bool alien_only);
+#ifdef IRIS_CUDA
+	void eval_m2m_gpu(cell_t *in_cells, bool alien_only);
+#endif
+	
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
 	void eval_l2l();

@@ -355,6 +355,10 @@ void fmm::solve()
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
 
     local_tree_construction();
+
+    MPI_Barrier(m_local_comm->m_comm);
+    exit(-1);
+
     exchange_LET();
     dual_tree_traversal();
 
@@ -376,21 +380,17 @@ void fmm::local_tree_construction()
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
-    
+    eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
+
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	cudaDeviceSynchronize();
 	IRIS_CUDA_CHECK_ERROR;
     }
 #endif
+    
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    
-    MPI_Barrier(m_local_comm->m_comm);
-    exit(-1);
-    
-    eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
-    
     //print_tree("Cell", m_cells, 0);
 }
 
@@ -651,6 +651,18 @@ void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
 }
 
 void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_m2m_gpu(in_cells, invalid_only);
+    }else
+#endif
+    {
+	eval_m2m_cpu(in_cells, invalid_only);
+    }
+}
+
+void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 {
     int last_level = invalid_only ? 0 : m_local_root_level;
     for(int level = max_level()-1;level>=last_level;level--) {

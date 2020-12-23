@@ -300,52 +300,111 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 // Eval P2M //
 //////////////
 
-__global__ void k_eval_p2m(cell_t *in_cells, int start, int end, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
-{
-    IRIS_CUDA_SETUP_WS(end-start);
-    for(int i=from+start;i<to+start;i++) {
-	cell_t *leaf = &in_cells[i];
-	
-	// no particles here -- continue
-	if(leaf->num_children == 0) {
-	    continue;
-	}
-	
-	// we only want alien cells, but this one is local -- continue
-	if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
-	    continue;
-	}
 
-	// it has been send from exchange_LET AND from halo exchange -- continue
-	if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
-	    continue;
-	}
-	for(int j=0;j<leaf->num_children;j++) {
-	    iris_real x, y, z, q;
-	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		x = m_xparticles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		y = m_xparticles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		z = m_xparticles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		q = m_xparticles[leaf->first_child+j].xyzq[3];
-	    }else {
-		x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		q = m_particles[leaf->first_child+j].xyzq[3];
-	    }
-	    p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
-	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
-	}
+__global__ void k_eval_p2m(cell_t *in_cells, int offset, int end, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
+{
+    int tid = IRIS_CUDA_TID;
+    int cellID = tid + offset;
+    if(cellID >= end) {
+	return;
     }
+    cell_t *leaf = &in_cells[cellID];
+    
+    // no particles here -- continue
+    if(leaf->num_children == 0) {
+	return;
+    }
+    
+    // we only want alien cells, but this one is local -- continue
+    if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+	return;
+    }
+    
+    // it has been send from exchange_LET AND from halo exchange -- continue
+    if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
+	return;
+    }
+    
+    iris_real *M = m_M + cellID * 2 * m_nterms;
+    for(int j=0;j<leaf->num_children;j++) {
+	iris_real x, y, z, q;
+	if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+	    x = m_xparticles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
+	    y = m_xparticles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
+	    z = m_xparticles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
+	    q = m_xparticles[leaf->first_child+j].xyzq[3];
+	}else {
+	    x = m_particles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
+	    y = m_particles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
+	    z = m_particles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
+	    q = m_particles[leaf->first_child+j].xyzq[3];
+	}
+	p2m(m_order, x, y, z, q, M);
+    }
+    leaf->flags |= IRIS_FMM_CELL_VALID_M;
 }
 
 void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     int n = m_tree_size - offset;
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_p2m<<<nthreads, nblocks>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+}
+
+
+//////////////
+// Eval M2M //
+//////////////
+
+
+__global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, iris_real *m_scratch, int m_order)
+{
+    int tid = IRIS_CUDA_TID;
+    int tcellID = tid + offset;
+    if(tid+offset >= children_offset) {
+	return;
+    }
+    if(invalid_only && (in_cells[tcellID].flags & IRIS_FMM_CELL_VALID_M)) {
+	return;
+    }
+    
+    iris_real cx = in_cells[tcellID].ses.c.r[0];
+    iris_real cy = in_cells[tcellID].ses.c.r[1];
+    iris_real cz = in_cells[tcellID].ses.c.r[2];
+    
+    bool valid_m = false;
+    iris_real *M = m_M + tcellID * 2 * m_nterms;
+    for(int j=0;j<8;j++) {
+	int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
+	if(!(in_cells[tcellID].flags & mask)) {
+	    continue;
+	}
+	int scellID = children_offset + 8*tid + j;
+	iris_real x = in_cells[scellID].ses.c.r[0] - cx;
+	iris_real y = in_cells[scellID].ses.c.r[1] - cy;
+	iris_real z = in_cells[scellID].ses.c.r[2] - cz;
+	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+	m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, m_scratch);
+	valid_m = true;
+    }
+    if(valid_m) {
+	in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
+    }
+}
+
+void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
+{
+    int last_level = invalid_only ? 0 : m_local_root_level;
+    for(int level = max_level()-1;level>=last_level;level--) {
+	int start = cell_meta_t::offset_for_level(level);
+	int end = cell_meta_t::offset_for_level(level+1);
+	int n = end - start;
+	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
+	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+	k_eval_m2m<<<nblocks, nthreads>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_scratch, m_order);
+    }
 }
 
 
