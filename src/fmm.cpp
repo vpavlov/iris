@@ -375,18 +375,20 @@ void fmm::local_tree_construction()
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);                                     // link parents and calculate parent's SES
+    eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     
-    tm.stop();
-    m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-
+#ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	cudaDeviceSynchronize();
 	IRIS_CUDA_CHECK_ERROR;
     }
+#endif
+    tm.stop();
+    m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    
     MPI_Barrier(m_local_comm->m_comm);
     exit(-1);
     
-    eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
     //print_tree("Cell", m_cells, 0);
@@ -595,6 +597,18 @@ void fmm::link_parents_cpu(cell_t *io_cells)
 
 void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
 {
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_p2m_gpu(in_cells, alien_only);
+    }else
+#endif
+    {
+	eval_p2m_cpu(in_cells, alien_only);
+    }
+}
+
+void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
+{
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {
 	cell_t *leaf = &in_cells[i];
@@ -728,6 +742,7 @@ void fmm::recalculate_LET()
     m_logger->info("    eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
 }
 
+#ifdef IRIS_CUDA
 void fmm::print_tree_gpu(const char *label, cell_t *in_cells)
 {
     cell_t *tmp = (cell_t *)memory::wmalloc(m_tree_size * sizeof(cell_t));
@@ -735,6 +750,7 @@ void fmm::print_tree_gpu(const char *label, cell_t *in_cells)
     print_tree(label, tmp, 0);
     memory::wfree(tmp);
 }
+#endif
 
 void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 {

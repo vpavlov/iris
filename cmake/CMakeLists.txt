@@ -33,7 +33,7 @@ project(iris)
 set(SOVERSION 0)
 
 enable_language(CXX CUDA)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 set(IRIS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
@@ -80,6 +80,7 @@ if(IRIS_CUDA)
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/point.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/sphere.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/fmm_cell.cpp")
+  list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/fmm_kernels.cpp")
 endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)

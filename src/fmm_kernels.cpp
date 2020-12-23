@@ -27,33 +27,82 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <complex>
 #include <assert.h>
+#include "cuda.h"
 #include "fmm_kernels.h"
 
 using namespace ORG_NCSA_IRIS;
 
 
+IRIS_CUDA_DEVICE_HOST
+int ORG_NCSA_IRIS::multipole_index(int l, int m)
+{
+    return l*(l+1) + 2*m;
+}
+
+IRIS_CUDA_DEVICE_HOST
+void ORG_NCSA_IRIS::multipole_get(iris_real *M, int l, int m, iris_real *out_re, iris_real *out_im)
+{
+    assert(l >= 0);
+    if(m < 0) {
+	if(-m > l) {
+	    *out_re = 0.0;
+	    *out_im = 0.0;
+	    return;
+	}
+	int i = multipole_index(l, -m);
+	iris_real a = M[i];
+	iris_real b = M[i+1];
+	if(m % 2) {
+	    a = -a;
+	}else {
+	    b = -b;
+	}
+	*out_re = a;
+	*out_im = b;
+    }else {
+	if(m > l) {
+	    *out_re = 0.0;
+	    *out_im = 0.0;
+	    return;
+	}
+	int i = multipole_index(l, m);
+	*out_re = M[i];
+	*out_im = M[i+1];
+    }
+}
+
+IRIS_CUDA_DEVICE_HOST
+void ORG_NCSA_IRIS::multipole_add(iris_real *M, int l, int m, complex<iris_real> &val)
+{
+    assert(l >= 0);
+    assert(m >= 0);
+    int i = multipole_index(l, m);
+    M[i] += val.real();
+    M[i+1] += val.imag();
+}
+
 //
 // P2M CPU Kernel
 //
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
     iris_real r2 = x * x + y * y + z * z;
 
-    std::complex<iris_real> R_m_m(q, 0);
-    std::complex<iris_real> xy(x, y);
+    complex<iris_real> R_m_m(q, 0);
+    complex<iris_real> xy(x, y);
     
     for(int m = 0; m < order; m++) {
 	multipole_add(out_M, m, m, R_m_m);
 
-	std::complex<iris_real> R_mplus1_m = z * R_m_m;
+	complex<iris_real> R_mplus1_m = z * R_m_m;
 	multipole_add(out_M, m+1, m, R_mplus1_m);
 
-	std::complex<iris_real> prev2 = R_m_m;
-	std::complex<iris_real> prev1 = R_mplus1_m;
+	complex<iris_real> prev2 = R_m_m;
+	complex<iris_real> prev1 = R_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
-	    std::complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
+	    complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
 	    R_l_m /= (l * l - m * m);
 	    multipole_add(out_M, l, m, R_l_m);
 	    prev2 = prev1;
@@ -70,6 +119,7 @@ void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_r
 //
 // M2M CPU Kernel
 //
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 			iris_real *in_M, iris_real *out_M, iris_real *scratch)
 {
@@ -104,25 +154,26 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 //
 // P2L CPU kernel
 //
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L)
 {
     iris_real r2 = x * x + y * y + z * z;
     iris_real r = sqrt(r2);
-    std::complex<iris_real> I_m_m(q/r, 0);
-    std::complex<iris_real> xy(x, y);
+    complex<iris_real> I_m_m(q/r, 0);
+    complex<iris_real> xy(x, y);
 
     for(int m = 0; m < order; m++) {
 	multipole_add(out_L, m, m, I_m_m);
 
-	std::complex<iris_real> I_mplus1_m = ((2*m+1)*z/r2) * I_m_m;
+	complex<iris_real> I_mplus1_m = ((2*m+1)*z/r2) * I_m_m;
 	multipole_add(out_L, m+1, m, I_mplus1_m);
 
-	std::complex<iris_real> prev2 = I_m_m;
-	std::complex<iris_real> prev1 = I_mplus1_m;
+	complex<iris_real> prev2 = I_m_m;
+	complex<iris_real> prev1 = I_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
-	    std::complex<iris_real> t = prev2;
+	    complex<iris_real> t = prev2;
 	    t *= ((l-1)*(l-1) - m*m);
-	    std::complex<iris_real> I_l_m = (2*l-1) * z * prev1 - t;
+	    complex<iris_real> I_l_m = (2*l-1) * z * prev1 - t;
 	    I_l_m /= r2;
 	    multipole_add(out_L, l, m, I_l_m);
 	    prev2 = prev1;
@@ -140,6 +191,7 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 //
 // M2L CPU Kernel
 //
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_L, iris_real *in_scratch)
 {
     p2l(order, x, y, z, 1.0, in_scratch);
@@ -171,6 +223,7 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 //
 // L2L CPU Kernel
 //
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 			iris_real *in_L, iris_real *out_L, iris_real *scratch)
 {
@@ -206,6 +259,7 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 //
 // NOTE: This is the same as L2L, just n<2 and the result is not written in out_L, but in out_phi, Ex,y,z ...
 //       So this can be "write once and only once" optimized, or not -- depends...
+IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *in_L, iris_real *scratch,
 			iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez)
 {

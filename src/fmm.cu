@@ -36,6 +36,7 @@
 #include "fmm.h"
 #include "real.h"
 #include "ses.h"
+#include "fmm_kernels.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -227,10 +228,6 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
     k_distribute_particles<<<nblocks, nthreads>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
-
-    // stack size is dubious, so let's see if it actually worked
-    // cudaDeviceSynchronize();
-    // IRIS_CUDA_CHECK_ERROR;
 }
 
 
@@ -279,11 +276,6 @@ __global__ void k_compute_ses_nl(cell_t *io_cells, int start, int end)
     
 void fmm::link_parents_gpu(cell_t *io_cells)
 {
-    cudaDeviceSynchronize();
-
-    //stack size is dubious, so let's see if it distribute_particles actually worked
-    IRIS_CUDA_CHECK_ERROR;
-    
     for(int i=max_level();i>0;i--) {
 	int start = cell_meta_t::offset_for_level(i);
 	int end = cell_meta_t::offset_for_level(i+1);
@@ -302,5 +294,59 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 	k_compute_ses_nl<<<nthreads, nblocks>>>(io_cells, start, end);
     }
 }
+
+
+//////////////
+// Eval P2M //
+//////////////
+
+__global__ void k_eval_p2m(cell_t *in_cells, int start, int end, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
+{
+    IRIS_CUDA_SETUP_WS(end-start);
+    for(int i=from+start;i<to+start;i++) {
+	cell_t *leaf = &in_cells[i];
+	
+	// no particles here -- continue
+	if(leaf->num_children == 0) {
+	    continue;
+	}
+	
+	// we only want alien cells, but this one is local -- continue
+	if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+	    continue;
+	}
+
+	// it has been send from exchange_LET AND from halo exchange -- continue
+	if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
+	    continue;
+	}
+	for(int j=0;j<leaf->num_children;j++) {
+	    iris_real x, y, z, q;
+	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+		x = m_xparticles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		y = m_xparticles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		z = m_xparticles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
+		q = m_xparticles[leaf->first_child+j].xyzq[3];
+	    }else {
+		x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
+		q = m_particles[leaf->first_child+j].xyzq[3];
+	    }
+	    p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
+	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
+	}
+    }
+}
+
+void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
+{
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int n = m_tree_size - offset;
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    k_eval_p2m<<<nthreads, nblocks>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+}
+
 
 #endif
