@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include "cuda.h"
 #include "fmm.h"
 
 using namespace ORG_NCSA_IRIS;
@@ -37,4 +38,26 @@ int fmm::comm_LET_gpu()
     cudaMemcpyAsync(m_M_cpu, m_M, m_tree_size*2*m_nterms*sizeof(iris_real), cudaMemcpyDefault, m_streams[1]);
     cudaStreamSynchronize(m_streams[1]);
     return comm_LET_cpu(m_cells_cpu, m_M_cpu);
+}
+
+__global__ void k_inhale_cells(unsigned char *m_recvbuf, int in_count, cell_t *m_xcells, iris_real *m_M, int unit_size, int m_nterms)
+{
+    int i = IRIS_CUDA_TID;
+    if(i < in_count) {
+	int cellID = *(int *)(m_recvbuf + unit_size * i);
+	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
+	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
+    }
+}
+
+void fmm::inhale_xcells_gpu(int in_count)
+{
+    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
+    int rsize = in_count * unit_size;
+    m_recvbuf_gpu = (unsigned char *)memory::wmalloc_gpu_cap(m_recvbuf_gpu, rsize, 1, &m_recvbuf_gpu_cap);
+    cudaMemcpy(m_recvbuf_gpu, m_recvbuf, rsize, cudaMemcpyDefault);
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(in_count, nthreads);
+    k_inhale_cells<<<nblocks, nthreads>>>(m_recvbuf_gpu, in_count, m_xcells, m_M, unit_size, m_nterms);
 }

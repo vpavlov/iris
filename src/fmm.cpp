@@ -66,7 +66,7 @@ fmm::fmm(iris *obj):
     m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
 #ifdef IRIS_CUDA
     ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0),
-    m_cells_cpu(NULL), m_M_cpu(NULL)
+    m_cells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0)
 #endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
@@ -106,6 +106,7 @@ fmm::~fmm()
 	}
 	if(m_atom_types != NULL) { memory::wfree_gpu(m_atom_types); }
 	if(m_cellID_keys != NULL) { memory::wfree_gpu(m_cellID_keys); }
+	if(m_recvbuf_gpu != NULL) { memory::wfree_gpu(m_recvbuf_gpu); }
     }else 
 #endif
     {
@@ -350,8 +351,19 @@ void fmm::solve()
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
 
     local_tree_construction();
-
     exchange_LET();
+
+    if(m_iris->m_cuda) {
+#ifdef IRIS_CUDA
+	if(m_iris->m_cuda) {
+	    cudaDeviceSynchronize();
+	    IRIS_CUDA_CHECK_ERROR;
+	}
+#endif
+	MPI_Barrier(m_local_comm->m_comm);
+	exit(-1);
+    }
+    
     dual_tree_traversal();
 
     compute_energy_and_virial();
@@ -512,10 +524,22 @@ void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int i
 
 void fmm::relink_parents(cell_t *io_cells)
 {
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	relink_parents_gpu(io_cells);
+    }else
+#endif
+    {
+	relink_parents_cpu(io_cells);
+    }
+}
+
+void fmm::relink_parents_cpu(cell_t *io_cells)
+{
     // first, clear the num_children and ses of all non-leaf cells
     int end = cell_meta_t::offset_for_level(max_level());
     for(int i=0;i<end;i++) {
-	io_cells[i].flags & ~IRIS_FMM_CELL_HAS_CHILDREN;
+	io_cells[i].flags &= ~IRIS_FMM_CELL_HAS_CHILDREN;
     }
 
     // second, for all shared cells (above local root level) recalculate ses
@@ -707,36 +731,14 @@ void fmm::exchange_LET()
     }
     
     if(m_local_comm->m_size > 1) {
-
-	tm3.start();
 	distribute_particles(m_xparticles, m_nxparticles, IRIS_FMM_CELL_ALIEN_LEAF, m_xcells);  // distribute particles into leaf cells
-	tm3.stop();
-	
-	timer tm2;
-	tm2.start();
 	comm_LET();
-	tm2.stop();
-	m_logger->info("FMM: Comm LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
-	
-	tm3.start();
 	recalculate_LET();
-	tm3.stop();
-	m_logger->info("FMM: Recalculate LET %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
     }
     //print_tree("Xcell", m_xcells, 0);
     
     tm.stop();
-    m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-
-// #ifdef IRIS_CUDA
-//     if(m_iris->m_cuda) {
-// 	cudaDeviceSynchronize();
-// 	IRIS_CUDA_CHECK_ERROR;
-//     }
-// #endif
-//     MPI_Barrier(m_local_comm->m_comm);
-//     exit(-1);
-    
+    m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
 }
 
 void fmm::comm_LET()
@@ -744,29 +746,20 @@ void fmm::comm_LET()
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	int count = comm_LET_gpu();
+	inhale_xcells_gpu(count);
     }else
 #endif
     {
 	int count = comm_LET_cpu(m_cells, m_M);
-	inhale_xcells(m_recvbuf, count);
+	inhale_xcells(count);
     }
 }
 
 void fmm::recalculate_LET()
 {
     relink_parents(m_xcells);
-    
-    timer tm2;
-    tm2.start();
     eval_p2m(m_xcells, true);
-    tm2.stop();
-    m_logger->info("    eval_p2m %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
-    
-    timer tm3;
-    tm3.start();
     eval_m2m(m_xcells, true);
-    tm3.stop();
-    m_logger->info("    eval_m2m %lf/%lf (%.2lf%% util)", tm3.read_wall(), tm3.read_cpu(), (tm3.read_cpu() * 100.0) /tm3.read_wall());
 }
 
 #ifdef IRIS_CUDA

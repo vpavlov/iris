@@ -408,4 +408,41 @@ void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 }
 
 
+////////////////////
+// Relink parents //
+////////////////////
+
+
+__global__ void k_clear_nl_children(cell_t *io_cells, int count)
+{
+    int tid = IRIS_CUDA_TID;
+    if(tid < count) {
+	io_cells[tid].flags &= ~IRIS_FMM_CELL_HAS_CHILDREN;
+    }
+}
+
+__global__ void k_clear_nl_ses(cell_t *io_cells, int count)
+{
+    int tid = IRIS_CUDA_TID;
+    if(tid < count) {
+	io_cells[tid].ses.r = 0.0;
+    }
+}
+
+
+void fmm::relink_parents_gpu(cell_t *io_cells)
+{
+    int end = cell_meta_t::offset_for_level(max_level());
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
+    k_clear_nl_children<<<nblocks, nthreads>>>(io_cells, end);
+
+    end = cell_meta_t::offset_for_level(m_local_root_level);
+    nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
+    k_clear_nl_ses<<<nblocks, nthreads>>>(io_cells, end);
+
+    link_parents_gpu(io_cells);
+}
+
+
 #endif

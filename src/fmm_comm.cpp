@@ -156,14 +156,14 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 }
 
 
-void fmm::inhale_xcells(unsigned char *recvbuf, int in_count)
+void fmm::inhale_xcells(int in_count)
 {
     int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
 
     for(int i=0;i<in_count;i++) {
-    	int cellID = *(int *)(recvbuf + unit_size * i);
-	memcpy(&(m_xcells[cellID].ses), recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
-	memcpy(m_M + cellID*2*m_nterms, recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+    	int cellID = *(int *)(m_recvbuf + unit_size * i);
+	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
+	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }

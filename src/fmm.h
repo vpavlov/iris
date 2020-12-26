@@ -94,7 +94,11 @@ namespace ORG_NCSA_IRIS {
 	void link_parents_gpu(cell_t *io_cells);
 #endif
 	
-	void relink_parents(cell_t *io_cells);
+	inline void relink_parents(cell_t *io_cells);
+	void relink_parents_cpu(cell_t *io_cells);
+#ifdef IRIS_CUDA
+	void relink_parents_gpu(cell_t *io_cells);
+#endif
 	
 	inline void eval_p2m(cell_t *in_cells, bool alien_only);
 	void eval_p2m_cpu(cell_t *in_cells, bool alien_only);
@@ -121,7 +125,11 @@ namespace ORG_NCSA_IRIS {
 #endif
 	void recalculate_LET();
 	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M);
-	void inhale_xcells(unsigned char *recvbuf, int in_count);
+	void inhale_xcells(int in_count);
+#ifdef IRIS_CUDA
+	void inhale_xcells_gpu(int in_count);
+#endif
+	
 	void print_tree(const char *label, cell_t *in_cells, int in_level);
 
 #ifdef IRIS_CUDA
@@ -196,6 +204,9 @@ namespace ORG_NCSA_IRIS {
 
 	struct cell_t *m_cells_cpu;
 	iris_real *m_M_cpu;
+
+	unsigned char *m_recvbuf_gpu;
+	int m_recvbuf_gpu_cap;
 #endif
 
 	unsigned char *m_sendbuf;
