@@ -227,7 +227,7 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
-    k_distribute_particles<<<nblocks, nthreads>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
+    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
 }
 
 

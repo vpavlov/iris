@@ -115,12 +115,12 @@ namespace ORG_NCSA_IRIS {
 	
 	void exchange_LET();
 	inline void comm_LET();
-	void comm_LET_cpu();
+	int comm_LET_cpu(cell_t *in_cells, iris_real *in_M);
 #ifdef IRIS_CUDA
-	void comm_LET_gpu();
+	int comm_LET_gpu();
 #endif
 	void recalculate_LET();
-	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits);
+	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M);
 	void inhale_xcells(unsigned char *recvbuf, int in_count);
 	void print_tree(const char *label, cell_t *in_cells, int in_level);
 
@@ -193,7 +193,9 @@ namespace ORG_NCSA_IRIS {
 	
 	int *m_cellID_keys;
 	int m_cellID_keys_cap;
-	
+
+	struct cell_t *m_cells_cpu;
+	iris_real *m_M_cpu;
 #endif
 
 	unsigned char *m_sendbuf;

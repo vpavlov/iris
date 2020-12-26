@@ -65,7 +65,8 @@ fmm::fmm(iris *obj):
     m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
     m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
 #ifdef IRIS_CUDA
-    ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0)
+    ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0),
+    m_cells_cpu(NULL), m_M_cpu(NULL)
 #endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
@@ -93,15 +94,13 @@ fmm::~fmm()
 	memory::wfree(m_ext_boxes);
 	memory::destroy_1d_gpu(m_scratch);
 	memory::destroy_1d_gpu(m_M);
+	if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
 	memory::destroy_1d_gpu(m_L);
 	if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
+	if(m_cells_cpu != NULL) { memory::wfree_gpu(m_cells_cpu); }
 	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
 	// if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }  // xparticles is at the end of particles
-	if(m_sendcnt != NULL) { memory::wfree_gpu(m_sendcnt); }
-	if(m_senddisp != NULL) { memory::wfree_gpu(m_senddisp); }
-	if(m_recvcnt != NULL) { memory::wfree_gpu(m_recvcnt); }
-	if(m_recvdisp != NULL) { memory::wfree_gpu(m_recvdisp); }
 	for(auto it = m_charges_gpu.begin(); it != m_charges_gpu.end(); it++) {
 	    memory::wfree_gpu(it->second);
 	}
@@ -119,11 +118,13 @@ fmm::~fmm()
 	if(m_xcells != NULL) { memory::wfree(m_xcells); }
 	if(m_particles != NULL) { memory::wfree(m_particles); }
 	if(m_xparticles != NULL)  { memory::wfree(m_xparticles); }
-	if(m_sendcnt != NULL) { memory::wfree(m_sendcnt); }
-	if(m_senddisp != NULL) { memory::wfree(m_senddisp); }
-	if(m_recvcnt != NULL) { memory::wfree(m_recvcnt); }
-	if(m_recvdisp != NULL) { memory::wfree(m_recvdisp); }
     }
+    if(m_sendcnt != NULL) { memory::wfree(m_sendcnt); }
+    if(m_senddisp != NULL) { memory::wfree(m_senddisp); }
+    if(m_recvcnt != NULL) { memory::wfree(m_recvcnt); }
+    if(m_recvdisp != NULL) { memory::wfree(m_recvdisp); }
+    if(m_sendbuf != NULL) { memory::wfree(m_sendbuf); }
+    if(m_recvbuf != NULL) { memory::wfree(m_recvbuf); }
 }
 
 void fmm::commit()
@@ -165,26 +166,19 @@ void fmm::commit()
 	    memory::create_1d_gpu(m_scratch, 2*m_nterms);
 	    memory::destroy_1d_gpu(m_M);
 	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
+	    if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
+	    m_M_cpu = (iris_real *)memory::wmalloc_gpu(m_tree_size*2*m_nterms*sizeof(iris_real), false, true);
 	    memory::destroy_1d_gpu(m_L);
 	    memory::create_1d_gpu(m_L, m_tree_size*2*m_nterms);
 
 	    if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
 	    m_cells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
 
+	    if(m_cells_cpu != NULL) { memory::wfree_gpu(m_cells_cpu); }
+	    m_cells_cpu = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t), false, true);
+	    
 	    if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	    m_xcells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
-
-	    if(m_sendcnt != NULL) { memory::wfree_gpu(m_sendcnt); }
-	    m_sendcnt = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
-
-	    if(m_senddisp != NULL) { memory::wfree_gpu(m_senddisp); }
-	    m_senddisp = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
-
-	    if(m_recvcnt != NULL) { memory::wfree_gpu(m_recvcnt); }
-	    m_recvcnt = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
-
-	    if(m_recvdisp != NULL) { memory::wfree_gpu(m_recvdisp); }
-	    m_recvdisp = (int *)memory::wmalloc_gpu(m_local_comm->m_size * sizeof(int));
 	    
 	}else
 #endif
@@ -201,20 +195,20 @@ void fmm::commit()
 	    
 	    memory::destroy_1d(m_xcells);
 	    memory::create_1d(m_xcells, m_tree_size);
-
-	    memory::destroy_1d(m_sendcnt);
-	    memory::create_1d(m_sendcnt, m_local_comm->m_size);
-	    
-	    memory::destroy_1d(m_senddisp);
-	    memory::create_1d(m_senddisp, m_local_comm->m_size);
-	    
-	    memory::destroy_1d(m_recvcnt);
-	    memory::create_1d(m_recvcnt, m_local_comm->m_size);
-	    
-	    memory::destroy_1d(m_recvdisp);
-	    memory::create_1d(m_recvdisp, m_local_comm->m_size);
 	}
 
+	memory::destroy_1d(m_sendcnt);
+	memory::create_1d(m_sendcnt, m_local_comm->m_size);
+	
+	memory::destroy_1d(m_senddisp);
+	memory::create_1d(m_senddisp, m_local_comm->m_size);
+	
+	memory::destroy_1d(m_recvcnt);
+	memory::create_1d(m_recvcnt, m_local_comm->m_size);
+	
+	memory::destroy_1d(m_recvdisp);
+	memory::create_1d(m_recvdisp, m_local_comm->m_size);
+	
 	m_dirty = false;
 	if(m_iris->m_cuda) {
 	    m_logger->info("FMM/GPU: order = %d; depth = %d; tree size = %d; local root level = %d", m_order, m_depth, m_tree_size, m_local_root_level);
@@ -379,13 +373,6 @@ void fmm::local_tree_construction()
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
-
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	cudaDeviceSynchronize();
-	IRIS_CUDA_CHECK_ERROR;
-    }
-#endif
     
     tm.stop();
     m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
@@ -709,8 +696,15 @@ void fmm::exchange_LET()
 {
     timer tm, tm3;
     tm.start();
-    
-    memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	cudaMemcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault);  // copy local tree to LET
+    }else
+#endif
+    {
+	memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
+    }
     
     if(m_local_comm->m_size > 1) {
 
@@ -733,17 +727,28 @@ void fmm::exchange_LET()
     
     tm.stop();
     m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+
+// #ifdef IRIS_CUDA
+//     if(m_iris->m_cuda) {
+// 	cudaDeviceSynchronize();
+// 	IRIS_CUDA_CHECK_ERROR;
+//     }
+// #endif
+//     MPI_Barrier(m_local_comm->m_comm);
+//     exit(-1);
+    
 }
 
 void fmm::comm_LET()
 {
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	comm_LET_gpu();
+	int count = comm_LET_gpu();
     }else
 #endif
     {
-	comm_LET_cpu();
+	int count = comm_LET_cpu(m_cells, m_M);
+	inhale_xcells(m_recvbuf, count);
     }
 }
 

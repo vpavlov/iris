@@ -38,7 +38,7 @@
 
 using namespace ORG_NCSA_IRIS;
 
-void fmm::comm_LET_cpu()
+int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
 {    
     // we're sending cell-in-transits, which are:
     //   - cellID (int)
@@ -57,7 +57,7 @@ void fmm::comm_LET_cpu()
 	}
 	
 	int num_cits = 0; // number of cells-in-transit	for this rank
-	get_LET(rank, 0, m_sendbuf + hwm, unit_size, &num_cits);
+	get_LET(rank, 0, m_sendbuf + hwm, unit_size, &num_cits, in_cells, in_M);
 	m_sendcnt[rank] = num_cits;
 	m_senddisp[rank] = hwm;
 	hwm += num_cits * unit_size;
@@ -91,11 +91,11 @@ void fmm::comm_LET_cpu()
     		  m_recvbuf, m_recvcnt, m_recvdisp, MPI_BYTE,
     		  m_local_comm->m_comm);
 
-    inhale_xcells(m_recvbuf, rsize / unit_size);
+    return rsize/unit_size;
 }
 
 
-void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits)
+void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M)
 {
     int level = cell_meta_t::level_of(cellID);
 
@@ -108,7 +108,7 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 
     int mask = IRIS_FMM_CELL_HAS_CHILD1;
     for(int i=0;i<8;i++) {
-	if(!(m_cells[cellID].flags & mask)) {
+	if(!(in_cells[cellID].flags & mask)) {
 	    mask <<= 1;
 	    continue;
 	}
@@ -117,10 +117,10 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	
 	bool is_close = (level < m_local_root_level);  // all cells above local root level are to be drilled-down
 	
-	iris_real dn = m_cells[childID].ses.r;
-	iris_real cx = m_cells[childID].ses.c.r[0];
-	iris_real cy = m_cells[childID].ses.c.r[1];
-	iris_real cz = m_cells[childID].ses.c.r[2];
+	iris_real dn = in_cells[childID].ses.r;
+	iris_real cx = in_cells[childID].ses.c.r[0];
+	iris_real cy = in_cells[childID].ses.c.r[1];
+	iris_real cz = in_cells[childID].ses.c.r[2];
 	
 	for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 	    if(is_close) { break; }
@@ -145,11 +145,11 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	}
 
 	if(is_close) {
-	    get_LET(rank, childID, sendbuf, unit_size, out_cits);
+	    get_LET(rank, childID, sendbuf, unit_size, out_cits, in_cells, in_M);
 	}else { // orig: not close OR close but leaf; BUT second option we already sent with partices ?!?
 	    memcpy(sendbuf + (*out_cits)*unit_size, &childID, sizeof(int));
-	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(m_cells[childID].ses), sizeof(sphere_t));
-	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), m_M + childID*2*m_nterms, 2*m_nterms*sizeof(iris_real));
+	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(in_cells[childID].ses), sizeof(sphere_t));
+	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), in_M + childID*2*m_nterms, 2*m_nterms*sizeof(iris_real));
 	    *out_cits = *out_cits + 1;
 	}
     }
