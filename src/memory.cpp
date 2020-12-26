@@ -89,3 +89,12 @@ void *memory::wmalloc_cap(void *in_array, int in_new_size, int in_unit_size, int
     }
     return in_array;
 }
+
+void *memory::wrealloc_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity)
+{
+    if(in_new_size > *io_capacity) {
+	*io_capacity = in_new_size * CPU_EXTRA_CAP;
+	return memory::wrealloc(in_array, *io_capacity * in_unit_size);
+    }
+    return in_array;
+}

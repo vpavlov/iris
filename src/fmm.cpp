@@ -62,7 +62,8 @@ fmm::fmm(iris *obj):
     m_nxparticles(0), m_nxpart_cap(0), m_xparticles(NULL),
     m_dirty(true), m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
-    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0)
+    m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
+    m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
 #ifdef IRIS_CUDA
     ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0)
 #endif

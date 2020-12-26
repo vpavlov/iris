@@ -41,6 +41,7 @@ namespace ORG_NCSA_IRIS {
 
 	static void *wmalloc(size_t nbytes);
 	static void *wmalloc_cap(void *io_array, int in_new_size, int in_unit_size, int *io_capacity);
+	static void *wrealloc_cap(void *io_array, int in_new_size, int in_unit_size, int *io_capacity);
 	
 #ifdef IRIS_CUDA
 	static void *wmalloc_gpu(int nbytes, bool clear = false, bool host = false);

@@ -195,6 +195,11 @@ namespace ORG_NCSA_IRIS {
 	int m_cellID_keys_cap;
 	
 #endif
+
+	unsigned char *m_sendbuf;
+	unsigned char *m_recvbuf;
+	int m_sendbuf_cap;
+	int m_recvbuf_cap;
     };
 }
 

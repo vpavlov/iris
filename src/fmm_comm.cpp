@@ -45,11 +45,9 @@ void fmm::comm_LET_cpu()
     //   - ses (3 coordinates of centre + 1 radius)
     //   - m_nterms complex numbers for the multipole expansions
     int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
-    
-    // create the buffer for the first rank
-    unsigned char *sendbuf;
-    memory::create_1d(sendbuf, m_tree_size * unit_size);
 
+    m_sendbuf = (unsigned char *)memory::wmalloc_cap(m_sendbuf, m_tree_size, unit_size, &m_sendbuf_cap);
+    
     int hwm = 0;  // high-water-mark in sendbuf
     for(int rank=0;rank<m_local_comm->m_size;rank++) {
 	if(rank == m_local_comm->m_rank) {
@@ -59,14 +57,12 @@ void fmm::comm_LET_cpu()
 	}
 	
 	int num_cits = 0; // number of cells-in-transit	for this rank
-	get_LET(rank, 0, sendbuf + hwm, unit_size, &num_cits);
+	get_LET(rank, 0, m_sendbuf + hwm, unit_size, &num_cits);
 	m_sendcnt[rank] = num_cits;
 	m_senddisp[rank] = hwm;
 	hwm += num_cits * unit_size;
-	sendbuf = (unsigned char *)memory::wrealloc(sendbuf, hwm + m_tree_size * unit_size);
+	m_sendbuf = (unsigned char *)memory::wrealloc_cap(m_sendbuf, hwm/unit_size + m_tree_size, unit_size, &m_sendbuf_cap);
     }
-
-    sendbuf = (unsigned char *)memory::wrealloc(sendbuf, hwm);  // final size of the sendbuf
 
     for(int i=0;i<m_local_comm->m_size;i++) {
 	m_logger->trace("sendcnt to rank %d = %d", i, m_sendcnt[i]);
@@ -89,17 +85,13 @@ void fmm::comm_LET_cpu()
 	rsize += m_recvcnt[i];
     }
 
-    unsigned char *recvbuf;
-    memory::create_1d(recvbuf, rsize);
-
-    MPI_Alltoallv(sendbuf, m_sendcnt, m_senddisp, MPI_BYTE,
-    		  recvbuf, m_recvcnt, m_recvdisp, MPI_BYTE,
+    m_recvbuf = (unsigned char *)memory::wmalloc_cap(m_recvbuf, rsize, 1, &m_recvbuf_cap);
+    
+    MPI_Alltoallv(m_sendbuf, m_sendcnt, m_senddisp, MPI_BYTE,
+    		  m_recvbuf, m_recvcnt, m_recvdisp, MPI_BYTE,
     		  m_local_comm->m_comm);
 
-    inhale_xcells(recvbuf, rsize / unit_size);
-    
-    memory::destroy_1d(recvbuf);
-    memory::destroy_1d(sendbuf);
+    inhale_xcells(m_recvbuf, rsize / unit_size);
 }
 
 
