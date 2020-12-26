@@ -734,6 +734,18 @@ void fmm::exchange_LET()
     m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
+void fmm::comm_LET()
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	comm_LET_gpu();
+    }else
+#endif
+    {
+	comm_LET_cpu();
+    }
+}
+
 void fmm::recalculate_LET()
 {
     relink_parents(m_xcells);

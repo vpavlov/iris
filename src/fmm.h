@@ -114,7 +114,11 @@ namespace ORG_NCSA_IRIS {
 	void eval_l2p();
 	
 	void exchange_LET();
-	void comm_LET();
+	inline void comm_LET();
+	void comm_LET_cpu();
+#ifdef IRIS_CUDA
+	void comm_LET_gpu();
+#endif
 	void recalculate_LET();
 	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits);
 	void inhale_xcells(unsigned char *recvbuf, int in_count);
