@@ -38,7 +38,7 @@
 
 using namespace ORG_NCSA_IRIS;
 
-void fmm::exchange_rest_of_LET()
+void fmm::comm_LET()
 {    
     // we're sending cell-in-transits, which are:
     //   - cellID (int)

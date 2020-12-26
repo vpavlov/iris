@@ -114,7 +114,7 @@ namespace ORG_NCSA_IRIS {
 	void eval_l2p();
 	
 	void exchange_LET();
-	void exchange_rest_of_LET();
+	void comm_LET();
 	void recalculate_LET();
 	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits);
 	void inhale_xcells(unsigned char *recvbuf, int in_count);

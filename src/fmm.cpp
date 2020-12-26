@@ -356,9 +356,6 @@ void fmm::solve()
 
     local_tree_construction();
 
-    MPI_Barrier(m_local_comm->m_comm);
-    exit(-1);
-
     exchange_LET();
     dual_tree_traversal();
 
@@ -722,7 +719,7 @@ void fmm::exchange_LET()
 	
 	timer tm2;
 	tm2.start();
-	exchange_rest_of_LET();
+	comm_LET();
 	tm2.stop();
 	m_logger->info("FMM: Comm LET %lf/%lf (%.2lf%% util)", tm2.read_wall(), tm2.read_cpu(), (tm2.read_cpu() * 100.0) /tm2.read_wall());
 	
