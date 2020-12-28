@@ -36,6 +36,23 @@ namespace ORG_NCSA_IRIS {
 	int sourceID;
 	int targetID;
     };
+
+    struct interact_item_t {
+	int sourceID;
+	int targetID;
+	int ix;
+	int iy;
+	int iz;
+
+	interact_item_t(int in_sourceID, int in_targetID, int in_ix, int in_iy, int in_iz)
+	{
+	    sourceID = in_sourceID;
+	    targetID = in_targetID;
+	    ix = in_ix;
+	    iy = in_iy;
+	    iz = in_iz;
+	};
+    };
 }
 
 #endif

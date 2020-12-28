@@ -335,6 +335,9 @@ void fmm::solve()
 	    m_iris->m_virial[5] = 0.0;
     }
 
+    m_p2p_list.clear();
+    m_m2l_list.clear();
+    
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
        	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[0]);
@@ -351,7 +354,8 @@ void fmm::solve()
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
 
     local_tree_construction();
-    exchange_LET();
+    exchange_LET();    
+    dual_tree_traversal();
 
     if(m_iris->m_cuda) {
 #ifdef IRIS_CUDA
@@ -363,9 +367,7 @@ void fmm::solve()
 	MPI_Barrier(m_local_comm->m_comm);
 	exit(-1);
     }
-    
-    dual_tree_traversal();
-
+        
     compute_energy_and_virial();
     send_back_forces();
 
@@ -816,7 +818,32 @@ void fmm::dual_tree_traversal()
 {
     timer tm;
     tm.start();
+            
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	dual_tree_traversal_gpu();
+	eval_l2l();
+	eval_l2p();
+    }else
+#endif
+    {
+	dual_tree_traversal_cpu(m_xcells, m_cells);
+	eval_p2p_cpu();
+	eval_m2l_cpu();
+	eval_l2l();
+	eval_l2p();
+    }
 
+    tm.stop();
+    m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+}
+
+void fmm::dual_tree_traversal_gpu()
+{
+}
+
+void fmm::dual_tree_traversal_cpu(cell_t *src_cells, cell_t *dest_cells)
+{
     assert(m_queue.empty());
     
     for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
@@ -826,19 +853,13 @@ void fmm::dual_tree_traversal()
 		root.sourceID = 0;
 		root.targetID = 0;
 		m_queue.push_back(root);
-		traverse_queue(ix, iy, iz);
+		traverse_queue(src_cells, dest_cells, ix, iy, iz);
 	    }
 	}
     }
-    
-    eval_l2l();
-    eval_l2p();
-    
-    tm.stop();
-    m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
-void fmm::traverse_queue(int ix, int iy, int iz)
+void fmm::traverse_queue(cell_t *src_cells, cell_t *dest_cells, int ix, int iy, int iz)
 {
     while(!m_queue.empty()) {
 	pair_t pair = m_queue.front();
@@ -847,29 +868,29 @@ void fmm::traverse_queue(int ix, int iy, int iz)
 	int src_level = cell_meta_t::level_of(pair.sourceID);
 	int tgt_level = cell_meta_t::level_of(pair.targetID);
 	
-	if((tgt_level == max_level()) || (src_level != max_level() && m_xcells[pair.sourceID].ses.r > m_cells[pair.targetID].ses.r)) {
-	    cell_t *src = m_xcells + pair.sourceID;
+	if((tgt_level == max_level()) || (src_level != max_level() && src_cells[pair.sourceID].ses.r > dest_cells[pair.targetID].ses.r)) {
+	    cell_t *src = src_cells + pair.sourceID;
 	    int level = cell_meta_t::level_of(pair.sourceID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
 	    int children_offset = cell_meta_t::offset_for_level(level+1);
 	    int mask = IRIS_FMM_CELL_HAS_CHILD1;
 	    for(int i=0;i<8;i++) {
-		if(m_xcells[pair.sourceID].flags & mask) {
+		if(src_cells[pair.sourceID].flags & mask) {
 		    int childID = children_offset + (pair.sourceID - this_offset)*8 + i;
-		    interact(childID, pair.targetID, ix, iy, iz);
+		    interact(src_cells, dest_cells, childID, pair.targetID, ix, iy, iz);
 		}
 		mask <<= 1;
 	    }
 	}else {
-	    cell_t *target = m_cells + pair.targetID;
+	    cell_t *target = dest_cells + pair.targetID;
 	    int level = cell_meta_t::level_of(pair.targetID);
 	    int this_offset = cell_meta_t::offset_for_level(level);
 	    int children_offset = cell_meta_t::offset_for_level(level+1);
 	    int mask = IRIS_FMM_CELL_HAS_CHILD1;
 	    for(int i=0;i<8;i++) {
-		if(m_cells[pair.targetID].flags & mask) {
+		if(dest_cells[pair.targetID].flags & mask) {
 		    int childID = children_offset + (pair.targetID - this_offset)*8 + i;
-		    interact(pair.sourceID, childID, ix, iy, iz);
+		    interact(src_cells, dest_cells, pair.sourceID, childID, ix, iy, iz);
 		}
 		mask <<= 1;
 	    }
@@ -877,33 +898,53 @@ void fmm::traverse_queue(int ix, int iy, int iz)
     }
 }
 
-void fmm::interact(int srcID, int destID, int ix, int iy, int iz)
+void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID, int ix, int iy, int iz)
 {
-    iris_real src_cx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
-    iris_real src_cy = m_xcells[srcID].ses.c.r[1] + iy * m_domain->m_global_box.ysize;
-    iris_real src_cz = m_xcells[srcID].ses.c.r[2] + iz * m_domain->m_global_box.zsize;
+    iris_real src_cx = src_cells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
+    iris_real src_cy = src_cells[srcID].ses.c.r[1] + iy * m_domain->m_global_box.ysize;
+    iris_real src_cz = src_cells[srcID].ses.c.r[2] + iz * m_domain->m_global_box.zsize;
 
-    iris_real dest_cx = m_cells[destID].ses.c.r[0];
-    iris_real dest_cy = m_cells[destID].ses.c.r[1];
-    iris_real dest_cz = m_cells[destID].ses.c.r[2];
+    iris_real dest_cx = dest_cells[destID].ses.c.r[0];
+    iris_real dest_cy = dest_cells[destID].ses.c.r[1];
+    iris_real dest_cz = dest_cells[destID].ses.c.r[2];
 
     iris_real dx = dest_cx - src_cx;
     iris_real dy = dest_cy - src_cy;
     iris_real dz = dest_cz - src_cz;
     
     iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
-    iris_real dn = m_xcells[srcID].ses.r + m_cells[destID].ses.r;
+    iris_real dn = src_cells[srcID].ses.r + dest_cells[destID].ses.r;
     if(dn/rn < m_mac) {
-	eval_m2l(srcID, destID, ix, iy, iz);
+	interact_item_t t(srcID, destID, ix, iy, iz);
+	m_m2l_list.push_back(t);
     }else if(cell_meta_t::level_of(srcID) == max_level() &&
 	     cell_meta_t::level_of(destID) == max_level())
     {
-	eval_p2p(srcID, destID, ix, iy, iz);
+	interact_item_t t(srcID, destID, ix, iy, iz);
+	m_p2p_list.push_back(t);
     }else {
 	pair_t pair;
 	pair.sourceID = srcID;
 	pair.targetID = destID;
 	m_queue.push_back(pair);
+    }
+}
+
+// TODO: OpenMP
+void fmm::eval_p2p_cpu()
+{
+    for(int i=0;i<m_p2p_list.size();i++) {
+	interact_item_t *item = &(m_p2p_list[i]);
+	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
+    }
+}
+
+// TODO: OpenMP
+void fmm::eval_m2l_cpu()
+{
+    for(int i=0;i<m_m2l_list.size();i++) {
+	interact_item_t *item = &(m_m2l_list[i]);
+	eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
     }
 }
 
@@ -954,6 +995,7 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 	    sum_ez += ez;
 	    
 	}
+
 	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;
 	m_particles[m_cells[destID].first_child + i].tgt[1] += sum_ex;
 	m_particles[m_cells[destID].first_child + i].tgt[2] += sum_ey;

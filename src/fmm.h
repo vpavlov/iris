@@ -115,6 +115,8 @@ namespace ORG_NCSA_IRIS {
 	
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
+	void eval_p2p_cpu();
+	void eval_m2l_cpu();
 	void eval_l2l();
 	void eval_l2p();
 	
@@ -137,9 +139,14 @@ namespace ORG_NCSA_IRIS {
 	void print_tree_gpu(const char *label, cell_t *in_cells);
 #endif
 
-	void dual_tree_traversal();
-	void traverse_queue(int ix, int iy, int iz);
-	void interact(int srcID, int destID, int ix, int iy, int iz);
+	inline void dual_tree_traversal();
+	void dual_tree_traversal_cpu(cell_t *src_cells, cell_t *dest_cells);
+#ifdef IRIS_CUDA
+	void dual_tree_traversal_gpu();
+#endif
+	
+	void traverse_queue(cell_t *src_cells, cell_t *dest_cells, int ix, int iy, int iz);
+	void interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID, int ix, int iy, int iz);
 	void compute_energy_and_virial();
 	void send_forces_to(int peer, int start, int end, bool include_energy_virial);
 	void send_back_forces();
@@ -209,8 +216,8 @@ namespace ORG_NCSA_IRIS {
 	unsigned char *m_recvbuf_gpu;
 	int m_recvbuf_gpu_cap;
 
-	std::vector<pair_t> m_p2p_list;
-	std::vector<pair_t> m_m2l_list;
+	std::vector<struct interact_item_t> m_p2p_list;
+	std::vector<struct interact_item_t> m_m2l_list;
 	
 #endif
 
