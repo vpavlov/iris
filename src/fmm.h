@@ -31,6 +31,7 @@
 #define __IRIS_FMM_H__
 #include <deque>
 #include <cstring>
+#include <vector>
 #include "solver.h"
 #include "real.h"
 #include "memory.h"
@@ -207,6 +208,10 @@ namespace ORG_NCSA_IRIS {
 
 	unsigned char *m_recvbuf_gpu;
 	int m_recvbuf_gpu_cap;
+
+	std::vector<pair_t> m_p2p_list;
+	std::vector<pair_t> m_m2l_list;
+	
 #endif
 
 	unsigned char *m_sendbuf;
