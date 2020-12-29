@@ -37,6 +37,7 @@
 #include "real.h"
 #include "ses.h"
 #include "fmm_kernels.h"
+#include "fmm_pair.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -444,5 +445,133 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
     link_parents_gpu(io_cells);
 }
 
+
+//////////////
+// Eval P2P //
+//////////////
+
+
+__global__ void k_eval_p2p(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+			   iris_real gxsize, iris_real gysize, iris_real gzsize)
+{
+    int tid = IRIS_CUDA_TID;
+    int srcID = list[tid].sourceID;
+    int destID = list[tid].targetID;
+    iris_real xoff = list[tid].ix * gxsize;
+    iris_real yoff = list[tid].iy * gysize;
+    iris_real zoff = list[tid].iz * gzsize;
+    for(int i=0;i<m_cells[destID].num_children;i++) {
+	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
+	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
+	iris_real tz = m_particles[m_cells[destID].first_child + i].xyzq[2];
+
+	iris_real sum_phi = 0.0;
+	iris_real sum_ex = 0.0;
+	iris_real sum_ey = 0.0;
+	iris_real sum_ez = 0.0;
+	for(int j=0;j<m_xcells[srcID].num_children;j++) {
+	    iris_real sx, sy, sz, sq;
+	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+		sx = m_xparticles[m_xcells[srcID].first_child + j].xyzq[0] + xoff;
+		sy = m_xparticles[m_xcells[srcID].first_child + j].xyzq[1] + yoff;
+		sz = m_xparticles[m_xcells[srcID].first_child + j].xyzq[2] + zoff;
+		sq = m_xparticles[m_xcells[srcID].first_child + j].xyzq[3];
+	    }else {
+		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0] + xoff;
+		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1] + yoff;
+		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + zoff;
+		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
+	    }
+
+	    iris_real dx = tx - sx;
+	    iris_real dy = ty - sy;
+	    iris_real dz = tz - sz;
+	    iris_real r2 = dx*dx + dy*dy + dz*dz;
+	    iris_real inv_r2;
+	    if(r2 == 0) {
+		inv_r2 = 0;
+	    }else {
+		inv_r2 = 1/r2;
+	    }
+	    iris_real phi = sq * sqrt(inv_r2);
+	    iris_real phi_over_r2 = phi * inv_r2;
+	    iris_real ex = dx * phi_over_r2;
+	    iris_real ey = dy * phi_over_r2;
+	    iris_real ez = dz * phi_over_r2;
+
+	    sum_phi += phi;
+	    sum_ex += ex;
+	    sum_ey += ey;
+	    sum_ez += ez;
+	}
+
+	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 0, sum_phi);
+	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 1, sum_ex);
+	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 2, sum_ey);
+	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 3, sum_ez);
+    }
+}
+
+void fmm::eval_p2p_gpu()
+{
+    int n = m_p2p_list.size();
+
+    m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
+    cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[0]);
+    
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles, m_xparticles,
+    						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
+}
+
+
+//////////////
+// Eval M2l //
+//////////////
+
+__global__ void k_eval_m2l(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, iris_real *m_scratch, int m_order, iris_real *m_M, iris_real *m_L)
+{
+    int tid = IRIS_CUDA_TID;
+    int srcID = list[tid].sourceID;
+    int destID = list[tid].targetID;
+    iris_real xoff = list[tid].ix * gxsize;
+    iris_real yoff = list[tid].iy * gysize;
+    iris_real zoff = list[tid].iz * gzsize;
+    
+    assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
+
+    iris_real sx = m_xcells[srcID].ses.c.r[0] + xoff;
+    iris_real sy = m_xcells[srcID].ses.c.r[1] + yoff;
+    iris_real sz = m_xcells[srcID].ses.c.r[2] + zoff;
+
+    iris_real tx = m_cells[destID].ses.c.r[0];
+    iris_real ty = m_cells[destID].ses.c.r[1];
+    iris_real tz = m_cells[destID].ses.c.r[2];
+
+    iris_real x = tx - sx;
+    iris_real y = ty - sy;
+    iris_real z = tz - sz;
+
+    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch);
+
+    m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
+}
+
+void fmm::eval_m2l_gpu()
+{
+    int n = m_m2l_list.size();
+
+    m_m2l_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_m2l_list_gpu, n, sizeof(interact_item_t), &m_m2l_list_cap);
+    cudaMemcpyAsync(m_m2l_list_gpu, m_m2l_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
+    
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, m_cells, m_xcells, m_particles, m_xparticles,
+    						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms, m_scratch,
+    						       m_order, m_M, m_L);
+}
 
 #endif

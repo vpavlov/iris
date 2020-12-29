@@ -37,6 +37,7 @@ int fmm::comm_LET_gpu()
     cudaMemcpyAsync(m_cells_cpu, m_cells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
     cudaMemcpyAsync(m_M_cpu, m_M, m_tree_size*2*m_nterms*sizeof(iris_real), cudaMemcpyDefault, m_streams[1]);
     cudaStreamSynchronize(m_streams[1]);
+    m_has_cells_cpu = true;
     return comm_LET_cpu(m_cells_cpu, m_M_cpu);
 }
 

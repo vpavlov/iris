@@ -66,7 +66,8 @@ fmm::fmm(iris *obj):
     m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
 #ifdef IRIS_CUDA
     ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0),
-    m_cells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0)
+    m_cells_cpu(NULL), m_xcells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0),
+    m_p2p_list_gpu(NULL), m_p2p_list_cap(0), m_m2l_list_gpu(NULL), m_m2l_list_cap(0)
 #endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
@@ -98,6 +99,7 @@ fmm::~fmm()
 	memory::destroy_1d_gpu(m_L);
 	if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
 	if(m_cells_cpu != NULL) { memory::wfree_gpu(m_cells_cpu); }
+	if(m_xcells_cpu != NULL) { memory::wfree_gpu(m_xcells_cpu); }
 	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
 	// if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }  // xparticles is at the end of particles
@@ -107,6 +109,8 @@ fmm::~fmm()
 	if(m_atom_types != NULL) { memory::wfree_gpu(m_atom_types); }
 	if(m_cellID_keys != NULL) { memory::wfree_gpu(m_cellID_keys); }
 	if(m_recvbuf_gpu != NULL) { memory::wfree_gpu(m_recvbuf_gpu); }
+	if(m_p2p_list_gpu != NULL) { memory::wfree_gpu(m_p2p_list_gpu); }
+	if(m_m2l_list_gpu != NULL) { memory::wfree_gpu(m_m2l_list_gpu); }
     }else 
 #endif
     {
@@ -177,6 +181,9 @@ void fmm::commit()
 
 	    if(m_cells_cpu != NULL) { memory::wfree_gpu(m_cells_cpu); }
 	    m_cells_cpu = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t), false, true);
+
+	    if(m_xcells_cpu != NULL) { memory::wfree_gpu(m_xcells_cpu); }
+	    m_xcells_cpu = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t), false, true);
 	    
 	    if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	    m_xcells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
@@ -337,6 +344,7 @@ void fmm::solve()
 
     m_p2p_list.clear();
     m_m2l_list.clear();
+    m_has_cells_cpu = false;
     
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -367,7 +375,7 @@ void fmm::solve()
 	MPI_Barrier(m_local_comm->m_comm);
 	exit(-1);
     }
-        
+
     compute_energy_and_virial();
     send_back_forces();
 
@@ -822,8 +830,10 @@ void fmm::dual_tree_traversal()
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	dual_tree_traversal_gpu();
-	eval_l2l();
-	eval_l2p();
+	eval_p2p_gpu();
+	eval_m2l_gpu();
+	// eval_l2l();
+	// eval_l2p();
     }else
 #endif
     {
@@ -840,6 +850,12 @@ void fmm::dual_tree_traversal()
 
 void fmm::dual_tree_traversal_gpu()
 {
+    if(!m_has_cells_cpu) {
+	cudaMemcpyAsync(m_cells_cpu, m_cells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
+    }
+    cudaMemcpyAsync(m_xcells_cpu, m_xcells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
+    cudaStreamSynchronize(m_streams[1]);
+    dual_tree_traversal_cpu(m_xcells_cpu, m_cells_cpu);
 }
 
 void fmm::dual_tree_traversal_cpu(cell_t *src_cells, cell_t *dest_cells)

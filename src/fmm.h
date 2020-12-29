@@ -40,9 +40,12 @@
 #include "fmm_particle.h"
 #include "assert.h"
 #include "logger.h"
+
 #ifdef IRIS_CUDA
 #include "cuda_runtime_api.h"
+#include "fmm_gpu_halloc.h"
 #endif
+
 namespace ORG_NCSA_IRIS {
 
 
@@ -117,6 +120,10 @@ namespace ORG_NCSA_IRIS {
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p_cpu();
 	void eval_m2l_cpu();
+#ifdef IRIS_CUDA
+	void eval_p2p_gpu();
+	void eval_m2l_gpu();
+#endif
 	void eval_l2l();
 	void eval_l2p();
 	
@@ -211,13 +218,20 @@ namespace ORG_NCSA_IRIS {
 	int m_cellID_keys_cap;
 
 	struct cell_t *m_cells_cpu;
+	bool m_has_cells_cpu;
+	struct cell_t *m_xcells_cpu;
 	iris_real *m_M_cpu;
 
 	unsigned char *m_recvbuf_gpu;
 	int m_recvbuf_gpu_cap;
 
-	std::vector<struct interact_item_t> m_p2p_list;
-	std::vector<struct interact_item_t> m_m2l_list;
+	std::vector<struct interact_item_t, HostAlloc<interact_item_t>> m_p2p_list;
+	std::vector<struct interact_item_t, HostAlloc<interact_item_t>> m_m2l_list;
+
+	struct interact_item_t *m_p2p_list_gpu;
+	struct interact_item_t *m_m2l_list_gpu;
+	int m_p2p_list_cap;
+	int m_m2l_list_cap;
 	
 #endif
 
