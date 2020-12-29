@@ -451,10 +451,13 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
 //////////////
 
 
-__global__ void k_eval_p2p(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+__global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
 			   iris_real gxsize, iris_real gysize, iris_real gzsize)
 {
     int tid = IRIS_CUDA_TID;
+    if(tid >= list_size) {
+	return;
+    }
     int srcID = list[tid].sourceID;
     int destID = list[tid].targetID;
     iris_real xoff = list[tid].ix * gxsize;
@@ -521,19 +524,22 @@ void fmm::eval_p2p_gpu()
     
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles, m_xparticles,
+    k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
 }
 
 
 //////////////
-// Eval M2l //
+// Eval M2L //
 //////////////
 
-__global__ void k_eval_m2l(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+__global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
 			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, iris_real *m_scratch, int m_order, iris_real *m_M, iris_real *m_L)
 {
     int tid = IRIS_CUDA_TID;
+    if(tid >= list_size) {
+	return;
+    }
     int srcID = list[tid].sourceID;
     int destID = list[tid].targetID;
     iris_real xoff = list[tid].ix * gxsize;
@@ -569,9 +575,69 @@ void fmm::eval_m2l_gpu()
     
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, m_cells, m_xcells, m_particles, m_xparticles,
+    k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms, m_scratch,
     						       m_order, m_M, m_L);
+}
+
+
+//////////////
+// Eval L2L //
+//////////////
+
+__global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, iris_real *m_scratch, int m_order)
+{
+    int tid = IRIS_CUDA_TID;
+    int scellID = tid + offset;
+
+    if(tid + offset >= children_offset) {
+	return;
+    }
+    
+    if(!(m_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
+	return;
+    }
+    
+    iris_real cx = m_cells[scellID].ses.c.r[0];
+    iris_real cy = m_cells[scellID].ses.c.r[1];
+    iris_real cz = m_cells[scellID].ses.c.r[2];
+
+    iris_real *L = m_L + scellID * 2 * m_nterms;
+    for(int j=0;j<8;j++) {
+	int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
+	if(!(m_cells[scellID].flags & mask)) {
+	    continue;
+	}
+	int tcellID = children_offset + 8*tid + j;
+	iris_real x = cx - m_cells[tcellID].ses.c.r[0];
+	iris_real y = cy - m_cells[tcellID].ses.c.r[1];
+	iris_real z = cz - m_cells[tcellID].ses.c.r[2];
+	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+	l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, m_scratch);
+	m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
+    }
+}
+
+void fmm::eval_l2l_gpu()
+{
+    for(int level = 0; level < m_depth-1; level++) {
+	int start = cell_meta_t::offset_for_level(level);
+	int end = cell_meta_t::offset_for_level(level+1);
+	int n = end - start;
+	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
+	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+	k_eval_l2l<<<nblocks, nthreads>>>(m_cells, start, end, m_L, m_nterms, m_scratch, m_order);
+    }
+}
+
+
+//////////////
+// Eval L2P //
+//////////////
+
+
+void fmm::eval_l2p_gpu()
+{
 }
 
 #endif

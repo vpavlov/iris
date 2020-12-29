@@ -832,8 +832,8 @@ void fmm::dual_tree_traversal()
 	dual_tree_traversal_gpu();
 	eval_p2p_gpu();
 	eval_m2l_gpu();
-	// eval_l2l();
-	// eval_l2p();
+	eval_l2l();
+	eval_l2p();
     }else
 #endif
     {
@@ -1045,6 +1045,19 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_l2l()
 {
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_l2l_gpu();
+    }else
+#endif
+    {
+	eval_l2l_cpu();
+    }
+    
+}
+
+void fmm::eval_l2l_cpu()
+{
     for(int level = 0; level < m_depth-1; level++) {
 	int scellID = cell_meta_t::offset_for_level(level);
 	int tcellID = cell_meta_t::offset_for_level(level+1);
@@ -1082,6 +1095,18 @@ void fmm::eval_l2l()
 }
 
 void fmm::eval_l2p()
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_l2p_gpu();
+    }else
+#endif
+    {
+	eval_l2p_cpu();
+    }
+}
+
+void fmm::eval_l2p_cpu()
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {

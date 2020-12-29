@@ -116,16 +116,28 @@ namespace ORG_NCSA_IRIS {
 	void eval_m2m_gpu(cell_t *in_cells, bool alien_only);
 #endif
 	
-	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
+	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
+	
 	void eval_p2p_cpu();
 	void eval_m2l_cpu();
+	
 #ifdef IRIS_CUDA
 	void eval_p2p_gpu();
 	void eval_m2l_gpu();
 #endif
-	void eval_l2l();
-	void eval_l2p();
+	
+	inline void eval_l2l();
+	void eval_l2l_cpu();
+#ifdef IRIS_CUDA
+	void eval_l2l_gpu();
+#endif
+
+	inline void eval_l2p();
+	void eval_l2p_cpu();
+#ifdef IRIS_CUDA
+	void eval_l2p_gpu();
+#endif
 	
 	void exchange_LET();
 	inline void comm_LET();
