@@ -585,6 +585,7 @@ void fmm::eval_m2l_gpu()
 // Eval L2L //
 //////////////
 
+
 __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, iris_real *m_scratch, int m_order)
 {
     int tid = IRIS_CUDA_TID;
