@@ -351,7 +351,7 @@ void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
     int n = m_tree_size - offset;
     int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_p2m<<<nthreads, nblocks>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+    k_eval_p2m<<<nblocks, nthreads>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
 }
 
 
@@ -636,8 +636,45 @@ void fmm::eval_l2l_gpu()
 //////////////
 
 
+__global__ void k_eval_l2p(cell_t *m_cells, int offset, int end, particle_t *m_particles, int m_order, iris_real *m_L, int m_nterms, iris_real *m_scratch)
+{
+    int tid = IRIS_CUDA_TID;
+    int cellID = tid + offset;
+    if(cellID >= end) {
+	return;
+    }
+
+    cell_t *leaf = m_cells + cellID;
+    
+    if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
+	return;
+    }
+
+    iris_real *L = m_L + cellID * 2 * m_nterms;
+    for(int j=0;j<leaf->num_children;j++) {
+	iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
+	iris_real y = leaf->ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
+	iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
+	iris_real q = m_particles[leaf->first_child+j].xyzq[3];
+
+	iris_real phi, Ex, Ey, Ez;
+	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+	l2p(m_order, x, y, z, q, L, m_scratch, &phi, &Ex, &Ey, &Ez);
+	
+	atomicAdd(m_particles[leaf->first_child+j].tgt + 0, phi);
+	atomicAdd(m_particles[leaf->first_child+j].tgt + 1, Ex);
+	atomicAdd(m_particles[leaf->first_child+j].tgt + 2, Ey);
+	atomicAdd(m_particles[leaf->first_child+j].tgt + 3, Ez);
+    }
+}
+
 void fmm::eval_l2p_gpu()
 {
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int n = m_tree_size - offset;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
+    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    k_eval_l2p<<<nblocks, nthreads>>>(m_cells, offset, m_tree_size, m_particles, m_order, m_L, m_nterms, m_scratch);    
 }
 
 #endif
