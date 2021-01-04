@@ -172,7 +172,9 @@ void fmm::commit()
 #ifdef IRIS_CUDA
 	if(m_iris->m_cuda) {
 	    memory::destroy_1d_gpu(m_scratch);
-	    memory::create_1d_gpu(m_scratch, 2*m_nterms);
+	    int l1 = cell_meta_t::offset_for_level(max_level());
+	    int l2 = cell_meta_t::offset_for_level(max_level()-1);
+	    memory::create_1d_gpu(m_scratch, (l1 - l2)*2*m_nterms);
 	    memory::destroy_1d_gpu(m_M);
 	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
 	    if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
@@ -418,7 +420,14 @@ void fmm::local_tree_construction()
     
     // tm.stop();
     // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    //print_tree("Cell", m_cells, 0);
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	print_tree_gpu("Cell", m_cells);
+    }else
+#endif
+    {
+	print_tree("Cell", m_cells, 0, m_M);
+    }
 }
 
 void fmm::load_particles()
@@ -796,13 +805,16 @@ void fmm::recalculate_LET()
 void fmm::print_tree_gpu(const char *label, cell_t *in_cells)
 {
     cell_t *tmp = (cell_t *)memory::wmalloc(m_tree_size * sizeof(cell_t));
+    iris_real *tmpM = (iris_real *)memory::wmalloc(m_tree_size * 2 * m_nterms * sizeof(iris_real));
     cudaMemcpy(tmp, in_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault);
-    print_tree(label, tmp, 0);
+    cudaMemcpy(tmpM, m_M, m_tree_size * 2 * m_nterms * sizeof(iris_real), cudaMemcpyDefault);
+    print_tree(label, tmp, 0, tmpM);
     memory::wfree(tmp);
+    memory::wfree(tmpM);
 }
 #endif
 
-void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
+void fmm::print_tree(const char *label, cell_t *in_cells, int cellID, iris_real *in_M)
 {
     int level = cell_meta_t::level_of(cellID);
     if(level == max_level()) {
@@ -811,7 +823,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       m_M[cellID*2*m_nterms]);
+		       in_M[cellID*2*m_nterms]);
     }else {
 	int num_children = 0;
 	int mask = IRIS_FMM_CELL_HAS_CHILD1;
@@ -827,7 +839,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       m_M[cellID*2*m_nterms]);
+		       in_M[cellID*2*m_nterms]);
     }
     if(level < max_level()) {
 	int this_offset = cell_meta_t::offset_for_level(level);
@@ -836,7 +848,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 	    int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
 	    if(in_cells[cellID].flags & mask) {
 		int childID = children_offset + 8*(cellID-this_offset) + j;
-		print_tree(label, in_cells, childID);
+		print_tree(label, in_cells, childID, in_M);
 	    }
 	}
     }

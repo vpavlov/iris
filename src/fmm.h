@@ -152,7 +152,7 @@ namespace ORG_NCSA_IRIS {
 	void inhale_xcells_gpu(int in_count);
 #endif
 	
-	void print_tree(const char *label, cell_t *in_cells, int in_level);
+	void print_tree(const char *label, cell_t *in_cells, int in_level, iris_real *in_M);
 
 #ifdef IRIS_CUDA
 	void print_tree_gpu(const char *label, cell_t *in_cells);

@@ -14,7 +14,7 @@
 #include <iris/timer.h>
 #include <iris/factorizer.h>
 
-#define NSTEPS 2
+#define NSTEPS 1
 #define CUTOFF 1.2  // 12 angstroms
 
 using namespace ORG_NCSA_IRIS;

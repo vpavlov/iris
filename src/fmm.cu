@@ -360,7 +360,7 @@ void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
 //////////////
 
 
-__global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, iris_real *m_scratch, int m_order)
+__global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, int m_order, iris_real *scratch)
 {
     int tid = IRIS_CUDA_TID;
     int tcellID = tid + offset;
@@ -370,7 +370,10 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
     if(invalid_only && (in_cells[tcellID].flags & IRIS_FMM_CELL_VALID_M)) {
 	return;
     }
-    
+
+    int scratch_size = 2*m_nterms*sizeof(iris_real);
+    int scratch_offset = tid * 2 * m_nterms;
+
     iris_real cx = in_cells[tcellID].ses.c.r[0];
     iris_real cy = in_cells[tcellID].ses.c.r[1];
     iris_real cz = in_cells[tcellID].ses.c.r[2];
@@ -386,8 +389,9 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
 	iris_real x = in_cells[scellID].ses.c.r[0] - cx;
 	iris_real y = in_cells[scellID].ses.c.r[1] - cy;
 	iris_real z = in_cells[scellID].ses.c.r[2] - cz;
-	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, m_scratch);
+	
+	memset(scratch+scratch_offset, 0, scratch_size);
+	m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch+scratch_offset);
 	valid_m = true;
     }
     if(valid_m) {
@@ -404,7 +408,7 @@ void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 	int n = end - start;
 	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
 	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-	k_eval_m2m<<<nblocks, nthreads>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_scratch, m_order);
+	k_eval_m2m<<<nblocks, nthreads>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_order, m_scratch);
     }
 }
 
