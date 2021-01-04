@@ -179,11 +179,12 @@ void fmm::load_particles_gpu()
 // Distribute particles //
 //////////////////////////
 
+#define MAX_POINTS_FOR_SES 20
 
 // Smallest enclosing sphere by Welzl's algorithm -- but has a limited recursion depth...
 __device__ void d_compute_ses(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
 {
-    point_t points[2*IRIS_MAX_NCRIT];
+    point_t points[MAX_POINTS_FOR_SES];
     for(int i=0;i<num_points;i++) {
     	points[i].r[0] = in_particles[first_child+i].xyzq[0];
     	points[i].r[1] = in_particles[first_child+i].xyzq[1];
@@ -247,8 +248,11 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
     out_target[cellID].first_child = from;
     out_target[cellID].num_children = num_children;
     out_target[cellID].flags = in_flags;
-    //d_compute_ses(in_particles, num_children, from, out_target+cellID);
-    d_compute_com(in_particles, num_children, from, out_target+cellID);
+    if(num_children > MAX_POINTS_FOR_SES) {
+	d_compute_com(in_particles, num_children, from, out_target+cellID);
+    }else {
+	d_compute_ses(in_particles, num_children, from, out_target+cellID);
+    }
 }
 
 void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
