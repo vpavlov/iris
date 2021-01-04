@@ -53,7 +53,7 @@ namespace ORG_NCSA_IRIS {
 	static void wfree(void *ptr);
 	
 #ifdef IRIS_CUDA
-	static void wfree_gpu(void *ptr);
+	static void wfree_gpu(void *ptr, bool host = false);
 #endif
 	
 	//**********************************************************************

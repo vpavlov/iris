@@ -166,9 +166,21 @@ namespace ORG_NCSA_IRIS {
 	
 	void traverse_queue(cell_t *src_cells, cell_t *dest_cells, int ix, int iy, int iz);
 	void interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID, int ix, int iy, int iz);
-	void compute_energy_and_virial();
-	void send_forces_to(int peer, int start, int end, bool include_energy_virial);
-	void send_back_forces();
+
+	inline void compute_energy_and_virial();
+	void compute_energy_and_virial_cpu();
+#ifdef IRIS_CUDA
+	void compute_energy_and_virial_gpu();
+#endif
+	
+	void send_forces_to(particle_t *in_particles, int peer, int start, int end, bool include_energy_virial);
+
+
+	inline void send_back_forces();
+#ifdef IRIS_CUDA
+	void send_back_forces_gpu();
+#endif
+	void send_back_forces_cpu(particle_t *in_particles);
 
 	void calc_ext_boxes();
 	
@@ -244,6 +256,10 @@ namespace ORG_NCSA_IRIS {
 	struct interact_item_t *m_m2l_list_gpu;
 	int m_p2p_list_cap;
 	int m_m2l_list_cap;
+
+	iris_real *m_evir_gpu;
+	particle_t *m_particles_cpu;
+	int m_particles_cpu_cap;
 	
 #endif
 

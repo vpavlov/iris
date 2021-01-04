@@ -56,9 +56,14 @@ void *memory::wmalloc_gpu(int nbytes, bool clear, bool host)
     return retval;
 }
 
-void memory::wfree_gpu(void *ptr)
+void memory::wfree_gpu(void *ptr, bool host)
 {
-    cudaError_t res = cudaFree(ptr);
+    cudaError_t res;
+    if(host) {
+	res = cudaFreeHost(ptr);
+    }else {
+	res = cudaFree(ptr);
+    }
     if(res != cudaSuccess) {
 	printf("CUDA Error: %s - %s\n", cudaGetErrorName(res), cudaGetErrorString(res));
 	throw std::runtime_error("CUDA Exception occured");

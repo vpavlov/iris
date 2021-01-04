@@ -678,4 +678,44 @@ void fmm::eval_l2p_gpu()
     k_eval_l2p<<<nblocks, nthreads>>>(m_cells, offset, m_tree_size, m_particles, m_order, m_L, m_nterms, m_scratch);    
 }
 
+
+///////////////////////////////
+// Compute energy and virial //
+///////////////////////////////
+
+
+// TODO: compute virial
+__global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *out_ener)
+{
+    __shared__ iris_real ener_acc[IRIS_CUDA_NTHREADS];
+    int iacc = threadIdx.x;
+    ener_acc[iacc] = 0.0;
+    
+    int tid = IRIS_CUDA_TID;
+    ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
+
+    __syncthreads();    
+    for(int i=IRIS_CUDA_NTHREADS; i>0; i/=2) {
+	int stride = IRIS_CUDA_NTHREADS/i;
+	if(iacc < (IRIS_CUDA_NTHREADS - stride) && iacc % (2*stride) == 0) {
+	    ener_acc[iacc] += ener_acc[iacc+stride];
+	}
+	__syncthreads();
+    }
+    if(iacc == 0) {
+	atomicAdd(out_ener, ener_acc[0]);
+    }
+}
+
+void fmm::compute_energy_and_virial_gpu()
+{
+    int n = m_nparticles;
+    int nthreads = IRIS_CUDA_NTHREADS;
+    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    k_compute_energy_and_virial<<<nblocks, nthreads>>>(m_particles, m_evir_gpu);
+    cudaMemcpy(&(m_iris->m_Ek), m_evir_gpu, sizeof(iris_real), cudaMemcpyDefault);
+    
+    m_iris->m_Ek *= 0.5 * m_units->ecf;
+}
+
 #endif

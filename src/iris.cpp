@@ -261,7 +261,7 @@ iris::~iris()
     for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 #ifdef IRIS_CUDA
 	if(m_cuda) {
-	    memory::wfree_gpu(it->second); // this is pinned memory
+	    memory::wfree_gpu(it->second, true); // this is pinned memory
 	}else
 #endif
 	{
@@ -468,7 +468,7 @@ void iris::perform_commit()
 	for(auto it = m_charges.begin(); it != m_charges.end(); it++) {
 #ifdef IRIS_CUDA
 	    if(m_cuda) {
-		memory::wfree_gpu(it->second); // this is pinned memory
+		memory::wfree_gpu(it->second, true); // this is pinned memory
 	    }else
 #endif
 	    {

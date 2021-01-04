@@ -67,7 +67,7 @@ int ORG_NCSA_IRIS::__xcompar_desc(const void *aptr, const void *bptr)
 }
 
 //
-// A comparator function used to sort the array of xparticles by cellID ascending
+// A comparator function used to sort the array of particles by rank and then by index
 //
 int ORG_NCSA_IRIS::__compar_id_asc(const void *aptr, const void *bptr)
 {

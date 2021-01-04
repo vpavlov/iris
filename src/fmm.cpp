@@ -67,7 +67,8 @@ fmm::fmm(iris *obj):
 #ifdef IRIS_CUDA
     ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0),
     m_cells_cpu(NULL), m_xcells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0),
-    m_p2p_list_gpu(NULL), m_p2p_list_cap(0), m_m2l_list_gpu(NULL), m_m2l_list_cap(0)
+    m_p2p_list_gpu(NULL), m_p2p_list_cap(0), m_m2l_list_gpu(NULL), m_m2l_list_cap(0),
+    m_particles_cpu(NULL), m_particles_cpu_cap(0)
 #endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
@@ -80,6 +81,7 @@ fmm::fmm(iris *obj):
 	}
     }
     cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
+    cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
     IRIS_CUDA_CHECK_ERROR;
 #endif
     
@@ -89,6 +91,7 @@ fmm::~fmm()
 {
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
+	cudaFree(m_evir_gpu);
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamDestroy(m_streams[i]);
 	}
@@ -102,6 +105,7 @@ fmm::~fmm()
 	if(m_xcells_cpu != NULL) { memory::wfree_gpu(m_xcells_cpu); }
 	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
+	if(m_particles_cpu != NULL) { memory::wfree(m_particles_cpu); }
 	// if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }  // xparticles is at the end of particles
 	for(auto it = m_charges_gpu.begin(); it != m_charges_gpu.end(); it++) {
 	    memory::wfree_gpu(it->second);
@@ -254,6 +258,18 @@ void fmm::handle_box_resize()
 
 void fmm::compute_energy_and_virial()
 {
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	compute_energy_and_virial_gpu();
+    }else
+#endif
+    {
+	compute_energy_and_virial_cpu();
+    }
+}
+
+void fmm::compute_energy_and_virial_cpu()
+{
     iris_real ener = 0.0;
     for(int i=0;i<m_nparticles;i++) {
     	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
@@ -262,7 +278,7 @@ void fmm::compute_energy_and_virial()
     // TODO: calculate virial in m_iris->m_virial[0..5]
 }
 
-void fmm::send_forces_to(int peer, int start, int end, bool include_energy_virial)
+void fmm::send_forces_to(particle_t *in_particles, int peer, int start, int end, bool include_energy_virial)
 {
     MPI_Comm comm = m_iris->client_comm();
     int ncharges = end - start;
@@ -290,12 +306,12 @@ void fmm::send_forces_to(int peer, int start, int end, bool include_energy_viria
     m_iris->m_forces[peer] = forces;
 
     for(int i=start;i<end;i++) {
-	iris_real factor = m_particles[i].xyzq[3] * m_units->ecf;  // q * 1/4pieps
+	iris_real factor = in_particles[i].xyzq[3] * m_units->ecf;  // q * 1/4pieps
 
-	forces[7 + (i-start)*4 + 0] = m_particles[i].index + 0.33333333;
-	forces[7 + (i-start)*4 + 1] = factor * m_particles[i].tgt[1];
-	forces[7 + (i-start)*4 + 2] = factor * m_particles[i].tgt[2];
-	forces[7 + (i-start)*4 + 3] = factor * m_particles[i].tgt[3];
+	forces[7 + (i-start)*4 + 0] = in_particles[i].index + 0.33333333;
+	forces[7 + (i-start)*4 + 1] = factor * in_particles[i].tgt[1];
+	forces[7 + (i-start)*4 + 2] = factor * in_particles[i].tgt[2];
+	forces[7 + (i-start)*4 + 3] = factor * in_particles[i].tgt[3];
     }
 
     MPI_Request req;
@@ -305,18 +321,32 @@ void fmm::send_forces_to(int peer, int start, int end, bool include_energy_viria
 
 void fmm::send_back_forces()
 {
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	m_particles_cpu = (particle_t *)memory::wmalloc_cap(m_particles_cpu, m_nparticles, sizeof(particle_t), &m_particles_cpu_cap);
+	cudaMemcpy(m_particles_cpu, m_particles, m_nparticles * sizeof(particle_t), cudaMemcpyDefault);
+	send_back_forces_cpu(m_particles_cpu);
+    }else
+#endif
+    {
+	send_back_forces_cpu(m_particles);
+    }
+}
+
+void fmm::send_back_forces_cpu(particle_t *in_particles)
+{
     bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
     
-    sort_back_particles(m_particles, m_nparticles);
+    sort_back_particles(in_particles, m_nparticles);
     int start = 0;
     for(int rank = 0; rank < m_iris->m_client_size; rank++) {
 	int end;
 	for(end = start ; end<m_nparticles ; end++) {
-	    if(m_particles[end].rank != rank) {
+	    if(in_particles[end].rank != rank) {
 		break;
 	    }
 	}
-	send_forces_to(rank, start, end, include_energy_virial);
+	send_forces_to(in_particles, rank, start, end, include_energy_virial);
 	include_energy_virial = false;
 	start = end;
     }
@@ -364,21 +394,9 @@ void fmm::solve()
     local_tree_construction();
     exchange_LET();    
     dual_tree_traversal();
-
-    if(m_iris->m_cuda) {
-#ifdef IRIS_CUDA
-	if(m_iris->m_cuda) {
-	    cudaDeviceSynchronize();
-	    IRIS_CUDA_CHECK_ERROR;
-	}
-#endif
-	MPI_Barrier(m_local_comm->m_comm);
-	exit(-1);
-    }
-
     compute_energy_and_virial();
     send_back_forces();
-
+    
     tm.stop();
     m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
     
