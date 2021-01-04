@@ -472,8 +472,8 @@ int main(int argc, char **argv)
 	exit(-1);
     }
 
-    //x->set_pbc(false, false, false);
-    x->set_pbc(true, true, true);
+    x->set_pbc(false, false, false);
+    //x->set_pbc(true, true, true);
     x->set_units(md);
     x->m_logger->info("Node name = %s; PID = %d", proc_name, getpid());
 
@@ -562,8 +562,9 @@ int main(int argc, char **argv)
 	    // the clients don't have a mesh; this needs to be moved to the server
 	    // x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);
 	    // x->m_mesh->dump_ascii("bob-phi", x->m_mesh->m_phi);
-	    
-	    read_frameN(i, dirname, x->m_local_comm, &input);
+	    if(i < NSTEPS) {
+		read_frameN(i, dirname, x->m_local_comm, &input);
+	    }
 	}else {
 	    x->run();
 	}

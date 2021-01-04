@@ -355,7 +355,7 @@ void fmm::send_back_forces_cpu(particle_t *in_particles)
 }
 
 void fmm::solve()
-{
+{    
     timer tm;
     m_logger->trace("FMM solve() start");
 
@@ -420,6 +420,7 @@ void fmm::local_tree_construction()
     
     // tm.stop();
     // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	print_tree_gpu("Cell", m_cells);
@@ -774,7 +775,15 @@ void fmm::exchange_LET()
 	comm_LET();
 	recalculate_LET();
     }
-    //print_tree("Xcell", m_xcells, 0);
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	print_tree_gpu("Xcell", m_xcells);
+    }else
+#endif
+    {
+	print_tree("Xcell", m_xcells, 0, m_M);
+    }
     
     // tm.stop();
     // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
@@ -981,6 +990,7 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
 // TODO: OpenMP
 void fmm::eval_p2p_cpu()
 {
+    m_logger->info("P2P size = %d", m_p2p_list.size());
     for(int i=0;i<m_p2p_list.size();i++) {
 	interact_item_t *item = &(m_p2p_list[i]);
 	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
@@ -990,6 +1000,7 @@ void fmm::eval_p2p_cpu()
 // TODO: OpenMP
 void fmm::eval_m2l_cpu()
 {
+    m_logger->info("M2L size = %d", m_m2l_list.size());
     for(int i=0;i<m_m2l_list.size();i++) {
 	interact_item_t *item = &(m_m2l_list[i]);
 	eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);

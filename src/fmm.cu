@@ -130,7 +130,7 @@ void fmm::load_particles_gpu()
 	iris_real *charges = m_iris->m_charges[rank];
 	cudaMemcpyAsync(m_charges_gpu[rank], charges, ncharges * 5 * sizeof(iris_real), cudaMemcpyDefault, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]);
 	
-	int nthreads = IRIS_CUDA_NTHREADS;
+	int nthreads = MIN(IRIS_CUDA_NTHREADS, ncharges);
 	int nblocks = IRIS_CUDA_NBLOCKS(ncharges, nthreads);
 	k_load_charges<<<nblocks, nthreads, 0, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]>>>(m_charges_gpu[rank], ncharges, hwm,
 											      m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
@@ -160,7 +160,7 @@ void fmm::load_particles_gpu()
     m_xparticles = m_particles + m_nparticles;
 
     // Get the cellIDs in the reordered array
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, total_local_charges);
     int nblocks = IRIS_CUDA_NBLOCKS(total_local_charges, nthreads);
     k_extract_cellID<<<nblocks, nthreads>>>(m_particles, total_local_charges, m_cellID_keys);
 
@@ -180,18 +180,46 @@ void fmm::load_particles_gpu()
 //////////////////////////
 
 
+// Smallest enclosing sphere by Welzl's algorithm -- but has a limited recursion depth...
 __device__ void d_compute_ses(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
 {
     point_t points[2*IRIS_MAX_NCRIT];
-    if(num_points > 2*IRIS_MAX_NCRIT) {
-	asm("trap;");
-    }
     for(int i=0;i<num_points;i++) {
     	points[i].r[0] = in_particles[first_child+i].xyzq[0];
     	points[i].r[1] = in_particles[first_child+i].xyzq[1];
     	points[i].r[2] = in_particles[first_child+i].xyzq[2];
     }
     ses_of_points(points, num_points, &(out_target->ses));
+}
+
+// Center of mass
+__device__ void d_compute_com(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
+{
+    iris_real M = 0.0;
+    for(int i=0;i<num_points;i++) {
+	M += in_particles[first_child+i].xyzq[3];
+    }
+    for(int i=0;i<num_points;i++) {
+	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0] * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1] * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2] * in_particles[first_child+i].xyzq[3];
+    }
+
+    out_target->ses.c.r[0] /= M;
+    out_target->ses.c.r[1] /= M;
+    out_target->ses.c.r[2] /= M;
+
+    iris_real max_dist2 = 0.0;
+    for(int i=0;i<num_points;i++) {
+	iris_real dx = in_particles[first_child+i].xyzq[0] - out_target->ses.c.r[0];
+	iris_real dy = in_particles[first_child+i].xyzq[1] - out_target->ses.c.r[1];
+	iris_real dz = in_particles[first_child+i].xyzq[2] - out_target->ses.c.r[2];
+	iris_real dist2 = dx*dx + dy*dy + dz*dz;
+	if(dist2 > max_dist2) {
+	    max_dist2 = dist2;
+	}
+    }
+    out_target->ses.r = sqrt(max_dist2);
 }
 
 __global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int nleafs)
@@ -219,14 +247,15 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
     out_target[cellID].first_child = from;
     out_target[cellID].num_children = num_children;
     out_target[cellID].flags = in_flags;
-    d_compute_ses(in_particles, num_children, from, out_target+cellID);
+    //d_compute_ses(in_particles, num_children, from, out_target+cellID);
+    d_compute_com(in_particles, num_children, from, out_target+cellID);
 }
 
 void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
     k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
 }
@@ -281,18 +310,18 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 	int start = cell_meta_t::offset_for_level(i);
 	int end = cell_meta_t::offset_for_level(i+1);
 	int n = end - start;
-	int nthreads = IRIS_CUDA_NTHREADS;
+	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
 	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-	k_link_parents_proper<<<nthreads, nblocks>>>(io_cells, start, end);
+	k_link_parents_proper<<<nblocks, nthreads>>>(io_cells, start, end);
     }
 
     for(int i=max_level()-1;i>=0;i--) {
     	int start = cell_meta_t::offset_for_level(i);
     	int end = cell_meta_t::offset_for_level(i+1);
     	int n = end - start;
-    	int nthreads = IRIS_CUDA_NTHREADS;
+    	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-	k_compute_ses_nl<<<nthreads, nblocks>>>(io_cells, start, end);
+	k_compute_ses_nl<<<nblocks, nthreads>>>(io_cells, start, end);
     }
 }
 
@@ -522,11 +551,15 @@ __global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells
 void fmm::eval_p2p_gpu()
 {
     int n = m_p2p_list.size();
+    m_logger->info("P2P size = %d", m_p2p_list.size());
+    if(n == 0) {
+	return;
+    }
 
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
     cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[0]);
     
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
@@ -573,6 +606,10 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
 void fmm::eval_m2l_gpu()
 {
     int n = m_m2l_list.size();
+    m_logger->info("M2L size = %d", m_m2l_list.size());
+    if(n == 0) {
+	return;
+    }
 
     m_m2l_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_m2l_list_gpu, n, sizeof(interact_item_t), &m_m2l_list_cap);
     cudaMemcpyAsync(m_m2l_list_gpu, m_m2l_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
@@ -698,10 +735,11 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
     int tid = IRIS_CUDA_TID;
     ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
 
-    __syncthreads();    
-    for(int i=IRIS_CUDA_NTHREADS; i>0; i/=2) {
-	int stride = IRIS_CUDA_NTHREADS/i;
-	if(iacc < (IRIS_CUDA_NTHREADS - stride) && iacc % (2*stride) == 0) {
+    __syncthreads();
+
+    for(int i=blockDim.x; i>0; i/=2) {
+	int stride = blockDim.x/i;
+	if(iacc < (blockDim.x - stride) && iacc % (2*stride) == 0) {
 	    ener_acc[iacc] += ener_acc[iacc+stride];
 	}
 	__syncthreads();
@@ -714,7 +752,7 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
 void fmm::compute_energy_and_virial_gpu()
 {
     int n = m_nparticles;
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_compute_energy_and_virial<<<nblocks, nthreads>>>(m_particles, m_evir_gpu);
     cudaMemcpy(&(m_iris->m_Ek), m_evir_gpu, sizeof(iris_real), cudaMemcpyDefault);
