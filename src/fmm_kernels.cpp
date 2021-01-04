@@ -218,8 +218,13 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    }
 
 	    int idx = multipole_index(n, m);
+#ifdef __CUDA_ARCH__
+	    atomicAdd(out_L+idx, re);
+	    atomicAdd(out_L+idx+1, im);
+#else
 	    out_L[idx] += re;
 	    out_L[idx+1] += im;
+#endif
 	}
     }
 }
@@ -253,8 +258,13 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 	    }
 
 	    int idx=multipole_index(n, m);
+#ifdef __CUDA_ARCH__
+	    atomicAdd(out_L+idx, re);
+	    atomicAdd(out_L+idx+1, im);
+#else
 	    out_L[idx] += re;
 	    out_L[idx+1] += im;
+#endif
 	}
     }
 }

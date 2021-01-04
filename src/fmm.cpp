@@ -172,9 +172,7 @@ void fmm::commit()
 #ifdef IRIS_CUDA
 	if(m_iris->m_cuda) {
 	    memory::destroy_1d_gpu(m_scratch);
-	    int l1 = cell_meta_t::offset_for_level(max_level());
-	    int l2 = cell_meta_t::offset_for_level(max_level()-1);
-	    memory::create_1d_gpu(m_scratch, (l1 - l2)*2*m_nterms);
+	    memory::create_1d_gpu(m_scratch, m_tree_size*2*m_nterms);
 	    memory::destroy_1d_gpu(m_M);
 	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
 	    if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
@@ -421,14 +419,14 @@ void fmm::local_tree_construction()
     // tm.stop();
     // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
     
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	print_tree_gpu("Cell", m_cells);
-    }else
-#endif
-    {
-	print_tree("Cell", m_cells, 0, m_M);
-    }
+// #ifdef IRIS_CUDA
+//     if(m_iris->m_cuda) {
+// 	print_tree_gpu("Cell", m_cells);
+//     }else
+// #endif
+//     {
+// 	print_tree("Cell", m_cells, 0, m_M);
+//     }
 }
 
 void fmm::load_particles()
@@ -776,14 +774,14 @@ void fmm::exchange_LET()
 	recalculate_LET();
     }
 
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	print_tree_gpu("Xcell", m_xcells);
-    }else
-#endif
-    {
-	print_tree("Xcell", m_xcells, 0, m_M);
-    }
+// #ifdef IRIS_CUDA
+//     if(m_iris->m_cuda) {
+// 	print_tree_gpu("Xcell", m_xcells);
+//     }else
+// #endif
+//     {
+// 	print_tree("Xcell", m_xcells, 0, m_M);
+//     }
     
     // tm.stop();
     // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    

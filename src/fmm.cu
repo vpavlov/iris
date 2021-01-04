@@ -405,7 +405,7 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
     }
 
     int scratch_size = 2*m_nterms*sizeof(iris_real);
-    int scratch_offset = tid * 2 * m_nterms;
+    int scratch_offset = tcellID * 2 * m_nterms;
 
     iris_real cx = in_cells[tcellID].ses.c.r[0];
     iris_real cy = in_cells[tcellID].ses.c.r[1];
@@ -471,11 +471,12 @@ __global__ void k_clear_nl_ses(cell_t *io_cells, int count)
 void fmm::relink_parents_gpu(cell_t *io_cells)
 {
     int end = cell_meta_t::offset_for_level(max_level());
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, end);
     int nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
     k_clear_nl_children<<<nblocks, nthreads>>>(io_cells, end);
 
     end = cell_meta_t::offset_for_level(m_local_root_level);
+    nthreads = MIN(IRIS_CUDA_NTHREADS, end);
     nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
     k_clear_nl_ses<<<nblocks, nthreads>>>(io_cells, end);
 
@@ -575,12 +576,15 @@ void fmm::eval_p2p_gpu()
 //////////////
 
 __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
-			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, iris_real *m_scratch, int m_order, iris_real *m_M, iris_real *m_L)
+			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, int m_order, iris_real *m_M, iris_real *m_L)
 {
+    __shared__ iris_real m_scratch[132*32];
+    
     int tid = IRIS_CUDA_TID;
     if(tid >= list_size) {
 	return;
     }
+
     int srcID = list[tid].sourceID;
     int destID = list[tid].targetID;
     iris_real xoff = list[tid].ix * gxsize;
@@ -601,9 +605,10 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
-    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch);
-
+    // TODO: get rid of the the dynamic allocation
+    memset(m_scratch+threadIdx.x*132, 0, 2*m_nterms*sizeof(iris_real));
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch+threadIdx.x*132);
+    
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
 }
 
@@ -618,10 +623,10 @@ void fmm::eval_m2l_gpu()
     m_m2l_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_m2l_list_gpu, n, sizeof(interact_item_t), &m_m2l_list_cap);
     cudaMemcpyAsync(m_m2l_list_gpu, m_m2l_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
     
-    int nthreads = IRIS_CUDA_NTHREADS;
+    int nthreads = MIN(32, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
-    						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms, m_scratch,
+    						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms,
     						       m_order, m_M, m_L);
 }
 
@@ -643,6 +648,9 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
     if(!(m_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
 	return;
     }
+
+    int scratch_size = 2*m_nterms*sizeof(iris_real);
+    int scratch_offset = scellID * 2 * m_nterms;
     
     iris_real cx = m_cells[scellID].ses.c.r[0];
     iris_real cy = m_cells[scellID].ses.c.r[1];
@@ -658,8 +666,8 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
 	iris_real x = cx - m_cells[tcellID].ses.c.r[0];
 	iris_real y = cy - m_cells[tcellID].ses.c.r[1];
 	iris_real z = cz - m_cells[tcellID].ses.c.r[2];
-	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, m_scratch);
+	memset(m_scratch+scratch_offset, 0, scratch_size);
+	l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, m_scratch+scratch_offset);
 	m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
     }
 }
@@ -695,7 +703,10 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, int end, particle_t *m_p
     if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
 	return;
     }
-
+    
+    int scratch_size = 2*m_nterms*sizeof(iris_real);
+    int scratch_offset = cellID * 2 * m_nterms;
+    
     iris_real *L = m_L + cellID * 2 * m_nterms;
     for(int j=0;j<leaf->num_children;j++) {
 	iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
@@ -704,8 +715,8 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, int end, particle_t *m_p
 	iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 
 	iris_real phi, Ex, Ey, Ez;
-	memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	l2p(m_order, x, y, z, q, L, m_scratch, &phi, &Ex, &Ey, &Ez);
+	memset(m_scratch+scratch_offset, 0, scratch_size);
+	l2p(m_order, x, y, z, q, L, m_scratch+scratch_offset, &phi, &Ex, &Ey, &Ez);
 	
 	atomicAdd(m_particles[leaf->first_child+j].tgt + 0, phi);
 	atomicAdd(m_particles[leaf->first_child+j].tgt + 1, Ex);
