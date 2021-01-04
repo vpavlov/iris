@@ -399,14 +399,16 @@ void fmm::solve()
     
     tm.stop();
     m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    
-    m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
+
+    if(!m_iris->m_cuda) {
+	m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
+    }
 }
 
 void fmm::local_tree_construction()
 {
-    timer tm;
-    tm.start();
+    // timer tm;
+    // tm.start();
 
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
@@ -414,8 +416,8 @@ void fmm::local_tree_construction()
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
-    tm.stop();
-    m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    // tm.stop();
+    // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
     //print_tree("Cell", m_cells, 0);
 }
 
@@ -746,8 +748,8 @@ void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 
 void fmm::exchange_LET()
 {
-    timer tm, tm3;
-    tm.start();
+    // timer tm, tm3;
+    // tm.start();
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -765,8 +767,8 @@ void fmm::exchange_LET()
     }
     //print_tree("Xcell", m_xcells, 0);
     
-    tm.stop();
-    m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
+    // tm.stop();
+    // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
 }
 
 void fmm::comm_LET()
@@ -842,8 +844,8 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID)
 
 void fmm::dual_tree_traversal()
 {
-    timer tm;
-    tm.start();
+    // timer tm;
+    // tm.start();
             
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -862,8 +864,8 @@ void fmm::dual_tree_traversal()
 	eval_l2p();
     }
 
-    tm.stop();
-    m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    // tm.stop();
+    // m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::dual_tree_traversal_gpu()
