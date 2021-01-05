@@ -752,6 +752,9 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
     ener_acc[iacc] = 0.0;
     
     int tid = IRIS_CUDA_TID;
+    if(tid == 0) {
+	*out_ener = 0.0;
+    }
     ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
 
     __syncthreads();
