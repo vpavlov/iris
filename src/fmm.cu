@@ -556,18 +556,20 @@ __global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells
 void fmm::eval_p2p_gpu()
 {
     int n = m_p2p_list.size();
-    m_logger->info("P2P size = %d", m_p2p_list.size());
     if(n == 0) {
 	return;
     }
 
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
     cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[0]);
+    cudaEventRecord(m_p2p_memcpy_done, m_streams[0]);
     
     int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
+    cudaEventSynchronize(m_p2p_memcpy_done);
+    m_p2p_list.clear();
 }
 
 
@@ -615,19 +617,21 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
 void fmm::eval_m2l_gpu()
 {
     int n = m_m2l_list.size();
-    m_logger->info("M2L size = %d", m_m2l_list.size());
     if(n == 0) {
 	return;
     }
 
     m_m2l_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_m2l_list_gpu, n, sizeof(interact_item_t), &m_m2l_list_cap);
     cudaMemcpyAsync(m_m2l_list_gpu, m_m2l_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
+    cudaEventRecord(m_m2l_memcpy_done, m_streams[1]);
     
     int nthreads = MIN(32, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms,
     						       m_order, m_M, m_L);
+    cudaEventSynchronize(m_m2l_memcpy_done);
+    m_m2l_list.clear();
 }
 
 

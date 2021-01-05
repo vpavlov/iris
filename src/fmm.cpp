@@ -79,6 +79,8 @@ fmm::fmm(iris *obj):
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamCreate(&m_streams[i]);
 	}
+	cudaEventCreate(&m_m2l_memcpy_done);
+	cudaEventCreate(&m_p2p_memcpy_done);
     }
     cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
     cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
@@ -95,6 +97,9 @@ fmm::~fmm()
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamDestroy(m_streams[i]);
 	}
+	cudaEventDestroy(m_m2l_memcpy_done);
+	cudaEventDestroy(m_p2p_memcpy_done);
+	
 	memory::wfree(m_ext_boxes);
 	memory::destroy_1d_gpu(m_scratch);
 	memory::destroy_1d_gpu(m_M);
@@ -970,13 +975,11 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
     iris_real dn = src_cells[srcID].ses.r + dest_cells[destID].ses.r;
     if(dn/rn < m_mac) {
-	interact_item_t t(srcID, destID, ix, iy, iz);
-	m_m2l_list.push_back(t);
+	do_m2l_interact(srcID, destID, ix, iy, iz);
     }else if(cell_meta_t::level_of(srcID) == max_level() &&
 	     cell_meta_t::level_of(destID) == max_level())
     {
-	interact_item_t t(srcID, destID, ix, iy, iz);
-	m_p2p_list.push_back(t);
+	do_p2p_interact(srcID, destID, ix, iy, iz);
     }else {
 	pair_t pair;
 	pair.sourceID = srcID;
@@ -985,20 +988,50 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     }
 }
 
+#define M2L_CHUNK_SIZE 8192
+#define P2P_CHUNK_SIZE 8192
+
+void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
+{
+    interact_item_t t(srcID, destID, ix, iy, iz);
+    m_m2l_list.push_back(t);
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	if(m_m2l_list.size() >= M2L_CHUNK_SIZE) {
+	    eval_m2l_gpu();
+	}
+    }
+#endif
+}
+
+void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
+{
+    interact_item_t t(srcID, destID, ix, iy, iz);
+    m_p2p_list.push_back(t);
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) {
+	    eval_p2p_gpu();
+	}
+    }
+#endif
+}
+
+
 // TODO: OpenMP
 void fmm::eval_p2p_cpu()
 {
-    m_logger->info("P2P size = %d", m_p2p_list.size());
     for(int i=0;i<m_p2p_list.size();i++) {
 	interact_item_t *item = &(m_p2p_list[i]);
 	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
     }
 }
 
+
 // TODO: OpenMP
 void fmm::eval_m2l_cpu()
 {
-    m_logger->info("M2L size = %d", m_m2l_list.size());
     for(int i=0;i<m_m2l_list.size();i++) {
 	interact_item_t *item = &(m_m2l_list[i]);
 	eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);

@@ -183,7 +183,9 @@ namespace ORG_NCSA_IRIS {
 	void send_back_forces_cpu(particle_t *in_particles);
 
 	void calc_ext_boxes();
-	
+
+	void do_m2l_interact(int srcID, int destID, int ix, int iy, int iz);
+	void do_p2p_interact(int srcID, int destID, int ix, int iy, int iz);
 	
     private:
 	int                 m_order;             // order of expansion (p)
@@ -234,7 +236,9 @@ namespace ORG_NCSA_IRIS {
 	std::map<int, iris_real *> m_charges_gpu;
 	std::map<int, int> m_charges_gpu_cap;
 	cudaStream_t m_streams[IRIS_CUDA_FMM_NUM_STREAMS];
-
+	cudaEvent_t m_m2l_memcpy_done;
+	cudaEvent_t m_p2p_memcpy_done;	
+	
 	int *m_atom_types;
 	int m_at_cap;
 	
