@@ -51,8 +51,8 @@ using namespace ORG_NCSA_IRIS;
 
 #define _LN8 2.0794415416798357  // natural logarithm of 8
 
-#define MIN_DEPTH 2   // minimum value for depth (2)
-#define MAX_DEPTH 16  // more than enough (e.g. 18 quadrillion particles)
+#define MIN_DEPTH 2
+#define MAX_DEPTH 12
 
 fmm::fmm(iris *obj):
     solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
@@ -152,8 +152,14 @@ void fmm::commit()
 	int ncrit = t.i;
 
 	ncrit = MIN(ncrit, IRIS_MAX_NCRIT);
-	
-	m_depth = (natoms > ncrit) ? int(log(natoms / ncrit)/_LN8) + 2 : 0;
+
+	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_DEPTH);
+	int user_depth = t.i;
+	if(user_depth == -1) {
+	    m_depth = (natoms > ncrit) ? int(log(natoms / ncrit)/_LN8) + 1 : 0;
+	}else {
+	    m_depth = user_depth;
+	}
 	m_depth = MAX(m_depth, MIN_DEPTH);
 	m_depth = MIN(m_depth, MAX_DEPTH);
 

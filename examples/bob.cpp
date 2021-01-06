@@ -505,19 +505,24 @@ int main(int argc, char **argv)
     // the configuration and make the IRIS server nodes perform any preliminary
     // calculations in order to prepare for the calculation proper.
     x->config_auto_tune(input.natoms, input.qtot2, CUTOFF);
-    
-    solver_param_t nsigmas;
-    nsigmas.r = 6.0;
-    x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
 
-    solver_param_t pade;
-    pade.i = 0;
-    x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_M, pade);
+    solver_param_t param;
+    // solver_param_t nsigmas;
+    // nsigmas.r = 6.0;
+    // x->set_solver_param(IRIS_SOLVER_CG_NSIGMAS, nsigmas);
 
-    pade.i = 2;
-    x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
-    
+    // solver_param_t pade;
+    // pade.i = 0;
+    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_M, pade);
+
+    // pade.i = 2;
+    // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
+
+    // pade.i = 5;
+    // x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, pade);
+
     x->set_order(6);
+    
     x->set_mesh_size(128, 128, 128);
     x->set_alpha(2.6028443952840625);
     x->set_accuracy(1e-4, true);

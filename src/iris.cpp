@@ -246,6 +246,9 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 
     def_param.r = 1.5;
     set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
+
+    def_param.i = -1;
+    set_solver_param(IRIS_SOLVER_FMM_DEPTH, def_param);
 }
 
 iris::~iris()

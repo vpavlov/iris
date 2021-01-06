@@ -40,7 +40,8 @@ typedef double iris_real;
 #define sqrt_fn sqrt
 #define pow_fn  pow
 #define exp_fn  exp
-
+#define __rsqrt __drsqrt_rn
+#define __fma   __fma_rn
 #else
 
 typedef float iris_real;
@@ -51,7 +52,8 @@ typedef float iris_real;
 #define sqrt_fn sqrtf
 #define pow_fn  powf
 #define exp_fn  expf
-
+#define __rsqrt __frsqrt_rn
+#define __fma   __fmaf_rn
 #endif
 
 #endif // __IRIS_REAL_H__

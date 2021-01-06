@@ -196,19 +196,19 @@ __device__ void d_compute_ses(particle_t *in_particles, int num_points, int firs
 // Center of mass
 __device__ void d_compute_com(particle_t *in_particles, int num_points, int first_child, cell_t *out_target)
 {
-    iris_real M = 0.0;
+    // iris_real M = 0.0;
+    // for(int i=0;i<num_points;i++) {
+    // 	M += in_particles[first_child+i].xyzq[3];
+    // }
     for(int i=0;i<num_points;i++) {
-	M += in_particles[first_child+i].xyzq[3];
-    }
-    for(int i=0;i<num_points;i++) {
-	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0] * in_particles[first_child+i].xyzq[3];
-	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1] * in_particles[first_child+i].xyzq[3];
-	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2] * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0]; // * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1]; // * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2]; // * in_particles[first_child+i].xyzq[3];
     }
 
-    out_target->ses.c.r[0] /= M;
-    out_target->ses.c.r[1] /= M;
-    out_target->ses.c.r[2] /= M;
+    out_target->ses.c.r[0] /= num_points;
+    out_target->ses.c.r[1] /= num_points;
+    out_target->ses.c.r[2] /= num_points;
 
     iris_real max_dist2 = 0.0;
     for(int i=0;i<num_points;i++) {
@@ -528,22 +528,15 @@ __global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells
 	    iris_real dy = ty - sy;
 	    iris_real dz = tz - sz;
 	    iris_real r2 = dx*dx + dy*dy + dz*dz;
-	    iris_real inv_r2;
-	    if(r2 == 0) {
-		inv_r2 = 0;
-	    }else {
-		inv_r2 = 1/r2;
+	    if(r2 == 0.0) {
+		continue;
 	    }
-	    iris_real phi = sq * sqrt(inv_r2);
-	    iris_real phi_over_r2 = phi * inv_r2;
-	    iris_real ex = dx * phi_over_r2;
-	    iris_real ey = dy * phi_over_r2;
-	    iris_real ez = dz * phi_over_r2;
-
+	    iris_real phi = sq * __rsqrt(r2);
+	    iris_real phi_over_r2 = phi / r2;
 	    sum_phi += phi;
-	    sum_ex += ex;
-	    sum_ey += ey;
-	    sum_ez += ez;
+	    sum_ex = __fma(dx, phi_over_r2, sum_ex);
+	    sum_ey = __fma(dy, phi_over_r2, sum_ey);
+	    sum_ez = __fma(dz, phi_over_r2, sum_ez);
 	}
 
 	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 0, sum_phi);
