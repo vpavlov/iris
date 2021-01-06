@@ -223,7 +223,24 @@ __device__ void d_compute_com(particle_t *in_particles, int num_points, int firs
     out_target->ses.r = sqrt(max_dist2);
 }
 
-__global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int nleafs)
+__device__ int d_bsearch(particle_t *in_particles, int in_count, int cellID)
+{
+    int start = 0;
+    int end = in_count-1;
+    while (start <= end) {
+        int m = start + (end - start) / 2;
+        if (in_particles[m].cellID == cellID) {
+            return m;
+	}else if (in_particles[m].cellID < cellID) {
+            start = m + 1;
+	}else {
+	    end = m - 1;
+	}
+    }
+    return -1; 
+}
+
+__global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset)
 {
     if(in_count == 0) {
 	return;
@@ -231,27 +248,29 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
     
     int tid = IRIS_CUDA_TID;
     int cellID = offset + tid;
-    float fract = (1.0*in_count)/nleafs;
-    int from = (int)(fract * tid);
-    int to = MIN((int)(fract * (tid + 1)), in_count-1);
 
+    int from = d_bsearch(in_particles, in_count, cellID);
+    if(from == -1) {
+    	return;
+    }
+    int to = from;
+    
     while(from > 0 && in_particles[from].cellID >= cellID)       { from--; }
     while(from < in_count && in_particles[from].cellID < cellID) { from++; }
     while(to < in_count-1 && in_particles[to].cellID <= cellID)  { to++; }
     while(to >= 0 && in_particles[to].cellID > cellID)           { to--; }
-
+    
     int num_children = (to - from + 1);
     if(num_children <= 0) {
 	return;
     }
-
     out_target[cellID].first_child = from;
     out_target[cellID].num_children = num_children;
     out_target[cellID].flags = in_flags;
     if(num_children > MAX_POINTS_FOR_SES) {
-	d_compute_com(in_particles, num_children, from, out_target+cellID);
+    	d_compute_com(in_particles, num_children, from, out_target+cellID);
     }else {
-	d_compute_ses(in_particles, num_children, from, out_target+cellID);
+    	d_compute_ses(in_particles, num_children, from, out_target+cellID);
     }
 }
 
@@ -261,7 +280,7 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
-    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, nleafs);
+    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset);
 }
 
 
