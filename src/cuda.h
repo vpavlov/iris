@@ -32,7 +32,7 @@
 
 #ifdef IRIS_CUDA
 
-#define IRIS_CUDA_NTHREADS 256
+#define IRIS_CUDA_NTHREADS 128
 #define IRIS_CUDA_NBLOCKS(N, NT) (((N) + (NT) - 1)/(NT))
 #define IRIS_CUDA_TID (blockIdx.x * blockDim.x + threadIdx.x)
 #define IRIS_CUDA_CHUNK(N) (((N) + gridDim.x*blockDim.x - 1)/(gridDim.x*blockDim.x))

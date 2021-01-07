@@ -51,6 +51,7 @@ namespace ORG_NCSA_IRIS {
 	int rank;           // from which rank this particle came ?
 	int index;          // # in m_charges{rank}
 	iris_real tgt[4];   // φ, Ex, Ey, Ez
+	int dummy[5];
     };
 
     int __xcompar_desc(const void *aptr, const void *bptr);

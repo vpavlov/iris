@@ -76,14 +76,19 @@ fmm::fmm(iris *obj):
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
+	int leastPriority;
+	int greatestPriority;
+	
+	cudaDeviceGetStreamPriorityRange(&leastPriority, &greatestPriority);
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
-	    cudaStreamCreate(&m_streams[i]);
+	    cudaStreamCreateWithPriority(&m_streams[i], cudaStreamDefault, greatestPriority);
 	}
 	cudaEventCreate(&m_m2l_memcpy_done);
 	cudaEventCreate(&m_p2p_memcpy_done);
     }
     cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
     cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
+    cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
     IRIS_CUDA_CHECK_ERROR;
 #endif
     
@@ -93,6 +98,7 @@ fmm::~fmm()
 {
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
+	cudaFree(m_max_particles_gpu);
 	cudaFree(m_evir_gpu);
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamDestroy(m_streams[i]);
@@ -389,9 +395,10 @@ void fmm::solve()
     
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-       	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[0]);
-	cudaMemsetAsync(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[1]);
-	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[2]);	
+	cudaMemsetAsync(m_max_particles_gpu, 0, sizeof(int), m_streams[0]);
+       	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[1]);
+	cudaMemsetAsync(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[2]);
+	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[3]);
     }else
 #endif
     {
@@ -784,6 +791,13 @@ void fmm::exchange_LET()
 	comm_LET();
 	recalculate_LET();
     }
+    
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	cudaMemcpy(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault);
+	m_logger->trace("Max particles per cell: %d", m_max_particles);
+    }
+#endif
 
 // #ifdef IRIS_CUDA
 //     if(m_iris->m_cuda) {
@@ -994,8 +1008,8 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     }
 }
 
-#define M2L_CHUNK_SIZE 8192
-#define P2P_CHUNK_SIZE 8192
+#define M2L_CHUNK_SIZE 1600000
+#define P2P_CHUNK_SIZE 16000
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
@@ -1014,6 +1028,7 @@ void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 {
     interact_item_t t(srcID, destID, ix, iy, iz);
+    //m_logger->info("P2P %d %d %d %d %d", srcID, destID, ix, iy, iz);
     m_p2p_list.push_back(t);
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -1028,6 +1043,7 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 // TODO: OpenMP
 void fmm::eval_p2p_cpu()
 {
+    m_logger->info("P2P list size = %d", m_p2p_list.size());
     for(int i=0;i<m_p2p_list.size();i++) {
 	interact_item_t *item = &(m_p2p_list[i]);
 	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);

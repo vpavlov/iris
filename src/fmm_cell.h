@@ -71,12 +71,12 @@ namespace ORG_NCSA_IRIS {
     };
     
     struct cell_t {
-	sphere_t ses;      // smallest sphere enclosing all particles
 	int num_children;  // only for leafs: number of particles
 	int first_child;   // only for leafs: index in particles/xparticles1..6
+	sphere_t ses;      // smallest sphere enclosing all particles
 	int flags;         // IRIS_FMM_CELL_*
+	
 	cell_t(int dummy = 0) {};  // to satisfy the compiler
-
 	void compute_ses(struct particle_t *in_particles);
     };
 

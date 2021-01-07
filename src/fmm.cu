@@ -240,7 +240,7 @@ __device__ int d_bsearch(particle_t *in_particles, int in_count, int cellID)
     return -1; 
 }
 
-__global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset)
+__global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int *m_max_particles_gpu)
 {
     if(in_count == 0) {
 	return;
@@ -272,6 +272,7 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
     }else {
     	d_compute_ses(in_particles, num_children, from, out_target+cellID);
     }
+    atomicMax(m_max_particles_gpu, num_children);
 }
 
 void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
@@ -280,7 +281,7 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
-    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset);
+    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, m_max_particles_gpu);
 }
 
 
@@ -508,78 +509,190 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
 //////////////
 
 
-__global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
-			   iris_real gxsize, iris_real gysize, iris_real gzsize)
+//
+// This function computes one Coulomb interaction between a source particle SP having a charge SQ and
+// a particle at destination TP.
+//
+// NOTE: The exact instructions of doing this are crucial for the performance. For example, if a division
+// is made here, it will slow down the total kernel execution time twice!
+__device__ __forceinline__ void d_coulomb(float3 tp, float3 sp, iris_real sq, iris_real &sum_phi, float3 &e)
 {
-    int tid = IRIS_CUDA_TID;
-    if(tid >= list_size) {
+    iris_real dx = tp.x - sp.x;
+    iris_real dy = tp.y - sp.y;
+    iris_real dz = tp.z - sp.z;
+    iris_real rlen = __rsqrt(__fma(dx, dx, __fma(dy, dy, __fma(dz, dz, 0.0))));
+    dx *= rlen * rlen;
+    dy *= rlen * rlen;
+    dz *= rlen * rlen;
+    rlen *= sq;
+    sum_phi += rlen;
+    e.x = __fma(dx, rlen, e.x);
+    e.y = __fma(dy, rlen, e.y);
+    e.z = __fma(dz, rlen, e.z);
+}
+
+__global__ void k_eval_p2p_self(interact_item_t *list, cell_t *m_cells, particle_t *m_particles)
+{
+    int pair_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which interaction pair we're processing
+    int cellID = list[pair_idx].sourceID;                 // This is C -> C, so cellID = sourceID = destID
+    int i = IRIS_CUDA_TID;                                // Target particle inside cellID
+    int npart = m_cells[cellID].num_children;             // Number of particles in the cell
+    
+    if(i >= npart) {                                      // Make sure this is a valid particle
 	return;
     }
-    int srcID = list[tid].sourceID;
-    int destID = list[tid].targetID;
-    iris_real xoff = list[tid].ix * gxsize;
-    iris_real yoff = list[tid].iy * gysize;
-    iris_real zoff = list[tid].iz * gzsize;
-    for(int i=0;i<m_cells[destID].num_children;i++) {
-	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
-	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
-	iris_real tz = m_particles[m_cells[destID].first_child + i].xyzq[2];
 
-	iris_real sum_phi = 0.0;
-	iris_real sum_ex = 0.0;
-	iris_real sum_ey = 0.0;
-	iris_real sum_ez = 0.0;
-	for(int j=0;j<m_xcells[srcID].num_children;j++) {
-	    iris_real sx, sy, sz, sq;
-	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		sx = m_xparticles[m_xcells[srcID].first_child + j].xyzq[0] + xoff;
-		sy = m_xparticles[m_xcells[srcID].first_child + j].xyzq[1] + yoff;
-		sz = m_xparticles[m_xcells[srcID].first_child + j].xyzq[2] + zoff;
-		sq = m_xparticles[m_xcells[srcID].first_child + j].xyzq[3];
-	    }else {
-		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0] + xoff;
-		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1] + yoff;
-		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + zoff;
-		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
-	    }
+    float phi = 0.0;                                      // Computed potential
+    float3 e = make_float3(0.0, 0.0, 0.0);                // Computed field
+    
+    int start = m_cells[cellID].first_child;              // Where do the particles in cellID start
+    int end = start + npart;                              // Where do the particles in cellID end
+    
+    int ii = start + i;                                   // Index of the target particle in m_particles
+    float4 tmp = *reinterpret_cast<float4 *>(m_particles[ii].xyzq);
+    float3 tpp = make_float3(tmp.x, tmp.y, tmp.z);        // target particle position
 
-	    iris_real dx = tx - sx;
-	    iris_real dy = ty - sy;
-	    iris_real dz = tz - sz;
-	    iris_real r2 = dx*dx + dy*dy + dz*dz;
-	    if(r2 == 0.0) {
-		continue;
-	    }
-	    iris_real phi = sq * __rsqrt(r2);
-	    iris_real phi_over_r2 = phi / r2;
-	    sum_phi += phi;
-	    sum_ex = __fma(dx, phi_over_r2, sum_ex);
-	    sum_ey = __fma(dy, phi_over_r2, sum_ey);
-	    sum_ez = __fma(dz, phi_over_r2, sum_ez);
+    // Process all particles except i-th one to avoid self-interaction and infinities
+    // Use two identical loops (before i; after i) to avoid an 'if'
+    for(int j=start;j<ii;j++) {
+	float4 tmp = *reinterpret_cast<float4 *>(m_particles[j].xyzq);
+	float3 spp = make_float3(tmp.x, tmp.y, tmp.z);    // source particle position
+	iris_real sq = tmp.w;                             // source charge
+	d_coulomb(tpp, spp, sq, phi, e);                  // compute Coulomb interaction
+    }
+    for(int j=ii+1;j<end;j++) {
+	float4 tmp = *reinterpret_cast<float4 *>(m_particles[j].xyzq);
+	float3 spp = make_float3(tmp.x, tmp.y, tmp.z);    // source particle position
+	iris_real sq = tmp.w;                             // source charge
+	d_coulomb(tpp, spp, sq, phi, e);                  // compute Coulomb interaction
+    }
+
+    // atomically reduce the computed potential and field to the target particle's result
+    atomicAdd(m_particles[ii].tgt + 0, phi);
+    atomicAdd(m_particles[ii].tgt + 1, e.x);
+    atomicAdd(m_particles[ii].tgt + 2, e.y);
+    atomicAdd(m_particles[ii].tgt + 3, e.z);
+}
+
+// __device__ void d_p2p_proper(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *in_sparticles,
+// 			     iris_real gxsize, iris_real gysize, iris_real gzsize)
+// {
+//     int pair_idx = blockIdx.y;
+//     int srcID = list[pair_idx].sourceID;
+//     int destID = list[pair_idx].targetID;
+//     iris_real xoff = list[pair_idx].ix * gxsize;
+//     iris_real yoff = list[pair_idx].iy * gysize;
+//     iris_real zoff = list[pair_idx].iz * gzsize;
+
+//     int i = IRIS_CUDA_TID;  // index of the target particle inside destID cell
+//     if(i >= m_cells[destID].num_children) {
+// 	return;
+//     }
+        
+//     particle_t *dest = m_particles + m_cells[destID].first_child + i;
+//     iris_real tx = dest->xyzq[0];
+//     iris_real ty = dest->xyzq[1];
+//     iris_real tz = dest->xyzq[2];
+    
+//     iris_real sum_phi = 0.0;
+//     iris_real sum_ex = 0.0;
+//     iris_real sum_ey = 0.0;
+//     iris_real sum_ez = 0.0;
+    
+//     int sj = m_xcells[srcID].first_child;
+//     int ej = sj + m_xcells[srcID].num_children;
+//     for(int j=sj;j<ej;j++) {
+// 	iris_real sx = in_sparticles[j].xyzq[0] + xoff;
+// 	iris_real sy = in_sparticles[j].xyzq[1] + yoff;
+// 	iris_real sz = in_sparticles[j].xyzq[2] + zoff;
+// 	iris_real sq = in_sparticles[j].xyzq[3];
+// 	d_coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
+//     }
+//     atomicAdd(dest->tgt + 0, sum_phi);
+//     atomicAdd(dest->tgt + 1, sum_ex);
+//     atomicAdd(dest->tgt + 2, sum_ey);
+//     atomicAdd(dest->tgt + 3, sum_ez);
+// }
+
+
+// __global__ void k_eval_p2p(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+// 			   iris_real gxsize, iris_real gysize, iris_real gzsize)
+// {
+//     int pair_idx = blockIdx.y;
+//     if(pair_idx >= list_size) {
+// 	return;
+//     }
+    
+//     int srcID = list[pair_idx].sourceID;
+//     int destID = list[pair_idx].targetID;
+//     if(srcID != destID) {
+//     	return;
+//     }
+//     if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+// 	d_p2p_proper(list, list_size, m_cells, m_xcells, m_particles, m_xparticles, gxsize, gysize, gzsize);
+//     }else {
+// 	d_p2p_proper(list, list_size, m_cells, m_xcells, m_particles, m_particles, gxsize, gysize, gzsize);
+//     }
+// }
+
+int __bahor(const void *aptr, const void *bptr)
+{
+    interact_item_t *a = (interact_item_t *)aptr;
+    interact_item_t *b = (interact_item_t *)bptr;
+    if(a->sourceID > b->sourceID) {
+	return 1;
+    }else if(a->sourceID < b->sourceID) {
+	return -1;
+    }else {
+	if(a->targetID > b->targetID) {
+	    return 1;
+	}else if(a->targetID < b->targetID) {
+	    return -1;
+	}else {
+	    return 0;
 	}
+    }
+}
 
-	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 0, sum_phi);
-	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 1, sum_ex);
-	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 2, sum_ey);
-	atomicAdd(m_particles[m_cells[destID].first_child + i].tgt + 3, sum_ez);
+int __bahor2(const void *aptr, const void *bptr)
+{
+    interact_item_t *a = (interact_item_t *)aptr;
+    interact_item_t *b = (interact_item_t *)bptr;
+    if(a->sourceID == a->targetID) {
+	return -1;
+    }else {
+	return 1;
     }
 }
 
 void fmm::eval_p2p_gpu()
 {
     int n = m_p2p_list.size();
+    // m_logger->info("P2P list size = %d", m_p2p_list.size());
     if(n == 0) {
 	return;
     }
 
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
+    qsort(m_p2p_list.data(), n, sizeof(interact_item_t), __bahor2);
+    int n2;
+    for(int i=0;i<n;i++) {
+	if(m_p2p_list[i].sourceID != m_p2p_list[i].targetID) {
+	    n2 = i;
+	    break;
+	}
+    }
+    
+    // for(int i=0;i<m_p2p_list.size();i++) {
+    // 	m_logger->info("P2P %d %d %d %d %d", m_p2p_list[i].sourceID, m_p2p_list[i].targetID, m_p2p_list[i].ix, m_p2p_list[i].iy, m_p2p_list[i].iz);
+    // }
+    
     cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[0]);
     cudaEventRecord(m_p2p_memcpy_done, m_streams[0]);
-    
-    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
-    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_p2p<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
-    						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
+
+    dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
+    dim3 nblocks((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, 32, 16);
+    k_eval_p2p_self<<<nblocks, nthreads, 0, m_streams[0]>>>(m_p2p_list_gpu, m_cells, m_particles);
     cudaEventSynchronize(m_p2p_memcpy_done);
     m_p2p_list.clear();
 }

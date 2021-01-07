@@ -518,10 +518,10 @@ int main(int argc, char **argv)
     // pade.i = 2;
     // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
 
-    // param.i = 6;
-    // x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, param);
+    param.i = 4;
+    x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, param);
 
-    x->set_order(6);
+    x->set_order(10);
     
     x->set_mesh_size(128, 128, 128);
     x->set_alpha(2.6028443952840625);
