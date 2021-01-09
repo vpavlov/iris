@@ -35,8 +35,28 @@ namespace ORG_NCSA_IRIS {
     struct pair_t {
 	int sourceID;
 	int targetID;
+
+	pair_t(int in_sourceID, int in_targetID)
+	{
+	    sourceID = in_sourceID;
+	    targetID = in_targetID;
+	}
     };
 
+    struct pair_comparator_t {
+	bool operator()(const pair_t &a, const pair_t &b)
+	{
+	    if(a.sourceID < b.sourceID) {
+		return true;
+	    }else if(a.sourceID == b.sourceID) {
+		if(a.targetID < b.targetID) {
+		    return true;
+		}
+	    }
+	    return false;
+	}
+    };
+	
     struct interact_item_t {
 	int sourceID;
 	int targetID;

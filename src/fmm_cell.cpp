@@ -133,3 +133,21 @@ IRIS_CUDA_DEVICE_HOST int cell_meta_t::parent_of(int in_cellID)
     int retval = ((in_cellID - curr_off) >> 3) + parent_off;
     return retval;
 }
+
+
+IRIS_CUDA_DEVICE_HOST int cell_meta_t::leaf_coords_to_ID(int lx, int ly, int lz, int max_level)
+{
+    int offset = cell_meta_t::offset_for_level(max_level);
+    int nd = 1 << max_level;
+    
+    int lc[] = { lx % nd, ly % nd, lz % nd };
+
+    int id = 0;
+    for(int l=0;l<max_level; l++) {
+	for(int d=0;d<3;d++) {
+	    id += (lc[d] & 1) << (3*l + d);
+	    lc[d] >>= 1;
+	}
+    }
+    return offset + id;
+}

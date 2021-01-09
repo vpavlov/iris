@@ -41,6 +41,7 @@
 #include "proc_grid.h"
 #include "tags.h"
 #include "ses.h"
+#include "utils.h"
 
 #ifdef IRIS_CUDA
 #include "cuda_runtime_api.h"
@@ -76,12 +77,8 @@ fmm::fmm(iris *obj):
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	int leastPriority;
-	int greatestPriority;
-	
-	cudaDeviceGetStreamPriorityRange(&leastPriority, &greatestPriority);
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
-	    cudaStreamCreateWithPriority(&m_streams[i], cudaStreamDefault, greatestPriority);
+	    cudaStreamCreate(&m_streams[i]);
 	}
 	cudaEventCreate(&m_m2l_memcpy_done);
 	cudaEventCreate(&m_p2p_memcpy_done);
@@ -147,6 +144,7 @@ fmm::~fmm()
     if(m_recvbuf != NULL) { memory::wfree(m_recvbuf); }
 }
 
+
 void fmm::commit()
 {
     if(m_dirty) {
@@ -183,7 +181,7 @@ void fmm::commit()
 	}
 
 	m_tree_size = ((1 << 3 * m_depth) - 1) / 7;
-	
+
 	handle_box_resize();
 
 #ifdef IRIS_CUDA
@@ -208,7 +206,6 @@ void fmm::commit()
 	    
 	    if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	    m_xcells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
-	    
 	}else
 #endif
 	{
@@ -323,7 +320,7 @@ void fmm::send_forces_to(particle_t *in_particles, int peer, int start, int end,
     m_iris->m_forces[peer] = forces;
 
     for(int i=start;i<end;i++) {
-	iris_real factor = in_particles[i].xyzq[3] * m_units->ecf;  // q * 1/4pieps
+	iris_real factor = m_units->ecf;  // 1/4pieps
 
 	forces[7 + (i-start)*4 + 0] = in_particles[i].index + 0.33333333;
 	forces[7 + (i-start)*4 + 1] = factor * in_particles[i].tgt[1];
@@ -391,6 +388,7 @@ void fmm::solve()
 
     m_p2p_list.clear();
     m_m2l_list.clear();
+    m_p2p_skip.clear();
     m_has_cells_cpu = false;
     
 #ifdef IRIS_CUDA
@@ -461,7 +459,6 @@ void fmm::load_particles()
 
 void fmm::load_particles_cpu()
 {
-    int offset = cell_meta_t::offset_for_level(max_level());
     int nd = 1 << max_level();
 
     m_nparticles = m_iris->num_local_atoms();
@@ -484,19 +481,7 @@ void fmm::load_particles_cpu()
 	    iris_real ty = (charges[i * 5 + 1] - gbox->ylo) / m_leaf_size[1];
 	    iris_real tz = (charges[i * 5 + 2] - gbox->zlo) / m_leaf_size[2];
 
-	    lc[0] = (int) tx;
-	    lc[1] = (int) ty;
-	    lc[2] = (int) tz;
-
-	    int id = 0;
-	    for(int l=0;l<max_level(); l++) {
-		for(int d=0;d<3;d++) {
-		    id += (lc[d] & 1) << (3*l + d);
-		    lc[d] >>= 1;
-		}
-	    }
-
-	    int cellID = offset + id;
+	    int cellID = cell_meta_t::leaf_coords_to_ID(tx, ty, tz, max_level());
 	    int chargeID = (int)charges[i*5 + 4];
 	    assert(chargeID != 0);
 	    
@@ -893,6 +878,7 @@ void fmm::dual_tree_traversal()
             
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
+	eval_p2p_self_gpu();
 	dual_tree_traversal_gpu();
 	eval_p2p_gpu();
 	eval_m2l_gpu();
@@ -901,6 +887,7 @@ void fmm::dual_tree_traversal()
     }else
 #endif
     {
+	eval_p2p_self_cpu();
 	dual_tree_traversal_cpu(m_xcells, m_cells);
 	eval_p2p_cpu();
 	eval_m2l_cpu();
@@ -929,9 +916,7 @@ void fmm::dual_tree_traversal_cpu(cell_t *src_cells, cell_t *dest_cells)
     for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 	for(int iy = -m_proc_grid->m_pbc[1]; iy <= m_proc_grid->m_pbc[1]; iy++) {
 	    for(int iz = -m_proc_grid->m_pbc[2]; iz <= m_proc_grid->m_pbc[2]; iz++) {
-		pair_t root;
-		root.sourceID = 0;
-		root.targetID = 0;
+		pair_t root(0, 0);
 		m_queue.push_back(root);
 		traverse_queue(src_cells, dest_cells, ix, iy, iz);
 	    }
@@ -996,20 +981,16 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     iris_real dn = src_cells[srcID].ses.r + dest_cells[destID].ses.r;
     if(dn/rn < m_mac) {
 	do_m2l_interact(srcID, destID, ix, iy, iz);
-    }else if(cell_meta_t::level_of(srcID) == max_level() &&
-	     cell_meta_t::level_of(destID) == max_level())
-    {
+    }else if(cell_meta_t::level_of(srcID) == max_level() && cell_meta_t::level_of(destID) == max_level()) {
 	do_p2p_interact(srcID, destID, ix, iy, iz);
     }else {
-	pair_t pair;
-	pair.sourceID = srcID;
-	pair.targetID = destID;
+	pair_t pair(srcID, destID);
 	m_queue.push_back(pair);
     }
 }
 
-#define M2L_CHUNK_SIZE 1600000
-#define P2P_CHUNK_SIZE 16000
+#define M2L_CHUNK_SIZE 8192
+#define P2P_CHUNK_SIZE 8192
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
@@ -1027,8 +1008,33 @@ void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 {
+    // P2P self is handled separately, just ignore it here
+    if(srcID == destID) {  
+    	return;
+    }
+
+    pair_t p(destID, srcID);
+    auto skip = m_p2p_skip.find(p);
+    if(skip != m_p2p_skip.end()) {
+	return;
+    }
+
+    pair_t pp(srcID, destID);
+    m_p2p_skip[pp] = true;
+    
+    if(m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0) {
+	do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
+    }else if(m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0) {
+	do_p2p_interact_nopbc(srcID, destID);
+    }else {
+	// TODO: figure this out
+	throw std::logic_error("Partial PBC not implemented!");
+    }
+}
+
+void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
+{
     interact_item_t t(srcID, destID, ix, iy, iz);
-    //m_logger->info("P2P %d %d %d %d %d", srcID, destID, ix, iy, iz);
     m_p2p_list.push_back(t);
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -1039,11 +1045,22 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 #endif
 }
 
+void fmm::do_p2p_interact_nopbc(int srcID, int destID)
+{
+    interact_item_t t(srcID, destID, 0, 0, 0);
+    m_p2p_list.push_back(t);
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) {
+	    eval_p2p_gpu();
+	}
+    }
+#endif
+}
 
 // TODO: OpenMP
 void fmm::eval_p2p_cpu()
 {
-    m_logger->info("P2P list size = %d", m_p2p_list.size());
     for(int i=0;i<m_p2p_list.size();i++) {
 	interact_item_t *item = &(m_p2p_list[i]);
 	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
@@ -1060,6 +1077,58 @@ void fmm::eval_m2l_cpu()
     }
 }
 
+inline void __coulomb(iris_real tx, iris_real ty, iris_real tz, iris_real sx, iris_real sy, iris_real sz, iris_real sq,
+		      iris_real &sum_phi, iris_real &sum_ex, iris_real &sum_ey, iris_real &sum_ez)
+{
+    iris_real dx = tx - sx;
+    iris_real dy = ty - sy;
+    iris_real dz = tz - sz;
+    iris_real rlen = 1/sqrt(dx*dx + dy*dy + dz*dz);
+    dx *= rlen * rlen;
+    dy *= rlen * rlen;
+    dz *= rlen * rlen;
+    rlen *= sq;
+    sum_phi += rlen;
+    sum_ex += dx * rlen;
+    sum_ey += dy * rlen;
+    sum_ez += dz * rlen;
+}
+
+// TODO: OpenMP; vectorisation?
+void fmm::eval_p2p_self_cpu()
+{
+    int offset = cell_meta_t::offset_for_level(max_level());
+    for(int cellID=offset;cellID<m_tree_size;cellID++) {
+	for(int i=0;i<m_cells[cellID].num_children;i++) {
+	    iris_real tx = m_particles[m_cells[cellID].first_child + i].xyzq[0];
+	    iris_real ty = m_particles[m_cells[cellID].first_child + i].xyzq[1];
+	    iris_real tz = m_particles[m_cells[cellID].first_child + i].xyzq[2];
+
+	    iris_real sum_phi = 0.0;
+	    iris_real sum_ex = 0.0;
+	    iris_real sum_ey = 0.0;
+	    iris_real sum_ez = 0.0;
+	    for(int j=0;j<m_cells[cellID].num_children;j++) {
+		if(i==j) {
+		    continue;
+		}
+		iris_real sx, sy, sz, sq;
+		sx = m_particles[m_cells[cellID].first_child + j].xyzq[0];
+		sy = m_particles[m_cells[cellID].first_child + j].xyzq[1];
+		sz = m_particles[m_cells[cellID].first_child + j].xyzq[2];
+		sq = m_particles[m_cells[cellID].first_child + j].xyzq[3];
+		__coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
+	    }
+
+	    m_particles[m_cells[cellID].first_child + i].tgt[0] += sum_phi;
+	    m_particles[m_cells[cellID].first_child + i].tgt[1] += sum_ex;
+	    m_particles[m_cells[cellID].first_child + i].tgt[2] += sum_ey;
+	    m_particles[m_cells[cellID].first_child + i].tgt[3] += sum_ez;
+	}
+	m_p2p_count++;
+    }
+}
+
 void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 {
     for(int i=0;i<m_cells[destID].num_children;i++) {
@@ -1072,6 +1141,9 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 	iris_real sum_ey = 0.0;
 	iris_real sum_ez = 0.0;
 	for(int j=0;j<m_xcells[srcID].num_children;j++) {
+	    if(srcID == destID && ix == 0 && iy == 0 && iz == 0 && i == j) {
+		continue;
+	    }
 	    iris_real sx, sy, sz, sq;
 	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
 		sx = m_xparticles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
@@ -1084,28 +1156,7 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
 		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
 	    }
-
-	    iris_real dx = tx - sx;
-	    iris_real dy = ty - sy;
-	    iris_real dz = tz - sz;
-	    iris_real r2 = dx*dx + dy*dy + dz*dz;
-	    iris_real inv_r2;
-	    if(r2 == 0) {
-		inv_r2 = 0;
-	    }else {
-		inv_r2 = 1/r2;
-	    }
-	    iris_real phi = sq * sqrt(inv_r2);
-	    iris_real phi_over_r2 = phi * inv_r2;
-	    iris_real ex = dx * phi_over_r2;
-	    iris_real ey = dy * phi_over_r2;
-	    iris_real ez = dz * phi_over_r2;
-
-	    sum_phi += phi;
-	    sum_ex += ex;
-	    sum_ey += ey;
-	    sum_ez += ez;
-	    
+	    __coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
 	}
 
 	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;

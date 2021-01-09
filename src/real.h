@@ -33,7 +33,6 @@
 #if IRIS_DOUBLE
 
 typedef double iris_real;
-
 #define IRIS_REAL MPI_DOUBLE
 #define log_fn  log
 #define fabs_fn fabs
@@ -42,10 +41,14 @@ typedef double iris_real;
 #define exp_fn  exp
 #define __rsqrt __drsqrt_rn
 #define __fma   __fma_rn
+#define iris_real3 double3
+#define iris_real4 double4
+#define make_iris_real3 make_double3
+#define make_iris_real4 make_double4
+
 #else
 
 typedef float iris_real;
-
 #define IRIS_REAL MPI_FLOAT
 #define log_fn  logf
 #define fabs_fn fabsf
@@ -54,6 +57,11 @@ typedef float iris_real;
 #define exp_fn  expf
 #define __rsqrt __frsqrt_rn
 #define __fma   __fmaf_rn
+#define iris_real3 float3
+#define iris_real4 float4
+#define make_iris_real3 make_float3
+#define make_iris_real4 make_float4
+
 #endif
 
 #endif // __IRIS_REAL_H__

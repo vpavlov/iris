@@ -40,6 +40,7 @@
 #include "fmm_particle.h"
 #include "assert.h"
 #include "logger.h"
+#include "fmm_pair.h"
 
 #ifdef IRIS_CUDA
 #include "cuda_runtime_api.h"
@@ -117,13 +118,16 @@ namespace ORG_NCSA_IRIS {
 #endif
 	
 	void eval_p2p(int srcID, int destID, int ix, int iy, int iz);
+	void eval_p2p_self();
 	void eval_m2l(int srcID, int destID, int ix, int iy, int iz);
 	
 	void eval_p2p_cpu();
+	void eval_p2p_self_cpu();
 	void eval_m2l_cpu();
 	
 #ifdef IRIS_CUDA
 	void eval_p2p_gpu();
+	void eval_p2p_self_gpu();
 	void eval_m2l_gpu();
 #endif
 	
@@ -186,6 +190,8 @@ namespace ORG_NCSA_IRIS {
 
 	void do_m2l_interact(int srcID, int destID, int ix, int iy, int iz);
 	void do_p2p_interact(int srcID, int destID, int ix, int iy, int iz);
+	void do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz);
+	void do_p2p_interact_nopbc(int srcID, int destID);
 	
     private:
 	int                 m_order;             // order of expansion (p)
@@ -272,6 +278,8 @@ namespace ORG_NCSA_IRIS {
 	unsigned char *m_recvbuf;
 	int m_sendbuf_cap;
 	int m_recvbuf_cap;
+
+	std::map<struct pair_t, bool, pair_comparator_t> m_p2p_skip;
     };
 }
 
