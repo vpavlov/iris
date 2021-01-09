@@ -1013,41 +1013,27 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
     	return;
     }
 
-    pair_t p(destID, srcID);
-    auto skip = m_p2p_skip.find(p);
-    if(skip != m_p2p_skip.end()) {
-	return;
-    }
-
-    pair_t pp(srcID, destID);
-    m_p2p_skip[pp] = true;
-    
     if(m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0) {
 	do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
     }else if(m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0) {
-	do_p2p_interact_nopbc(srcID, destID);
+	throw std::logic_error("Open boundary P2P not implemented!");
     }else {
-	// TODO: figure this out
-	throw std::logic_error("Partial PBC not implemented!");
+	throw std::logic_error("Partial PBC P2P not implemented!");
     }
 }
 
 void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 {
-    interact_item_t t(srcID, destID, ix, iy, iz);
-    m_p2p_list.push_back(t);
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) {
-	    eval_p2p_gpu();
-	}
+    pair_t p(destID, srcID);
+    auto skip = m_p2p_skip.find(p);
+    if(skip != m_p2p_skip.end()) {
+	return;
     }
-#endif
-}
-
-void fmm::do_p2p_interact_nopbc(int srcID, int destID)
-{
-    interact_item_t t(srcID, destID, 0, 0, 0);
+    
+    pair_t pp(srcID, destID);
+    m_p2p_skip[pp] = true;
+    
+    interact_item_t t(srcID, destID, ix, iy, iz);
     m_p2p_list.push_back(t);
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
