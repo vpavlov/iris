@@ -55,6 +55,7 @@ namespace ORG_NCSA_IRIS {
     // be more than enough (e.g. if NCRIT=64 - the default - there are about
     // 10 particles per cell)
 #define IRIS_MAX_NCRIT 64
+#define IRIS_FMM_MAX_ORDER 40
     
 #ifdef IRIS_CUDA
 #define IRIS_CUDA_FMM_NUM_STREAMS 4

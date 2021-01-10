@@ -150,7 +150,9 @@ void fmm::commit()
     if(m_dirty) {
 	
 	m_order = m_iris->m_order;  // if p = 2, we expand multipoles until Y_2^2
-	
+	if(m_order > IRIS_FMM_MAX_ORDER) {
+	    throw std::logic_error("Max FMM order exceeded. Change IRIS_FMM_MAX_ORDER if you need to!");
+	}
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);
 	int ncrit = t.i;
@@ -990,7 +992,6 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
 }
 
 #define M2L_CHUNK_SIZE 8192
-#define P2P_CHUNK_SIZE 8192
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
@@ -1024,6 +1025,9 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 {
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int nleafs = m_tree_size - offset;
+    
     pair_t p(destID, srcID);
     auto skip = m_p2p_skip.find(p);
     if(skip != m_p2p_skip.end()) {
@@ -1037,7 +1041,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
     m_p2p_list.push_back(t);
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) {
+	if(m_p2p_list.size() >= nleafs) {
 	    eval_p2p_gpu();
 	}
     }

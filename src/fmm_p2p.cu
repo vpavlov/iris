@@ -64,8 +64,8 @@ __device__ __forceinline__ void d_coulomb(iris_real3 tp, iris_real3 sp, iris_rea
 
 __global__ void k_p2p_self(cell_t *m_cells, particle_t *m_particles, int offset)
 {
-    int pair_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which interaction pair we're processing
-    int cellID = pair_idx + offset;                       // This is C -> C, so cellID = sourceID = destID
+    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which interaction pair we're processing
+    int cellID = leaf_idx + offset;                       // This is C -> C, so cellID = sourceID = destID
     int i = IRIS_CUDA_TID;                                // Target particle inside cellID
     int npart = m_cells[cellID].num_children;             // Number of particles in the cell
     
