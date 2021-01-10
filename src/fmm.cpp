@@ -1268,7 +1268,7 @@ void fmm::calc_ext_boxes()
 {
     iris_real R = sqrt(m_leaf_size[0]*m_leaf_size[0] + m_leaf_size[1]*m_leaf_size[1] + m_leaf_size[2]*m_leaf_size[2]);
 
-    iris_real r_cut = 2 * R / m_mac;
+    iris_real r_cut = R / m_mac;
     int nx = (int)(r_cut / m_leaf_size[0]);
     int ny = (int)(r_cut / m_leaf_size[1]);
     int nz = (int)(r_cut / m_leaf_size[2]);
