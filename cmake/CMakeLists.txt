@@ -70,12 +70,17 @@ list(APPEND IRIS_LINK_LIBS ${MPI_CXX_LIBRARIES})
 # Find CUDA
 ################################################################################
 option(IRIS_CUDA "Build CUDA version" ON)
+option(IRIS_OWN_CUB "Use own CUB" OFF)
+
 if(IRIS_CUDA)
   find_package(CUDA REQUIRED)
   add_definitions(-DIRIS_CUDA)
   #set(CMAKE_CUDA_ARCHITECTURES  61)
   file(GLOB IRIS_SOURCES ${IRIS_SOURCE_DIR}/*.c*)
   include_directories("${CUDA_TOOLKIT_ROOT_DIR}/include")
+  if(IRIS_OWN_CUB)
+    include_directories("${IRIS_SOURCE_DIR}/../lib/cub-1.8.0")
+  endif()
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/ses.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/point.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/sphere.cpp")

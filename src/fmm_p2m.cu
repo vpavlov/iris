@@ -68,18 +68,26 @@ __device__ void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_rea
     int lane_id = threadIdx.x % 32;
     
     for(int m = 0; m < order; m++) {
-	//complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
-	multipole_atomic_add(out_M, m, m, R_m_m);
+	complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
+	if(lane_id == 0) {
+	    multipole_atomic_add(out_M, m, m, tt);
+	}
 
 	complex<iris_real> R_mplus1_m = z * R_m_m;
-	multipole_atomic_add(out_M, m+1, m, R_mplus1_m);
+	tt = WarpReduce(temp[lane_id]).Sum(R_mplus1_m);
+	if(lane_id == 0) {
+	    multipole_atomic_add(out_M, m+1, m, tt);
+	}
 
 	complex<iris_real> prev2 = R_m_m;
 	complex<iris_real> prev1 = R_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
 	    complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
 	    R_l_m /= (l * l - m * m);
-	    multipole_atomic_add(out_M, l, m, R_l_m);
+	    tt = WarpReduce(temp[lane_id]).Sum(R_l_m);
+	    if(lane_id == 0) {
+		multipole_atomic_add(out_M, l, m, tt);
+	    }
 	    prev2 = prev1;
 	    prev1 = R_l_m;
 	}
@@ -87,7 +95,10 @@ __device__ void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_rea
 	R_m_m *= xy;
 	R_m_m /= 2*(m+1);
     }
-    multipole_atomic_add(out_M, order, order, R_m_m);
+    complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
+    if(lane_id == 0) {
+	multipole_atomic_add(out_M, order, order, tt);
+    }
 }
 
 
