@@ -494,7 +494,7 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
 __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
 			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, int m_order, iris_real *m_M, iris_real *m_L)
 {
-    __shared__ iris_real m_scratch[132*32];
+    iris_real m_scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
     
     int tid = IRIS_CUDA_TID;
     if(tid >= list_size) {
@@ -507,8 +507,6 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real yoff = list[tid].iy * gysize;
     iris_real zoff = list[tid].iz * gzsize;
     
-    assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
-
     iris_real sx = m_xcells[srcID].ses.c.r[0] + xoff;
     iris_real sy = m_xcells[srcID].ses.c.r[1] + yoff;
     iris_real sz = m_xcells[srcID].ses.c.r[2] + zoff;
@@ -521,9 +519,8 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
-    // TODO: get rid of the the dynamic allocation
-    memset(m_scratch+threadIdx.x*132, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch+threadIdx.x*132);
+    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch);
     
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
 }
@@ -539,7 +536,7 @@ void fmm::eval_m2l_gpu()
     cudaMemcpyAsync(m_m2l_list_gpu, m_m2l_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
     cudaEventRecord(m_m2l_memcpy_done, m_streams[1]);
     
-    int nthreads = MIN(32, n);
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
     k_eval_m2l<<<nblocks, nthreads, 0, m_streams[1]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms,
