@@ -336,57 +336,57 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 //////////////
 
 
-__global__ void k_eval_p2m(cell_t *in_cells, int offset, int end, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
-{
-    int tid = IRIS_CUDA_TID;
-    int cellID = tid + offset;
-    if(cellID >= end) {
-	return;
-    }
-    cell_t *leaf = &in_cells[cellID];
+// __global__ void k_eval_p2m(cell_t *in_cells, int offset, int end, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
+// {
+//     int tid = IRIS_CUDA_TID;
+//     int cellID = tid + offset;
+//     if(cellID >= end) {
+// 	return;
+//     }
+//     cell_t *leaf = &in_cells[cellID];
     
-    // no particles here -- continue
-    if(leaf->num_children == 0) {
-	return;
-    }
+//     // no particles here -- continue
+//     if(leaf->num_children == 0) {
+// 	return;
+//     }
     
-    // we only want alien cells, but this one is local -- continue
-    if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
-	return;
-    }
+//     // we only want alien cells, but this one is local -- continue
+//     if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+// 	return;
+//     }
     
-    // it has been send from exchange_LET AND from halo exchange -- continue
-    if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
-	return;
-    }
+//     // it has been send from exchange_LET AND from halo exchange -- continue
+//     if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
+// 	return;
+//     }
     
-    iris_real *M = m_M + cellID * 2 * m_nterms;
-    for(int j=0;j<leaf->num_children;j++) {
-	iris_real x, y, z, q;
-	if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-	    x = m_xparticles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
-	    y = m_xparticles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
-	    z = m_xparticles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
-	    q = m_xparticles[leaf->first_child+j].xyzq[3];
-	}else {
-	    x = m_particles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
-	    y = m_particles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
-	    z = m_particles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
-	    q = m_particles[leaf->first_child+j].xyzq[3];
-	}
-	p2m(m_order, x, y, z, q, M);
-    }
-    leaf->flags |= IRIS_FMM_CELL_VALID_M;
-}
+//     iris_real *M = m_M + cellID * 2 * m_nterms;
+//     for(int j=0;j<leaf->num_children;j++) {
+// 	iris_real x, y, z, q;
+// 	if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+// 	    x = m_xparticles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
+// 	    y = m_xparticles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
+// 	    z = m_xparticles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
+// 	    q = m_xparticles[leaf->first_child+j].xyzq[3];
+// 	}else {
+// 	    x = m_particles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
+// 	    y = m_particles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
+// 	    z = m_particles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
+// 	    q = m_particles[leaf->first_child+j].xyzq[3];
+// 	}
+// 	p2m(m_order, x, y, z, q, M);
+//     }
+//     leaf->flags |= IRIS_FMM_CELL_VALID_M;
+// }
 
-void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
-{
-    int offset = cell_meta_t::offset_for_level(max_level());
-    int n = m_tree_size - offset;
-    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
-    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_p2m<<<nblocks, nthreads>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
-}
+// void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
+// {
+//     int offset = cell_meta_t::offset_for_level(max_level());
+//     int n = m_tree_size - offset;
+//     int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
+//     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+//     k_eval_p2m<<<nblocks, nthreads>>>(in_cells, offset, m_tree_size, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+// }
 
 
 //////////////
