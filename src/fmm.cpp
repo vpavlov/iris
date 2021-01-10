@@ -779,13 +779,6 @@ void fmm::exchange_LET()
 	recalculate_LET();
     }
     
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	cudaMemcpy(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault);
-	m_logger->trace("Max particles per cell: %d", m_max_particles);
-    }
-#endif
-
 // #ifdef IRIS_CUDA
 //     if(m_iris->m_cuda) {
 // 	print_tree_gpu("Xcell", m_xcells);

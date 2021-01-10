@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
+#include <cub/cub.cuh>
 #include "cuda.h"
 #include "comm_rec.h"
 #include "fmm.h"
@@ -55,12 +56,19 @@ __device__ void multipole_atomic_add(iris_real *M, int l, int m, complex<iris_re
 
 __device__ void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
+    typedef cub::WarpReduce<complex<iris_real>> WarpReduce;
+    
+    __shared__ typename WarpReduce::TempStorage temp[128];
+    
     iris_real r2 = x * x + y * y + z * z;
 
     complex<iris_real> R_m_m(q, 0);
     complex<iris_real> xy(x, y);
+
+    int lane_id = threadIdx.x % 32;
     
     for(int m = 0; m < order; m++) {
+	//complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
 	multipole_atomic_add(out_M, m, m, R_m_m);
 
 	complex<iris_real> R_mplus1_m = z * R_m_m;
