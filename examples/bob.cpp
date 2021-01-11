@@ -14,7 +14,7 @@
 #include <iris/timer.h>
 #include <iris/factorizer.h>
 
-#define NSTEPS 2
+#define NSTEPS 1
 #define CUTOFF 1.2  // 12 angstroms
 
 using namespace ORG_NCSA_IRIS;
@@ -355,7 +355,8 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     int n = 0;
     for(int i=0;i<iris->m_server_size;i++) {
 	for(int j=0;j<nforces[i];j++) {
-	    fprintf(fp, "%f %f %f\n",
+	    fprintf(fp, "ID %d: %f %f %f\n",
+		    (int)forces[n*4 + 0],
 		    forces[n*4 + 1], 
 		    forces[n*4 + 2], 
 		    forces[n*4 + 3]);
