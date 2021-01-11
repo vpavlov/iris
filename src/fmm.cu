@@ -80,9 +80,7 @@ __global__ void k_load_charges(iris_real *charges, int ncharges, int hwm,
 __global__ void k_extract_cellID(particle_t *m_particles, int n, int *cellID_keys)
 {
     IRIS_CUDA_SETUP_WS(n);
-    for(int i=from;i<to;i++) {
-	cellID_keys[i] = m_particles[i].cellID;
-    }
+    cellID_keys[from] = m_particles[from].cellID;
 }
 
 void fmm::load_particles_gpu()
@@ -98,7 +96,7 @@ void fmm::load_particles_gpu()
     // Also, allocate same sized array for the atom types (=1 if halo atom, =0 if own atom)
     m_particles = (particle_t *)memory::wmalloc_gpu_cap((void *)m_particles, total_local_charges, sizeof(particle_t), &m_npart_cap);
     m_atom_types = (int *)memory::wmalloc_gpu_cap((void *)m_atom_types, total_local_charges, sizeof(int), &m_at_cap);
-    m_cellID_keys = (int *)memory::wmalloc_gpu_cap((void *)m_cellID_keys, total_local_charges, sizeof(int), &m_cellID_keys_cap);
+    m_keys = (int *)memory::wmalloc_gpu_cap((void *)m_keys, total_local_charges, sizeof(int), &m_keys_cap);
 
     // Allocate GPU memory for the charges coming from all client ranks
     // This is done all at once so as no to interfere with mem transfer/kernel overlapping in the next loop
@@ -139,9 +137,8 @@ void fmm::load_particles_gpu()
     thrust::sort_by_key(keys, keys+total_local_charges, values);
 
     // Now the first part of m_particles contains local atoms; second contains halo atoms
-    // Number of local particles can be taken from iris: num_local_atoms
+    // Number of local particles are those with key = 0
     // Number of halo particles is total_local_charges - num_local_atoms
-    //m_nparticles = m_iris->num_local_atoms();
     m_nparticles = thrust::count(keys, keys+total_local_charges, 0);
     m_nxparticles = total_local_charges - m_nparticles;
     m_xparticles = m_particles + m_nparticles;
@@ -149,10 +146,10 @@ void fmm::load_particles_gpu()
     // Get the cellIDs in the reordered array
     int nthreads = MIN(IRIS_CUDA_NTHREADS, total_local_charges);
     int nblocks = IRIS_CUDA_NBLOCKS(total_local_charges, nthreads);
-    k_extract_cellID<<<nblocks, nthreads>>>(m_particles, total_local_charges, m_cellID_keys);
+    k_extract_cellID<<<nblocks, nthreads>>>(m_particles, total_local_charges, m_keys);
 
     // We now need to sort the m_particles and m_xparticles arrays by cellID
-    thrust::device_ptr<int>         keys2(m_cellID_keys);
+    thrust::device_ptr<int>         keys2(m_keys);
     thrust::device_ptr<particle_t>  part(m_particles);
     thrust::device_ptr<particle_t>  xpart(m_xparticles);
     thrust::sort_by_key(keys2, keys2+m_nparticles, part);
@@ -395,43 +392,38 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 //////////////
 
 
-__global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, int m_order, iris_real *scratch)
+__global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, int m_order)
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    
     int tid = IRIS_CUDA_TID;
     int tcellID = tid + offset;
-    if(tid+offset >= children_offset) {
-	return;
-    }
+    int j = blockIdx.y;
+    
     if(invalid_only && (in_cells[tcellID].flags & IRIS_FMM_CELL_VALID_M)) {
 	return;
     }
 
+    if(!(in_cells[tcellID].flags & (IRIS_FMM_CELL_HAS_CHILD1 << j))) {
+	return;
+    }
+    
     int scratch_size = 2*m_nterms*sizeof(iris_real);
-    int scratch_offset = tcellID * 2 * m_nterms;
 
     iris_real cx = in_cells[tcellID].ses.c.r[0];
     iris_real cy = in_cells[tcellID].ses.c.r[1];
     iris_real cz = in_cells[tcellID].ses.c.r[2];
     
-    bool valid_m = false;
     iris_real *M = m_M + tcellID * 2 * m_nterms;
-    for(int j=0;j<8;j++) {
-	int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
-	if(!(in_cells[tcellID].flags & mask)) {
-	    continue;
-	}
-	int scellID = children_offset + 8*tid + j;
-	iris_real x = in_cells[scellID].ses.c.r[0] - cx;
-	iris_real y = in_cells[scellID].ses.c.r[1] - cy;
-	iris_real z = in_cells[scellID].ses.c.r[2] - cz;
-	
-	memset(scratch+scratch_offset, 0, scratch_size);
-	m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch+scratch_offset);
-	valid_m = true;
-    }
-    if(valid_m) {
-	in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
-    }
+    
+    int scellID = children_offset + 8*tid + j;
+    iris_real x = in_cells[scellID].ses.c.r[0] - cx;
+    iris_real y = in_cells[scellID].ses.c.r[1] - cy;
+    iris_real z = in_cells[scellID].ses.c.r[2] - cz;
+    
+    memset(scratch, 0, scratch_size);
+    m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch);
+    in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
 }
 
 void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
@@ -441,9 +433,9 @@ void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 	int start = cell_meta_t::offset_for_level(level);
 	int end = cell_meta_t::offset_for_level(level+1);
 	int n = end - start;
-	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
-	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-	k_eval_m2m<<<nblocks, nthreads>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_order, m_scratch);
+	dim3 nthreads(MIN(IRIS_CUDA_NTHREADS, n), 1, 1);
+	dim3 nblocks((n-1)/IRIS_CUDA_NTHREADS+1, 8, 1);
+	k_eval_m2m<<<nblocks, nthreads>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_order);
     }
 }
 
@@ -690,6 +682,45 @@ void fmm::compute_energy_and_virial_gpu()
     cudaMemcpy(&(m_iris->m_Ek), m_evir_gpu, sizeof(iris_real), cudaMemcpyDefault);
     
     m_iris->m_Ek *= 0.5 * m_units->ecf;
+}
+
+
+//////////////////////
+// Send back forces //
+//////////////////////
+
+
+__global__ void k_extract_rank(particle_t *m_particles, int n, int *keys)
+{
+    IRIS_CUDA_SETUP_WS(n);
+    keys[from] = m_particles[from].rank;
+}
+
+__global__ void k_extract_index(particle_t *m_particles, int n, int *keys)
+{
+    IRIS_CUDA_SETUP_WS(n);
+    keys[from] = m_particles[from].index;
+}
+
+
+void fmm::send_back_forces_gpu()
+{
+    // thrust::device_ptr<int>         keys(m_keys);
+    // thrust::device_ptr<particle_t>  part(m_particles);
+    
+    // int nthreads = MIN(IRIS_CUDA_NTHREADS, m_nparticles);
+    // int nblocks = IRIS_CUDA_NBLOCKS(m_nparticles, nthreads);
+    // k_extract_rank<<<nblocks, nthreads>>>(m_particles, m_nparticles, m_keys);
+    // thrust::sort_by_key(keys, keys+m_nparticles, part);
+
+    // k_extract_index<<<nblocks, nthreads>>>(m_particles, m_nparticles, m_keys);
+    // for(int i=0;i<m_iris->m_client_size;i++) {
+	
+    // }
+    
+    m_particles_cpu = (particle_t *)memory::wmalloc_cap(m_particles_cpu, m_nparticles, sizeof(particle_t), &m_particles_cpu_cap);
+    cudaMemcpy(m_particles_cpu, m_particles, m_nparticles * sizeof(particle_t), cudaMemcpyDefault);
+    send_back_forces_cpu(m_particles_cpu, false);
 }
 
 #endif

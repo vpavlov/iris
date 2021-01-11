@@ -66,7 +66,7 @@ fmm::fmm(iris *obj):
     m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
     m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
 #ifdef IRIS_CUDA
-    ,m_atom_types(NULL), m_at_cap(0), m_cellID_keys(NULL), m_cellID_keys_cap(0),
+    ,m_atom_types(NULL), m_at_cap(0), m_keys(NULL), m_keys_cap(0),
     m_cells_cpu(NULL), m_xcells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0),
     m_p2p_list_gpu(NULL), m_p2p_list_cap(0), m_m2l_list_gpu(NULL), m_m2l_list_cap(0),
     m_particles_cpu(NULL), m_particles_cpu_cap(0)
@@ -119,7 +119,7 @@ fmm::~fmm()
 	    memory::wfree_gpu(it->second);
 	}
 	if(m_atom_types != NULL) { memory::wfree_gpu(m_atom_types); }
-	if(m_cellID_keys != NULL) { memory::wfree_gpu(m_cellID_keys); }
+	if(m_keys != NULL) { memory::wfree_gpu(m_keys); }
 	if(m_recvbuf_gpu != NULL) { memory::wfree_gpu(m_recvbuf_gpu); }
 	if(m_p2p_list_gpu != NULL) { memory::wfree_gpu(m_p2p_list_gpu); }
 	if(m_m2l_list_gpu != NULL) { memory::wfree_gpu(m_m2l_list_gpu); }
@@ -339,21 +339,21 @@ void fmm::send_back_forces()
 {
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	m_particles_cpu = (particle_t *)memory::wmalloc_cap(m_particles_cpu, m_nparticles, sizeof(particle_t), &m_particles_cpu_cap);
-	cudaMemcpy(m_particles_cpu, m_particles, m_nparticles * sizeof(particle_t), cudaMemcpyDefault);
-	send_back_forces_cpu(m_particles_cpu);
+	send_back_forces_gpu();
     }else
 #endif
     {
-	send_back_forces_cpu(m_particles);
+	send_back_forces_cpu(m_particles, true);
     }
 }
 
-void fmm::send_back_forces_cpu(particle_t *in_particles)
+void fmm::send_back_forces_cpu(particle_t *in_particles, bool sort)
 {
     bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
-    
-    sort_back_particles(in_particles, m_nparticles);
+
+    if(sort) {
+	sort_back_particles(in_particles, m_nparticles);
+    }
     int start = 0;
     for(int rank = 0; rank < m_iris->m_client_size; rank++) {
 	int end;

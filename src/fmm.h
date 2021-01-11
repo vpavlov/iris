@@ -185,7 +185,7 @@ namespace ORG_NCSA_IRIS {
 #ifdef IRIS_CUDA
 	void send_back_forces_gpu();
 #endif
-	void send_back_forces_cpu(particle_t *in_particles);
+	void send_back_forces_cpu(particle_t *in_particles, bool sort);
 
 	void calc_ext_boxes();
 
@@ -249,8 +249,8 @@ namespace ORG_NCSA_IRIS {
 	int *m_atom_types;
 	int m_at_cap;
 	
-	int *m_cellID_keys;
-	int m_cellID_keys_cap;
+	int *m_keys;
+	int m_keys_cap;
 
 	struct cell_t *m_cells_cpu;
 	bool m_has_cells_cpu;
