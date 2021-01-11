@@ -202,7 +202,6 @@ namespace ORG_NCSA_IRIS {
 	int                 m_nterms;            // number of items in the multipole expansions
 	int                 m_local_root_level;  // the level of the local root (contains all subnodes here)
 	iris_real           m_leaf_size[3];      // size of leaf cells
-	iris_real          *m_scratch;           // M2M/M2L scratch space
 
 	int                *m_sendcnt;           // these four are for the all2all communication of the LET
 	int                *m_senddisp;

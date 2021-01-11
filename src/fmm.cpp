@@ -58,7 +58,7 @@ using namespace ORG_NCSA_IRIS;
 fmm::fmm(iris *obj):
     solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
     m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), 
-    m_scratch(NULL), m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
+    m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
     m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_npart_cap(0), m_particles(NULL),
     m_nxparticles(0), m_nxpart_cap(0), m_xparticles(NULL),
     m_dirty(true), m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
@@ -104,7 +104,6 @@ fmm::~fmm()
 	cudaEventDestroy(m_p2p_memcpy_done);
 	
 	memory::wfree(m_ext_boxes);
-	memory::destroy_1d_gpu(m_scratch);
 	memory::destroy_1d_gpu(m_M);
 	if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
 	memory::destroy_1d_gpu(m_L);
@@ -113,7 +112,7 @@ fmm::~fmm()
 	if(m_xcells_cpu != NULL) { memory::wfree_gpu(m_xcells_cpu); }
 	if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	if(m_particles != NULL) { memory::wfree_gpu(m_particles); }
-	if(m_particles_cpu != NULL) { memory::wfree(m_particles_cpu); }
+	if(m_particles_cpu != NULL) { memory::wfree_gpu(m_particles_cpu, true); }
 	// if(m_xparticles != NULL)  { memory::wfree_gpu(m_xparticles); }  // xparticles is at the end of particles
 	for(auto it = m_charges_gpu.begin(); it != m_charges_gpu.end(); it++) {
 	    memory::wfree_gpu(it->second);
@@ -127,7 +126,6 @@ fmm::~fmm()
 #endif
     {
 	memory::wfree(m_ext_boxes);
-	memory::destroy_1d(m_scratch);
 	memory::destroy_1d(m_cell_meta);
 	memory::destroy_1d(m_M);
 	memory::destroy_1d(m_L);
@@ -188,8 +186,6 @@ void fmm::commit()
 
 #ifdef IRIS_CUDA
 	if(m_iris->m_cuda) {
-	    memory::destroy_1d_gpu(m_scratch);
-	    memory::create_1d_gpu(m_scratch, m_tree_size*2*m_nterms);
 	    memory::destroy_1d_gpu(m_M);
 	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
 	    if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
@@ -211,8 +207,6 @@ void fmm::commit()
 	}else
 #endif
 	{
-	    memory::destroy_1d(m_scratch);
-	    memory::create_1d(m_scratch, 2*m_nterms);
 	    memory::destroy_1d(m_M);
 	    memory::create_1d(m_M, m_tree_size*2*m_nterms);
 	    memory::destroy_1d(m_L);
@@ -434,6 +428,14 @@ void fmm::local_tree_construction()
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_p2p_self_gpu();
+    }else
+#endif
+    {
+	eval_p2p_self_cpu();
+    }
     
     // tm.stop();
     // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
@@ -717,6 +719,8 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
 
 void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    
     int last_level = invalid_only ? 0 : m_local_root_level;
     for(int level = max_level()-1;level>=last_level;level--) {
 	int tcellID = cell_meta_t::offset_for_level(level);
@@ -743,8 +747,8 @@ void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 		iris_real x = in_cells[scellID].ses.c.r[0] - cx;
 		iris_real y = in_cells[scellID].ses.c.r[1] - cy;
 		iris_real z = in_cells[scellID].ses.c.r[2] - cz;
-		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, m_M + tcellID * 2 * m_nterms, m_scratch);
+		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
+		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, m_M + tcellID * 2 * m_nterms, scratch);
 		valid_m = true;
 		scellID++;
 		m_m2m_count++;
@@ -767,7 +771,7 @@ void fmm::exchange_LET()
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	cudaMemcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault);  // copy local tree to LET
+	cudaMemcpyAsync(m_xcells, m_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault, m_streams[0]);  // copy local tree to LET
     }else
 #endif
     {
@@ -874,7 +878,6 @@ void fmm::dual_tree_traversal()
             
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	eval_p2p_self_gpu();
 	dual_tree_traversal_gpu();
 	eval_p2p_gpu();
 	eval_m2l_gpu();
@@ -883,7 +886,6 @@ void fmm::dual_tree_traversal()
     }else
 #endif
     {
-	eval_p2p_self_cpu();
 	dual_tree_traversal_cpu(m_xcells, m_cells);
 	eval_p2p_cpu();
 	eval_m2l_cpu();
@@ -898,10 +900,10 @@ void fmm::dual_tree_traversal()
 void fmm::dual_tree_traversal_gpu()
 {
     if(!m_has_cells_cpu) {
-	cudaMemcpyAsync(m_cells_cpu, m_cells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
+	cudaMemcpyAsync(m_cells_cpu, m_cells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[0]);
     }
-    cudaMemcpyAsync(m_xcells_cpu, m_xcells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
-    cudaStreamSynchronize(m_streams[1]);
+    cudaMemcpyAsync(m_xcells_cpu, m_xcells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[0]);
+    cudaStreamSynchronize(m_streams[0]);
     dual_tree_traversal_cpu(m_xcells_cpu, m_cells_cpu);
 }
 
@@ -1153,6 +1155,8 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
 
     iris_real sx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
@@ -1167,8 +1171,8 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
-    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, m_scratch);
+    memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch);
 
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
     m_m2l_count++;
@@ -1189,6 +1193,8 @@ void fmm::eval_l2l()
 
 void fmm::eval_l2l_cpu()
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    
     for(int level = 0; level < m_depth-1; level++) {
 	int scellID = cell_meta_t::offset_for_level(level);
 	int tcellID = cell_meta_t::offset_for_level(level+1);
@@ -1214,8 +1220,8 @@ void fmm::eval_l2l_cpu()
 		iris_real y = cy - m_cells[tcellID].ses.c.r[1];
 		iris_real z = cz - m_cells[tcellID].ses.c.r[2];
 
-		memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-		l2l(m_order, x, y, z, m_L + scellID * 2 * m_nterms, m_L + tcellID * 2 * m_nterms, m_scratch);
+		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
+		l2l(m_order, x, y, z, m_L + scellID * 2 * m_nterms, m_L + tcellID * 2 * m_nterms, scratch);
 		m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 		tcellID++;
 		m_l2l_count++;
@@ -1239,6 +1245,8 @@ void fmm::eval_l2p()
 
 void fmm::eval_l2p_cpu()
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+
     int offset = cell_meta_t::offset_for_level(max_level());
     for(int i=offset;i<m_tree_size;i++) {
     	cell_t *leaf = m_cells + i;
@@ -1252,8 +1260,8 @@ void fmm::eval_l2p_cpu()
 	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 	    iris_real phi, Ex, Ey, Ez;
 	    
-	    memset(m_scratch, 0, 2*m_nterms*sizeof(iris_real));
-	    l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, m_scratch, &phi, &Ex, &Ey, &Ez);
+	    memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
+	    l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
 	    
 	    m_particles[leaf->first_child+j].tgt[0] += phi;
  	    m_particles[leaf->first_child+j].tgt[1] += Ex;

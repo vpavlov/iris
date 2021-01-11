@@ -378,8 +378,20 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     fclose(fp);
 }
 
+int get_int_env(const char *name, int def)
+{
+    char *tmp = getenv(name);
+    if(tmp == NULL) {
+	return def;
+    }
+    return atoi(tmp);
+}
+
 int main(int argc, char **argv)
 {
+    int depth = get_int_env("DEPTH", 4);
+    int order = get_int_env("ORDER", 10);
+    
     if(argc != 3) {
 	printf("Usage: %s <path-to-bob-trj dir> <mode>\n", argv[0]);
 	printf("  mode = 0 is all nodes are client/server\n");
@@ -519,10 +531,10 @@ int main(int argc, char **argv)
     // pade.i = 2;
     // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
 
-    param.i = 6;
+    param.i = depth;
     x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, param);
 
-    x->set_order(10);
+    x->set_order(order);
     
     x->set_mesh_size(128, 128, 128);
     x->set_alpha(2.6028443952840625);

@@ -124,15 +124,15 @@ void memory::destroy_2d_gpu(iris_real **&array)
 
 #define GPU_EXTRA_CAP 1.05
 
-void *memory::wmalloc_gpu_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity)
+void *memory::wmalloc_gpu_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity, bool host)
 {
     if(in_array != NULL && in_new_size > *io_capacity) {
-	memory::wfree_gpu(in_array);
+	memory::wfree_gpu(in_array, host);
     }
 
     if(in_array == NULL || in_new_size > *io_capacity) {
 	*io_capacity = in_new_size * GPU_EXTRA_CAP;
-	return memory::wmalloc_gpu(*io_capacity * in_unit_size);
+	return memory::wmalloc_gpu(*io_capacity * in_unit_size, false, host);
     }
     return in_array;
 }

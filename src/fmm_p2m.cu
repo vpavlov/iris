@@ -152,7 +152,7 @@ void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
 
     dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
     dim3 nblocks((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
-    k_eval_p2m<<<nblocks, nthreads>>>(in_cells, offset, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+    k_eval_p2m<<<nblocks, nthreads, 0, m_streams[0]>>>(in_cells, offset, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
 }
 
 #endif
