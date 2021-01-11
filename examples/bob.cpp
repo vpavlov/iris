@@ -355,10 +355,10 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     int n = 0;
     for(int i=0;i<iris->m_server_size;i++) {
 	for(int j=0;j<nforces[i];j++) {
-	    fprintf(fp, "%f %f %f\n",
-		    forces[n*4 + 1], 
-		    forces[n*4 + 2], 
-		    forces[n*4 + 3]);
+//	    fprintf(fp, "%f %f %f\n",
+//		    forces[n*4 + 1], 
+//		    forces[n*4 + 2], 
+//		    forces[n*4 + 3]);
 
 	    // forces[n*4 + 0] is the atom ID (encoded as iris_real)
 	    fsum[0] += forces[n*4 + 1];
@@ -518,7 +518,7 @@ int main(int argc, char **argv)
     // pade.i = 2;
     // x->set_solver_param(IRIS_SOLVER_CG_STENCIL_PADE_N, pade);
 
-    param.i = 4;
+    param.i = 6;
     x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, param);
 
     x->set_order(10);

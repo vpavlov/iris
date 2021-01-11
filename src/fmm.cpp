@@ -350,7 +350,6 @@ void fmm::send_back_forces()
 void fmm::send_back_forces_cpu(particle_t *in_particles, bool sort)
 {
     bool include_energy_virial = true;  // send the energy and virial to only one of the clients; to the others send 0
-
     if(sort) {
 	sort_back_particles(in_particles, m_nparticles);
     }
@@ -413,11 +412,12 @@ void fmm::solve()
     exchange_LET();    
     dual_tree_traversal();
     compute_energy_and_virial();
-    send_back_forces();
     
     tm.stop();
     m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 
+    send_back_forces();
+    
     if(!m_iris->m_cuda) {
 	m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
     }
@@ -761,8 +761,8 @@ void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 
 void fmm::exchange_LET()
 {
-    // timer tm, tm3;
-    // tm.start();
+    timer tm, tm3;
+    tm.start();
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -788,8 +788,8 @@ void fmm::exchange_LET()
 // 	print_tree("Xcell", m_xcells, 0, m_M);
 //     }
     
-    // tm.stop();
-    // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
+   tm.stop();
+   m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
 }
 
 void fmm::comm_LET()
