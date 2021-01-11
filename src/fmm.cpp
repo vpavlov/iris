@@ -415,6 +415,7 @@ void fmm::solve()
     
     tm.stop();
     m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    m_logger->info("FMM: TTS: %f ns/day (2 fs step)", 24*60*60/(tm.read_wall()*500000));
 
     send_back_forces();
     
