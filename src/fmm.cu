@@ -543,12 +543,15 @@ void fmm::eval_m2l_gpu()
 //////////////
 
 
-__global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, iris_real *m_scratch, int m_order)
+__global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, int m_order)
 {
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    
     int tid = IRIS_CUDA_TID;
     int scellID = tid + offset;
+    int j = blockIdx.y;
 
-    if(tid + offset >= children_offset) {
+    if(scellID >= children_offset) {
 	return;
     }
     
@@ -556,27 +559,26 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
 	return;
     }
 
+    if(!(m_cells[scellID].flags & (IRIS_FMM_CELL_HAS_CHILD1 << j))) {
+	return;
+    }
+    
     int scratch_size = 2*m_nterms*sizeof(iris_real);
-    int scratch_offset = scellID * 2 * m_nterms;
     
     iris_real cx = m_cells[scellID].ses.c.r[0];
     iris_real cy = m_cells[scellID].ses.c.r[1];
     iris_real cz = m_cells[scellID].ses.c.r[2];
 
     iris_real *L = m_L + scellID * 2 * m_nterms;
-    for(int j=0;j<8;j++) {
-	int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
-	if(!(m_cells[scellID].flags & mask)) {
-	    continue;
-	}
-	int tcellID = children_offset + 8*tid + j;
-	iris_real x = cx - m_cells[tcellID].ses.c.r[0];
-	iris_real y = cy - m_cells[tcellID].ses.c.r[1];
-	iris_real z = cz - m_cells[tcellID].ses.c.r[2];
-	memset(m_scratch+scratch_offset, 0, scratch_size);
-	l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, m_scratch+scratch_offset);
-	m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
-    }
+    
+    int tcellID = children_offset + 8*tid + j;
+    iris_real x = cx - m_cells[tcellID].ses.c.r[0];
+    iris_real y = cy - m_cells[tcellID].ses.c.r[1];
+    iris_real z = cz - m_cells[tcellID].ses.c.r[2];
+    
+    memset(scratch, 0, scratch_size);
+    l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, scratch);
+    m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 }
 
 void fmm::eval_l2l_gpu()
@@ -585,9 +587,9 @@ void fmm::eval_l2l_gpu()
 	int start = cell_meta_t::offset_for_level(level);
 	int end = cell_meta_t::offset_for_level(level+1);
 	int n = end - start;
-	int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
-	int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-	k_eval_l2l<<<nblocks, nthreads>>>(m_cells, start, end, m_L, m_nterms, m_scratch, m_order);
+	dim3 nthreads(MIN(IRIS_CUDA_NTHREADS, n), 1, 1);
+	dim3 nblocks((n-1)/IRIS_CUDA_NTHREADS+1, 8, 1);
+	k_eval_l2l<<<nblocks, nthreads>>>(m_cells, start, end, m_L, m_nterms, m_order);
     }
 }
 
