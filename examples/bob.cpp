@@ -355,7 +355,8 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     int n = 0;
     for(int i=0;i<iris->m_server_size;i++) {
 	for(int j=0;j<nforces[i];j++) {
-//	    fprintf(fp, "%f %f %f\n",
+//	    fprintf(fp, "ID %d: %f %f %f\n",
+//		    (int)forces[n*4 + 0],
 //		    forces[n*4 + 1], 
 //		    forces[n*4 + 2], 
 //		    forces[n*4 + 3]);

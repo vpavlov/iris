@@ -63,7 +63,7 @@ __global__ void k_load_charges(iris_real *charges, int ncharges, int hwm,
 	int chargeID = (int)charges[i*5 + 4];
 	
 	m_particles[i+hwm].rank = rank;
-	m_particles[i+hwm].index = chargeID; // (chargeID > 0)?chargeID:-chargeID;
+	m_particles[i+hwm].index = chargeID;
 	m_particles[i+hwm].cellID = cellID;
 	m_particles[i+hwm].xyzq[0] = charges[i*5+0];
 	m_particles[i+hwm].xyzq[1] = charges[i*5+1];
@@ -698,28 +698,16 @@ __global__ void k_extract_rank(particle_t *m_particles, int n, int *keys)
     keys[from] = m_particles[from].rank;
 }
 
-__global__ void k_extract_index(particle_t *m_particles, int n, int *keys)
-{
-    IRIS_CUDA_SETUP_WS(n);
-    keys[from] = m_particles[from].index;
-}
-
-
 void fmm::send_back_forces_gpu()
 {
-    // thrust::device_ptr<int>         keys(m_keys);
-    // thrust::device_ptr<particle_t>  part(m_particles);
+    thrust::device_ptr<int>         keys(m_keys);
+    thrust::device_ptr<particle_t>  part(m_particles);
     
-    // int nthreads = MIN(IRIS_CUDA_NTHREADS, m_nparticles);
-    // int nblocks = IRIS_CUDA_NBLOCKS(m_nparticles, nthreads);
-    // k_extract_rank<<<nblocks, nthreads>>>(m_particles, m_nparticles, m_keys);
-    // thrust::sort_by_key(keys, keys+m_nparticles, part);
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, m_nparticles);
+    int nblocks = IRIS_CUDA_NBLOCKS(m_nparticles, nthreads);
+    k_extract_rank<<<nblocks, nthreads>>>(m_particles, m_nparticles, m_keys);
+    thrust::sort_by_key(keys, keys+m_nparticles, part);
 
-    // k_extract_index<<<nblocks, nthreads>>>(m_particles, m_nparticles, m_keys);
-    // for(int i=0;i<m_iris->m_client_size;i++) {
-	
-    // }
-    
     m_particles_cpu = (particle_t *)memory::wmalloc_cap(m_particles_cpu, m_nparticles, sizeof(particle_t), &m_particles_cpu_cap);
     cudaMemcpy(m_particles_cpu, m_particles, m_nparticles * sizeof(particle_t), cudaMemcpyDefault);
     send_back_forces_cpu(m_particles_cpu, false);
