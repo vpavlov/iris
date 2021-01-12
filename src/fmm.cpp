@@ -1006,7 +1006,7 @@ void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
 {
     // P2P self is handled separately, just ignore it here
-    if(srcID == destID) {  
+    if(srcID == destID && ix == 0 && iy == 0 && iz == 0) {  
     	return;
     }
 
@@ -1029,7 +1029,6 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
     if(skip != m_p2p_skip.end()) {
 	return;
     }
-    
     pair_t pp(srcID, destID);
     m_p2p_skip[pp] = true;
     

@@ -299,10 +299,10 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    if(n == 0 && m == 0) {
 		*out_phi = re;  // multipoles of the L^a_a are real
 	    }else if(n == 1 && m == 1) {
-		*out_Ex = -re*q;
-		*out_Ey = -im*q;
+		*out_Ex = re*q;  // ??? the minus sign gone to make forces correct ???
+		*out_Ey = im*q;  // ??? the minus sign gone to make forces correct ???
 	    }else if(n == 1 && m == 0) {
-		*out_Ez = -re*q;
+		*out_Ez = re*q;  // ??? the minus sign gone to make forces correct ???
 	    }
 	}
     }

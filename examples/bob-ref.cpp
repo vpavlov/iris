@@ -5,7 +5,7 @@
 #include <math.h>
 
 #define iris_real double
-#define IMAGES 0
+#define IMAGES 1
 
 char **split(char *line, int max)
 {
@@ -165,7 +165,7 @@ int main()
 		}
 	    }
 	}
-	printf("%f %f %f\n", fx, fy, fz);
+	printf("ID %d: %f %f %f\n", i+1, fx, fy, fz);
 	fx_tot += fx;
 	fy_tot += fy;
 	fz_tot += fz;
