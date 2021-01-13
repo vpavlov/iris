@@ -54,21 +54,8 @@ namespace ORG_NCSA_IRIS {
 	int dummy[5];
     };
 
-    int __xcompar_desc(const void *aptr, const void *bptr);
-    int __xcompar_asc(const void *aptr, const void *bptr);
     int __compar_id_asc(const void *aptr, const void *bptr);
     
-    template <typename T>
-    void sort_particles(T *in_out_particles, int count, bool desc)
-    {
-	int (*fn)(const void *, const void *);
-	if(desc) {
-	    fn = __xcompar_desc;
-	}else {
-	    fn = __xcompar_asc;
-	}
-	qsort(in_out_particles, count, sizeof(T), fn);
-    }
 
     void sort_back_particles(particle_t *in_out_particles, int count);
 }

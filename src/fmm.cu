@@ -222,10 +222,6 @@ __device__ int d_bsearch(particle_t *in_particles, int in_count, int cellID)
 
 __global__ void k_distribute_particles(particle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int *m_max_particles_gpu)
 {
-    if(in_count == 0) {
-	return;
-    }
-    
     int tid = IRIS_CUDA_TID;
     int cellID = offset + tid;
 
@@ -253,6 +249,10 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
 
 void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
+    if(in_count == 0) {
+	return;
+    }
+    
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);

@@ -37,7 +37,8 @@ namespace ORG_NCSA_IRIS {
 #define IRIS_LOG_LEVEL_ERROR  0
 #define IRIS_LOG_LEVEL_WARN   1
 #define IRIS_LOG_LEVEL_INFO   2
-#define IRIS_LOG_LEVEL_TRACE  3
+#define IRIS_LOG_LEVEL_TIME   3
+#define IRIS_LOG_LEVEL_TRACE  4
     
     class logger : protected state_accessor {
 
@@ -49,6 +50,7 @@ namespace ORG_NCSA_IRIS {
 	void set_log_level(int in_log_level) { m_log_level = in_log_level; };
 
 	void trace(const char *str, ...);
+	void time(const char *str, ...);
 	void info(const char *str, ...);
 	void warn(const char *str, ...);
 	void error(const char *str, ...);

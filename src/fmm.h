@@ -270,10 +270,10 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_evir_gpu;
 	particle_t *m_particles_cpu;
 	int m_particles_cpu_cap;
-	int m_max_particles;
 	int *m_max_particles_gpu;
 #endif
 
+	int m_max_particles;
 	unsigned char *m_sendbuf;
 	unsigned char *m_recvbuf;
 	int m_sendbuf_cap;

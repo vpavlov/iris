@@ -14,7 +14,7 @@
 #include <iris/timer.h>
 #include <iris/factorizer.h>
 
-#define NSTEPS 2
+#define NSTEPS 1
 #define CUTOFF 1.2  // 12 angstroms
 
 using namespace ORG_NCSA_IRIS;
@@ -355,11 +355,11 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     int n = 0;
     for(int i=0;i<iris->m_server_size;i++) {
 	for(int j=0;j<nforces[i];j++) {
-//	    fprintf(fp, "ID %d: %f %f %f\n",
-//		    (int)forces[n*4 + 0],
-//		    forces[n*4 + 1], 
-//		    forces[n*4 + 2], 
-//		    forces[n*4 + 3]);
+	    fprintf(fp, "ID %d: %f %f %f\n",
+		    (int)forces[n*4 + 0],
+		    forces[n*4 + 1], 
+		    forces[n*4 + 2], 
+		    forces[n*4 + 3]);
 
 	    // forces[n*4 + 0] is the atom ID (encoded as iris_real)
 	    fsum[0] += forces[n*4 + 1];
@@ -387,10 +387,20 @@ int get_int_env(const char *name, int def)
     return atoi(tmp);
 }
 
+float get_float_env(const char *name, float def)
+{
+    char *tmp = getenv(name);
+    if(tmp == NULL) {
+	return def;
+    }
+    return atof(tmp);
+}
+
 int main(int argc, char **argv)
 {
     int depth = get_int_env("DEPTH", 4);
     int order = get_int_env("ORDER", 10);
+    float mac = get_float_env("MAC", 0.866025404 + 1e-6);
     
     if(argc != 3) {
 	printf("Usage: %s <path-to-bob-trj dir> <mode>\n", argv[0]);
@@ -534,6 +544,9 @@ int main(int argc, char **argv)
     param.i = depth;
     x->set_solver_param(IRIS_SOLVER_FMM_DEPTH, param);
 
+    param.r = mac;
+    x->set_solver_param(IRIS_SOLVER_FMM_MAC, param);
+    
     x->set_order(order);
     
     x->set_mesh_size(128, 128, 128);

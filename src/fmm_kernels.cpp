@@ -82,10 +82,7 @@ void ORG_NCSA_IRIS::multipole_add(iris_real *M, int l, int m, complex<iris_real>
     M[i+1] += val.imag();
 }
 
-//
-// P2M CPU Kernel
-//
-IRIS_CUDA_DEVICE_HOST
+// This version is used by the CPU kernel and by the M2M, L2L and L2P CPU/GPU kernels
 void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
     iris_real r2 = x * x + y * y + z * z;
@@ -105,6 +102,7 @@ void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
 	    R_l_m /= (l * l - m * m);
 	    multipole_add(out_M, l, m, R_l_m);
+	    
 	    prev2 = prev1;
 	    prev1 = R_l_m;
 	}
@@ -124,7 +122,6 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 			iris_real *in_M, iris_real *out_M, iris_real *scratch)
 {
     p2m(order, x, y, z, 1.0, scratch);
-    
     for(int n=0;n<=order;n++) {
 	for(int m=0;m<=n;m++) {
 	    iris_real re = 0.0, im = 0.0;
@@ -218,6 +215,7 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    }
 
 	    int idx = multipole_index(n, m);
+	    
 #ifdef __CUDA_ARCH__
 	    atomicAdd(out_L+idx, re);
 	    atomicAdd(out_L+idx+1, im);

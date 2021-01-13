@@ -61,10 +61,22 @@
 #undef IRIS_CUDA_DEVICE_HOST
 #define IRIS_CUDA_DEVICE_HOST __device__ __host__
 
+#undef IRIS_CUDA_DEVICE
+#define IRIS_CUDA_DEVICE __device__
+
+#undef IRIS_CUDA_HOST
+#define IRIS_CUDA_HOST __host__
+
 #else
 
 #undef IRIS_CUDA_DEVICE_HOST
 #define IRIS_CUDA_DEVICE_HOST
+
+#undef IRIS_CUDA_DEVICE
+#define IRIS_CUDA_DEVICE
+
+#undef IRIS_CUDA_HOST
+#define IRIS_CUDA_HOST
 
 #endif
 

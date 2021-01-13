@@ -78,6 +78,7 @@ namespace ORG_NCSA_IRIS {
 	
 	cell_t(int dummy = 0) {};  // to satisfy the compiler
 	void compute_ses(struct particle_t *in_particles);
+	void compute_com(struct particle_t *in_particles);
     };
 
 

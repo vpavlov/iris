@@ -66,6 +66,8 @@ logger::logger(iris *obj)
 	    m_log_level = IRIS_LOG_LEVEL_WARN;
 	}else if(xx == "info") {
 	    m_log_level = IRIS_LOG_LEVEL_INFO;
+	}else if(xx == "time") {
+	    m_log_level = IRIS_LOG_LEVEL_TIME;
 	}else if(xx == "trace") {
 	    m_log_level = IRIS_LOG_LEVEL_TRACE;
 	}else {
@@ -83,6 +85,11 @@ logger::~logger()
 void logger::trace(const char *fmt, ...)
 {
     DO_LOG(IRIS_LOG_LEVEL_TRACE, "TRACE");
+}
+
+void logger::time(const char *fmt, ...)
+{
+    DO_LOG(IRIS_LOG_LEVEL_TIME, "TIME");
 }
 
 void logger::info(const char *fmt, ...)

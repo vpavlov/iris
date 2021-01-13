@@ -28,6 +28,8 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <assert.h>
+#include <algorithm>
+#include <execution>
 #include "fmm.h"
 #include "fmm_cell.h"
 #include "fmm_particle.h"
@@ -395,6 +397,7 @@ void fmm::solve()
     }else
 #endif
     {
+	m_max_particles = 0;
 	memset(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
 	memset(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
 	memset(m_cells, 0, m_tree_size*sizeof(cell_t));
@@ -406,23 +409,15 @@ void fmm::solve()
     exchange_LET();    
     dual_tree_traversal();
     compute_energy_and_virial();
+    send_back_forces();
     
     tm.stop();
     m_logger->info("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
     m_logger->info("FMM: TTS: %f ns/day (2 fs step)", 24*60*60/(tm.read_wall()*500000));
-
-    send_back_forces();
-    
-    if(!m_iris->m_cuda) {
-	m_logger->info("P2M: %d (%d), M2M: %d (%d), M2L: %d, P2P: %d, L2L: %d, L2P: %d", m_p2m_count, m_p2m_alien_count, m_m2m_count, m_m2m_alien_count, m_m2l_count, m_p2p_count, m_l2l_count, m_l2p_count);
-    }
 }
 
 void fmm::local_tree_construction()
 {
-    // timer tm;
-    // tm.start();
-
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     link_parents(m_cells);                                     // link parents and calculate parent's SES
@@ -437,9 +432,6 @@ void fmm::local_tree_construction()
 	eval_p2p_self_cpu();
     }
     
-    // tm.stop();
-    // m_logger->info("FMM: Local tree construction wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    
 // #ifdef IRIS_CUDA
 //     if(m_iris->m_cuda) {
 // 	print_tree_gpu("Cell", m_cells);
@@ -449,6 +441,12 @@ void fmm::local_tree_construction()
 // 	print_tree("Cell", m_cells, 0, m_M);
 //     }
 }
+
+
+////////////////////
+// Load particles //
+////////////////////
+
 
 void fmm::load_particles()
 {
@@ -462,56 +460,102 @@ void fmm::load_particles()
     }
 }
 
-void fmm::load_particles_cpu()
+void h_load_charges(iris_real *charges, int ncharges, int hwm,
+		    iris_real xlo, iris_real ylo, iris_real zlo,
+		    iris_real lsx, iris_real lsy, iris_real lsz,
+		    int max_level, int offset, particle_t *m_particles, int rank,
+		    int nthreads)
 {
-    int nd = 1 << max_level();
-
-    m_nparticles = m_iris->num_local_atoms();
-    m_nxparticles = m_iris->num_halo_atoms();
-    m_logger->info("FMM: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
-
-    m_particles = (particle_t *)memory::wmalloc_cap((void *)m_particles, m_nparticles, sizeof(particle_t), &m_npart_cap);
-    m_xparticles = (particle_t *)memory::wmalloc_cap((void *)m_xparticles, m_nxparticles, sizeof(particle_t), &m_nxpart_cap);
-        
-    box_t<iris_real> *gbox = &m_domain->m_global_box;
+    // timer tm;
+    // tm.start();
     
-    int n_own = 0;
-    int n_halo = 0;
-    int lc[3];  // leaf global coords
-    for(int rank = 0; rank < m_iris->m_client_size; rank++ ) {
-	int ncharges = m_iris->m_ncharges[rank];
-	iris_real *charges = m_iris->m_charges[rank];
-	for(int i=0;i<ncharges;i++) {
-	    iris_real tx = (charges[i * 5 + 0] - gbox->xlo) / m_leaf_size[0];
-	    iris_real ty = (charges[i * 5 + 1] - gbox->ylo) / m_leaf_size[1];
-	    iris_real tz = (charges[i * 5 + 2] - gbox->zlo) / m_leaf_size[2];
-
-	    int cellID = cell_meta_t::leaf_coords_to_ID(tx, ty, tz, max_level());
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(ncharges, nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    iris_real tx = (charges[i * 5 + 0] - xlo) / lsx;
+	    iris_real ty = (charges[i * 5 + 1] - ylo) / lsy;
+	    iris_real tz = (charges[i * 5 + 2] - zlo) / lsz;
 	    int chargeID = (int)charges[i*5 + 4];
-	    assert(chargeID != 0);
 	    
-	    if(chargeID > 0) {
-		m_particles[n_own].rank = rank;
-		m_particles[n_own].index = chargeID;
-		m_particles[n_own].cellID = cellID;
-		memcpy(m_particles[n_own].xyzq, charges+i*5, 4*sizeof(iris_real));
-		memset(m_particles[n_own].tgt, 0, 4*sizeof(iris_real));
-		n_own++;
-	    }else {
-		m_xparticles[n_halo].rank = rank;
-		m_xparticles[n_halo].index = -chargeID;
-		m_xparticles[n_halo].cellID = cellID;
-		memcpy(m_xparticles[n_halo].xyzq, charges+i*5, 4*sizeof(iris_real));
-		memset(m_xparticles[n_halo].tgt, 0, 4*sizeof(iris_real));
-		n_halo++;
-	    }
+	    int cellID = cell_meta_t::leaf_coords_to_ID(tx, ty, tz, max_level);
+	    
+	    m_particles[i+hwm].xyzq[0] = charges[i*5+0];
+	    m_particles[i+hwm].xyzq[1] = charges[i*5+1];
+	    m_particles[i+hwm].xyzq[2] = charges[i*5+2];
+	    m_particles[i+hwm].xyzq[3] = charges[i*5+3];
+	    m_particles[i+hwm].cellID = cellID;
+	    m_particles[i+hwm].rank = rank;
+	    m_particles[i+hwm].index = chargeID;
+	    m_particles[i+hwm].tgt[0] = 0.0;
+	    m_particles[i+hwm].tgt[1] = 0.0;
+	    m_particles[i+hwm].tgt[2] = 0.0;
+	    m_particles[i+hwm].tgt[3] = 0.0;
+	    m_particles[i+hwm].dummy[0] = (chargeID > 0)?0:1;
 	}
     }
 
-    // sort the final lists by cellID
-    sort_particles(m_particles, m_nparticles, false);
-    sort_particles(m_xparticles, m_nxparticles, false);
+    // tm.stop();
+    // printf("h_load_charges %g\n", tm.read_wall());
 }
+
+void fmm::load_particles_cpu()
+{
+    timer tm;
+    tm.start();
+    
+    // Find the total amount of local charges, including halo atoms
+    // This is just a simple sum of ncharges from all incoming rank
+    int total_local_charges = 0;
+    for(int rank = 0; rank < m_iris->m_client_size; rank++ ) {
+	total_local_charges += m_iris->m_ncharges[rank];
+    }
+
+    m_particles = (particle_t *)memory::wmalloc_cap((void *)m_particles, total_local_charges, sizeof(particle_t), &m_npart_cap);
+
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int nd = 1 << max_level();
+    int hwm = 0;    
+    for(int rank = 0; rank < m_iris->m_client_size; rank++) {
+	int ncharges = m_iris->m_ncharges[rank];
+	iris_real *charges = m_iris->m_charges[rank];
+	h_load_charges(charges, ncharges, hwm,
+		       m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
+		       m_leaf_size[0], m_leaf_size[1], m_leaf_size[2],
+		       max_level(), offset, m_particles, rank,
+		       m_iris->m_nthreads);
+	hwm += ncharges;
+    }
+    
+    // At this point we have the m_particles filled up, with mixed halo/own atoms, etc.
+    // We need to sort them according to the atom type and split into m_particles and m_xparticles
+    std::sort(m_particles, m_particles+total_local_charges, [](const particle_t &a, const particle_t &b) { return a.dummy[0] < b.dummy[0]; });
+
+    // Now the first part of m_particles contains local atoms; second contains halo atoms
+    // Number of local particles are those with key = 0
+    // Number of halo particles is total_local_charges - num_local_atoms
+    m_nparticles = std::count_if(m_particles, m_particles+total_local_charges, [](const particle_t &a) { return a.dummy[0] == 0; });
+    m_nxparticles = total_local_charges - m_nparticles;
+    m_xparticles = m_particles + m_nparticles;
+
+    std::sort(m_particles, m_particles+m_nparticles, [](const particle_t &a, const particle_t &b) { return a.cellID < b.cellID; });
+    std::sort(m_xparticles, m_xparticles+m_nxparticles, [](const particle_t &a, const particle_t &b) { return a.cellID < b.cellID; });
+
+    tm.stop();
+    m_logger->time("Load particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    
+    m_logger->info("FMM/CPU: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
+}
+
+
+//////////////////////////
+// Distribute particles //
+//////////////////////////
+
 
 void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
@@ -525,47 +569,79 @@ void fmm::distribute_particles(particle_t *in_particles, int in_count, int in_fl
     }
 }
 
-// TODO: implement openmp version of this similar to the CUDA version
+int __compare_cellID(const void *a, const void *b)
+{
+    particle_t *aptr = (particle_t *)a;
+    particle_t *bptr = (particle_t *)b;
+    if(aptr->cellID < bptr->cellID) {
+	return -1;
+    }else if(aptr->cellID > bptr->cellID) {
+	return 1;
+    }else {
+	return 0;
+    }
+}
+
 void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
+    timer tm;
+    tm.start();
+
     if(in_count == 0) {
 	return;
     }
     
     box_t<iris_real> *gbox = &m_domain->m_global_box;
+    int nleafs = (1 << 3 * max_level());
+    int offset = cell_meta_t::offset_for_level(max_level());
     
-    int last = in_particles[0].cellID;
-    int first_child = 0;
-    int num_children = 0;
-    
-    for(int i=0;i<in_count;i++) {
-	if(in_particles[i].cellID != last) {
-	    assert(out_target[last].num_children == 0);  // no case in which two leafs overlap
-	    out_target[last].first_child = first_child;
-	    out_target[last].num_children = num_children;
-	    out_target[last].flags = in_flags;
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    int cellID = offset + i;
+	    particle_t key;
+	    key.cellID = cellID;
+	    particle_t *tmp = (particle_t *)bsearch(&key, in_particles, in_count, sizeof(particle_t), __compare_cellID);
+	    if(tmp == NULL) {
+		continue;
+	    }
 
-	    // out_target[last].ses.c.r[0] = m_cell_meta[last].geomc[0];
-	    // out_target[last].ses.c.r[1] = m_cell_meta[last].geomc[1];
-	    // out_target[last].ses.c.r[2] = m_cell_meta[last].geomc[2];
-	    // out_target[last].ses.r = m_cell_meta[last].maxr;
-	    out_target[last].compute_ses(in_particles);
+	    int left = tmp - in_particles;
+	    int right = left;
+
+	    while(left > 0 && in_particles[left].cellID >= cellID)             { left--; }
+	    while(left < in_count && in_particles[left].cellID < cellID)       { left++; }
+	    while(right < in_count-1 && in_particles[right].cellID <= cellID)  { right++; }
+	    while(right >= 0 && in_particles[right].cellID > cellID)           { right--; }
+
+	    int num_children = (right - left + 1);
+	    if(num_children <= 0) {
+		continue;
+	    }
 	    
-	    first_child = i;
-	    num_children = 0;
-	    last = in_particles[i].cellID;
+	    out_target[cellID].first_child = left;
+	    out_target[cellID].num_children = num_children;
+	    out_target[cellID].flags = in_flags;
+	    out_target[cellID].compute_com(in_particles);
+
+#if defined _OPENMP
+#pragma omp critical
+	    {
+#endif
+		m_max_particles = MAX(m_max_particles, num_children);
+#if defined _OPENMP
+	    }
+#endif
 	}
-	num_children++;
     }
-    out_target[last].first_child = first_child;
-    out_target[last].num_children = num_children;
-    out_target[last].flags = in_flags;
     
-    // out_target[last].ses.c.r[0] = m_cell_meta[last].geomc[0];
-    // out_target[last].ses.c.r[1] = m_cell_meta[last].geomc[1];
-    // out_target[last].ses.c.r[2] = m_cell_meta[last].geomc[2];
-    // out_target[last].ses.r = m_cell_meta[last].maxr;
-    out_target[last].compute_ses(in_particles);
+    tm.stop();
+    m_logger->time("Distribute particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 };
 
 void fmm::relink_parents(cell_t *io_cells)
@@ -612,15 +688,31 @@ void fmm::link_parents(cell_t *io_cells)
 
 void fmm::link_parents_cpu(cell_t *io_cells)
 {
+    timer tm;
+    tm.start();
+    
     for(int i=max_level();i>0;i--) {
 	int start = cell_meta_t::offset_for_level(i);
 	int end = cell_meta_t::offset_for_level(i+1);
-	for(int j=start;j<end;j++) {
-	    if((io_cells[j].num_children != 0) ||                   // cell is a non-empty leaf
-	       (io_cells[j].flags & IRIS_FMM_CELL_HAS_CHILDREN) ||  // or cell is a non-leaf and has some children
-	       (io_cells[j].flags & IRIS_FMM_CELL_ALIEN_NL)) {        // or is an alien cell
-		int parent = cell_meta_t::parent_of(j);
-		io_cells[parent].flags |= (IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
+	int n = end - start;
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+	{
+	    int tid = THREAD_ID;
+	    int from, to;
+	    setup_work_sharing(n, m_iris->m_nthreads, &from, &to);
+	    for(int j=start+from;j<start+to;j++) {
+		if((io_cells[j].num_children != 0) ||                   // cell is a non-empty leaf
+		   (io_cells[j].flags & IRIS_FMM_CELL_HAS_CHILDREN) ||  // or cell is a non-leaf and has some children
+		   (io_cells[j].flags & IRIS_FMM_CELL_ALIEN_NL)) {        // or is an alien cell
+		    int parent = cell_meta_t::parent_of(j);
+#if defined _OPENMP
+#pragma omp atomic update
+#endif
+		    io_cells[parent].flags += (IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
+		}
 	    }
 	}
     }
@@ -628,26 +720,40 @@ void fmm::link_parents_cpu(cell_t *io_cells)
     for(int i=max_level()-1;i>=0;i--) {
 	int start = cell_meta_t::offset_for_level(i);
 	int end = cell_meta_t::offset_for_level(i+1);
-	for(int j=start;j<end;j++) {
-	    if(io_cells[j].ses.r != 0.0) {
-		continue;
-	    }
-	    sphere_t S[8];
-	    int ns = 0;
-	    for(int k = 0;k<8;k++) {
-		int mask = IRIS_FMM_CELL_HAS_CHILD1 << k;
-		if(io_cells[j].flags & mask) {
-		    int childID = end + 8*(j-start) + k;
-		    S[ns].c.r[0] = io_cells[childID].ses.c.r[0];
-		    S[ns].c.r[1] = io_cells[childID].ses.c.r[1];
-		    S[ns].c.r[2] = io_cells[childID].ses.c.r[2];
-		    S[ns].r = io_cells[childID].ses.r;
-		    ns++;
+	int n = end - start;
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+	{
+	    int tid = THREAD_ID;
+	    int from, to;
+	    setup_work_sharing(n, m_iris->m_nthreads, &from, &to);
+	
+	    for(int j=start+from;j<start+to;j++) {
+		if(io_cells[j].ses.r != 0.0) {
+		    continue;
 		}
+		sphere_t S[8];
+		int ns = 0;
+		for(int k = 0;k<8;k++) {
+		    int mask = IRIS_FMM_CELL_HAS_CHILD1 << k;
+		    if(io_cells[j].flags & mask) {
+			int childID = end + 8*(j-start) + k;
+			S[ns].c.r[0] = io_cells[childID].ses.c.r[0];
+			S[ns].c.r[1] = io_cells[childID].ses.c.r[1];
+			S[ns].c.r[2] = io_cells[childID].ses.c.r[2];
+			S[ns].r = io_cells[childID].ses.r;
+			ns++;
+		    }
+		}
+		ses_of_spheres(S, ns, &(io_cells[j].ses));
 	    }
-	    ses_of_spheres(S, ns, &(io_cells[j].ses));
 	}
     }
+
+    tm.stop();
+    m_logger->time("Link parents wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
@@ -664,45 +770,57 @@ void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
 
 void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
 {
+    timer tm;
+    tm.start();
+    
     int offset = cell_meta_t::offset_for_level(max_level());
-    for(int i=offset;i<m_tree_size;i++) {
-	cell_t *leaf = &in_cells[i];
-	
-	// no particles here -- continue
-	if(leaf->num_children == 0) {
-	    continue;
-	}
-	
-	// we only want alien cells, but this one is local -- continue
-	if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
-	    continue;
-	}
+    int nleafs = m_tree_size - offset;
 
-	// it has been send from exchange_LET AND from halo exchange -- continue
-	if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
-	    continue;
-	}
-	for(int j=0;j<leaf->num_children;j++) {
-	    iris_real x, y, z, q;
-	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		x = m_xparticles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		y = m_xparticles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		z = m_xparticles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		q = m_xparticles[leaf->first_child+j].xyzq[3];
-	    }else {
-		x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		q = m_particles[leaf->first_child+j].xyzq[3];
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
+	for(int i=offset+from;i<offset+to;i++) {
+	    cell_t *leaf = &in_cells[i];
+	    
+	    // no particles here -- continue
+	    if(leaf->num_children == 0) {
+		continue;
 	    }
-	    p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
-	    in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
-	    m_p2m_count++;
-	    if(alien_only) {
-		m_p2m_alien_count++;
+	    
+	    // we only want alien cells, but this one is local -- continue
+	    if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
+		continue;
+	    }
+	    
+	    // it has been send from exchange_LET AND from halo exchange -- continue
+	    if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
+		continue;
+	    }
+	    for(int j=0;j<leaf->num_children;j++) {
+		iris_real x, y, z, q;
+		if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+		    x = m_xparticles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		    y = m_xparticles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		    z = m_xparticles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
+		    q = m_xparticles[leaf->first_child+j].xyzq[3];
+		}else {
+		    x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		    y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		    z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
+		    q = m_particles[leaf->first_child+j].xyzq[3];
+		}
+		p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
+		in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    }
 	}
     }
+    
+    tm.stop();
+    m_logger->time("P2M wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
@@ -717,57 +835,73 @@ void fmm::eval_m2m(cell_t *in_cells, bool invalid_only)
     }
 }
 
-void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
+void h_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, int m_order, int nthreads)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-    
-    int last_level = invalid_only ? 0 : m_local_root_level;
-    for(int level = max_level()-1;level>=last_level;level--) {
-	int tcellID = cell_meta_t::offset_for_level(level);
-	int scellID = cell_meta_t::offset_for_level(level+1);
-	int ntcells = scellID - tcellID;
-	for(int i = 0;i<ntcells;i++) {
+    int ntcells = children_offset - offset;
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+	int scratch_size = 2*m_nterms*sizeof(iris_real);
+	
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(ntcells, nthreads, &from, &to);
+	
+	for(int i = from;i<to;i++) {
+	    int tcellID = offset + i;
 	    if(invalid_only && (in_cells[tcellID].flags & IRIS_FMM_CELL_VALID_M)) {
-		tcellID++;
-		scellID+=8;
 		continue;
 	    }
 	    
 	    iris_real cx = in_cells[tcellID].ses.c.r[0];
 	    iris_real cy = in_cells[tcellID].ses.c.r[1];
 	    iris_real cz = in_cells[tcellID].ses.c.r[2];
-
+	    
+	    iris_real *M = m_M + tcellID * 2 * m_nterms;
+	    
 	    bool valid_m = false;
 	    for(int j=0;j<8;j++) {
+		int scellID = children_offset + 8*(tcellID-offset) + j;
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
 		if(!(in_cells[tcellID].flags & mask)) {
-		    scellID++;
 		    continue;
 		}
 		iris_real x = in_cells[scellID].ses.c.r[0] - cx;
 		iris_real y = in_cells[scellID].ses.c.r[1] - cy;
 		iris_real z = in_cells[scellID].ses.c.r[2] - cz;
-		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, m_M + tcellID * 2 * m_nterms, scratch);
+		memset(scratch, 0, scratch_size);
+		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch);
 		valid_m = true;
-		scellID++;
-		m_m2m_count++;
-		if(invalid_only) {
-		    m_m2m_alien_count++;
-		}
 	    }
 	    if(valid_m) {
 		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
 	    }
-	    tcellID++;
 	}
     }
 }
 
+void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
+{
+    timer tm;
+    tm.start();
+    
+    int last_level = invalid_only ? 0 : m_local_root_level;
+    for(int level = max_level()-1;level>=last_level;level--) {
+	int start = cell_meta_t::offset_for_level(level);
+	int end = cell_meta_t::offset_for_level(level+1);
+	h_eval_m2m(in_cells, invalid_only, start, end, m_M, m_nterms, m_order, m_iris->m_nthreads);	
+    }
+
+    tm.stop();
+    m_logger->time("M2M wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+}
+
 void fmm::exchange_LET()
 {
-    timer tm, tm3;
-    tm.start();
+    // timer tm, tm3;
+    // tm.start();
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -793,8 +927,8 @@ void fmm::exchange_LET()
 // 	print_tree("Xcell", m_xcells, 0, m_M);
 //     }
     
-   tm.stop();
-   m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
+   // tm.stop();
+   // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
 }
 
 void fmm::comm_LET()
@@ -1023,17 +1157,22 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     int nleafs = m_tree_size - offset;
-    
-    pair_t p(destID, srcID);
-    auto skip = m_p2p_skip.find(p);
-    if(skip != m_p2p_skip.end()) {
-	return;
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	pair_t p(destID, srcID);
+	auto skip = m_p2p_skip.find(p);
+	if(skip != m_p2p_skip.end()) {
+	    return;
+	}
+	pair_t pp(srcID, destID);
+	m_p2p_skip[pp] = true;
     }
-    pair_t pp(srcID, destID);
-    m_p2p_skip[pp] = true;
+#endif
     
     interact_item_t t(srcID, destID, ix, iy, iz);
     m_p2p_list.push_back(t);
+    
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	if(m_p2p_list.size() >= nleafs) {
@@ -1043,113 +1182,55 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 #endif
 }
 
-// TODO: OpenMP
 void fmm::eval_p2p_cpu()
 {
-    for(int i=0;i<m_p2p_list.size();i++) {
-	interact_item_t *item = &(m_p2p_list[i]);
-	eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
+    timer tm;
+    tm.start();
+    
+    int n = m_p2p_list.size();
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(n, m_iris->m_nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    interact_item_t *item = &(m_p2p_list[i]);
+	    eval_p2p(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
+	}
     }
+
+    m_p2p_list.clear();
+    
+    tm.stop();
+    m_logger->time("P2P Rest wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 
-// TODO: OpenMP
 void fmm::eval_m2l_cpu()
 {
-    for(int i=0;i<m_m2l_list.size();i++) {
-	interact_item_t *item = &(m_m2l_list[i]);
-	eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
-    }
-}
-
-inline void __coulomb(iris_real tx, iris_real ty, iris_real tz, iris_real sx, iris_real sy, iris_real sz, iris_real sq,
-		      iris_real &sum_phi, iris_real &sum_ex, iris_real &sum_ey, iris_real &sum_ez)
-{
-    iris_real dx = tx - sx;
-    iris_real dy = ty - sy;
-    iris_real dz = tz - sz;
-    iris_real rlen = 1/sqrt(dx*dx + dy*dy + dz*dz);
-    dx *= rlen * rlen;
-    dy *= rlen * rlen;
-    dz *= rlen * rlen;
-    rlen *= sq;
-    sum_phi += rlen;
-    sum_ex += dx * rlen;
-    sum_ey += dy * rlen;
-    sum_ez += dz * rlen;
-}
-
-// TODO: OpenMP; vectorisation?
-void fmm::eval_p2p_self_cpu()
-{
-    int offset = cell_meta_t::offset_for_level(max_level());
-    for(int cellID=offset;cellID<m_tree_size;cellID++) {
-	for(int i=0;i<m_cells[cellID].num_children;i++) {
-	    iris_real tx = m_particles[m_cells[cellID].first_child + i].xyzq[0];
-	    iris_real ty = m_particles[m_cells[cellID].first_child + i].xyzq[1];
-	    iris_real tz = m_particles[m_cells[cellID].first_child + i].xyzq[2];
-
-	    iris_real sum_phi = 0.0;
-	    iris_real sum_ex = 0.0;
-	    iris_real sum_ey = 0.0;
-	    iris_real sum_ez = 0.0;
-	    for(int j=0;j<m_cells[cellID].num_children;j++) {
-		if(i==j) {
-		    continue;
-		}
-		iris_real sx, sy, sz, sq;
-		sx = m_particles[m_cells[cellID].first_child + j].xyzq[0];
-		sy = m_particles[m_cells[cellID].first_child + j].xyzq[1];
-		sz = m_particles[m_cells[cellID].first_child + j].xyzq[2];
-		sq = m_particles[m_cells[cellID].first_child + j].xyzq[3];
-		__coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
-	    }
-
-	    m_particles[m_cells[cellID].first_child + i].tgt[0] += sum_phi;
-	    m_particles[m_cells[cellID].first_child + i].tgt[1] += sum_ex;
-	    m_particles[m_cells[cellID].first_child + i].tgt[2] += sum_ey;
-	    m_particles[m_cells[cellID].first_child + i].tgt[3] += sum_ez;
+    timer tm;
+    tm.start();
+    
+    int n = m_m2l_list.size();
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(n, m_iris->m_nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    interact_item_t *item = &(m_m2l_list[i]);
+	    eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
 	}
-	m_p2p_count++;
     }
-}
 
-void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
-{
-    for(int i=0;i<m_cells[destID].num_children;i++) {
-	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
-	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
-	iris_real tz = m_particles[m_cells[destID].first_child + i].xyzq[2];
-
-	iris_real sum_phi = 0.0;
-	iris_real sum_ex = 0.0;
-	iris_real sum_ey = 0.0;
-	iris_real sum_ez = 0.0;
-	for(int j=0;j<m_xcells[srcID].num_children;j++) {
-	    if(srcID == destID && ix == 0 && iy == 0 && iz == 0 && i == j) {
-		continue;
-	    }
-	    iris_real sx, sy, sz, sq;
-	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		sx = m_xparticles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
-		sy = m_xparticles[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
-		sz = m_xparticles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
-		sq = m_xparticles[m_xcells[srcID].first_child + j].xyzq[3];
-	    }else {
-		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
-		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
-		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
-		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
-	    }
-	    __coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
-	}
-
-	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;
-	m_particles[m_cells[destID].first_child + i].tgt[1] += sum_ex;
-	m_particles[m_cells[destID].first_child + i].tgt[2] += sum_ey;
-	m_particles[m_cells[destID].first_child + i].tgt[3] += sum_ez;
-    }
-    m_p2p_count++;
+    m_m2l_list.clear();
+    
+    tm.stop();
+    m_logger->time("M2L wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
@@ -1171,10 +1252,12 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real z = tz - sz;
 
     memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch);
+    h_m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch);
 
+#if defined _OPENMP
+#pragma omp atomic
+#endif
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
-    m_m2l_count++;
 }
 
 void fmm::eval_l2l()
@@ -1190,44 +1273,167 @@ void fmm::eval_l2l()
     
 }
 
-void fmm::eval_l2l_cpu()
+inline void __coulomb(iris_real tx, iris_real ty, iris_real tz, iris_real sx, iris_real sy, iris_real sz, iris_real sq,
+		      iris_real &sum_phi, iris_real &sum_ex, iris_real &sum_ey, iris_real &sum_ez)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    iris_real dx = tx - sx;
+    iris_real dy = ty - sy;
+    iris_real dz = tz - sz;
+    iris_real rlen = 1/sqrt(dx*dx + dy*dy + dz*dz);
+    dx *= rlen * rlen;
+    dy *= rlen * rlen;
+    dz *= rlen * rlen;
+    rlen *= sq;
+    sum_phi += rlen;
+    sum_ex += dx * rlen;
+    sum_ey += dy * rlen;
+    sum_ez += dz * rlen;
+}
+
+void fmm::eval_p2p_self_cpu()
+{
+    timer tm;
+    tm.start();
     
-    for(int level = 0; level < m_depth-1; level++) {
-	int scellID = cell_meta_t::offset_for_level(level);
-	int tcellID = cell_meta_t::offset_for_level(level+1);
-	int nscells = tcellID - scellID;
-	for(int i = 0;i<nscells;i++) {
-	    if(!(m_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
-		scellID++;
-		tcellID += 8;
+    int offset = cell_meta_t::offset_for_level(max_level());
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(m_tree_size-offset, m_iris->m_nthreads, &from, &to);
+	for(int cellID=offset+from;cellID<offset+to;cellID++) {
+	    for(int i=0;i<m_cells[cellID].num_children;i++) {
+		iris_real tx = m_particles[m_cells[cellID].first_child + i].xyzq[0];
+		iris_real ty = m_particles[m_cells[cellID].first_child + i].xyzq[1];
+		iris_real tz = m_particles[m_cells[cellID].first_child + i].xyzq[2];
+		iris_real tq = m_particles[m_cells[cellID].first_child + i].xyzq[3];
+		
+		iris_real sum_phi = 0.0;
+		iris_real sum_ex = 0.0;
+		iris_real sum_ey = 0.0;
+		iris_real sum_ez = 0.0;
+		for(int j=0;j<m_cells[cellID].num_children;j++) {
+		    if(i==j) {
+			continue;
+		    }
+		    iris_real sx, sy, sz, sq;
+		    sx = m_particles[m_cells[cellID].first_child + j].xyzq[0];
+		    sy = m_particles[m_cells[cellID].first_child + j].xyzq[1];
+		    sz = m_particles[m_cells[cellID].first_child + j].xyzq[2];
+		    sq = m_particles[m_cells[cellID].first_child + j].xyzq[3];
+		    __coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
+		}
+		
+		m_particles[m_cells[cellID].first_child + i].tgt[0] += sum_phi;
+		m_particles[m_cells[cellID].first_child + i].tgt[1] += tq*sum_ex;
+		m_particles[m_cells[cellID].first_child + i].tgt[2] += tq*sum_ey;
+		m_particles[m_cells[cellID].first_child + i].tgt[3] += tq*sum_ez;
+	    }
+	}
+    }
+
+    tm.stop();
+    m_logger->time("P2P Self wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+}
+
+void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
+{
+    for(int i=0;i<m_cells[destID].num_children;i++) {
+	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
+	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
+	iris_real tz = m_particles[m_cells[destID].first_child + i].xyzq[2];
+	iris_real tq = m_particles[m_cells[destID].first_child + i].xyzq[3];
+
+	iris_real sum_phi = 0.0;
+	iris_real sum_ex = 0.0;
+	iris_real sum_ey = 0.0;
+	iris_real sum_ez = 0.0;
+	for(int j=0;j<m_xcells[srcID].num_children;j++) {
+	    iris_real sx, sy, sz, sq;
+	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+		sx = m_xparticles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
+		sy = m_xparticles[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
+		sz = m_xparticles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
+		sq = m_xparticles[m_xcells[srcID].first_child + j].xyzq[3];
+	    }else {
+		sx = m_particles[m_xcells[srcID].first_child + j].xyzq[0] + ix * m_domain->m_global_box.xsize;
+		sy = m_particles[m_xcells[srcID].first_child + j].xyzq[1] + iy * m_domain->m_global_box.ysize;
+		sz = m_particles[m_xcells[srcID].first_child + j].xyzq[2] + iz * m_domain->m_global_box.zsize;
+		sq = m_particles[m_xcells[srcID].first_child + j].xyzq[3];
+	    }
+	    __coulomb(tx, ty, tz, sx, sy, sz, sq, sum_phi, sum_ex, sum_ey, sum_ez);
+	}
+
+#pragma omp atomic
+	m_particles[m_cells[destID].first_child + i].tgt[0] += sum_phi;
+#pragma omp atomic
+	m_particles[m_cells[destID].first_child + i].tgt[1] += tq*sum_ex;
+#pragma omp atomic
+	m_particles[m_cells[destID].first_child + i].tgt[2] += tq*sum_ey;
+#pragma omp atomic
+	m_particles[m_cells[destID].first_child + i].tgt[3] += tq*sum_ez;
+    }
+}
+
+void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, int m_order, int nthreads)
+{
+    int nscells = children_offset - offset;
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+	int scratch_size = 2*m_nterms*sizeof(iris_real);
+	
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(nscells, nthreads, &from, &to);
+	for(int i = from;i<to;i++) {
+	    int scellID = offset + i;
+	    if(!(in_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
 		continue;
 	    }
 	    
-	    iris_real cx = m_cells[scellID].ses.c.r[0];
-	    iris_real cy = m_cells[scellID].ses.c.r[1];
-	    iris_real cz = m_cells[scellID].ses.c.r[2];
+	    iris_real cx = in_cells[scellID].ses.c.r[0];
+	    iris_real cy = in_cells[scellID].ses.c.r[1];
+	    iris_real cz = in_cells[scellID].ses.c.r[2];
 
+	    iris_real *L = m_L + scellID * 2 * m_nterms;
+	    
 	    for(int j=0;j<8;j++) {
+		int tcellID = children_offset + 8*i + j;
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
-		if(!(m_cells[scellID].flags & mask)) {
-		    tcellID++;
+		if(!(in_cells[scellID].flags & mask)) {
 		    continue;
 		}
-		iris_real x = cx - m_cells[tcellID].ses.c.r[0];
-		iris_real y = cy - m_cells[tcellID].ses.c.r[1];
-		iris_real z = cz - m_cells[tcellID].ses.c.r[2];
+		iris_real x = cx - in_cells[tcellID].ses.c.r[0];
+		iris_real y = cy - in_cells[tcellID].ses.c.r[1];
+		iris_real z = cz - in_cells[tcellID].ses.c.r[2];
 
-		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-		l2l(m_order, x, y, z, m_L + scellID * 2 * m_nterms, m_L + tcellID * 2 * m_nterms, scratch);
-		m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
-		tcellID++;
-		m_l2l_count++;
+		memset(scratch, 0, scratch_size);
+		l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, scratch);
+		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 	    }
-	    scellID++;
 	}
     }
+}
+
+void fmm::eval_l2l_cpu()
+{
+    timer tm;
+    tm.start();
+    
+    for(int level = 0; level < m_depth-1; level++) {
+	int start = cell_meta_t::offset_for_level(level);
+	int end = cell_meta_t::offset_for_level(level+1);
+	h_eval_l2l(m_cells, start, end, m_L, m_nterms, m_order, m_iris->m_nthreads);
+    }
+
+    tm.stop();
+    m_logger->time("L2L wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::eval_l2p()
@@ -1244,32 +1450,47 @@ void fmm::eval_l2p()
 
 void fmm::eval_l2p_cpu()
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    timer tm;
+    tm.start();
 
     int offset = cell_meta_t::offset_for_level(max_level());
-    for(int i=offset;i<m_tree_size;i++) {
-    	cell_t *leaf = m_cells + i;
-    	if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
-    	    continue;
-    	}
-    	for(int j=0;j<leaf->num_children;j++) {
-	    iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
-	    iris_real y = leaf->ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
-	    iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
-	    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
-	    iris_real phi, Ex, Ey, Ez;
-	    
-	    memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-	    l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
-	    
-	    m_particles[leaf->first_child+j].tgt[0] += phi;
- 	    m_particles[leaf->first_child+j].tgt[1] += Ex;
-	    m_particles[leaf->first_child+j].tgt[2] += Ey;
-	    m_particles[leaf->first_child+j].tgt[3] += Ez;
-	    
-	    m_l2p_count++;
-    	}
+    int nleafs = m_tree_size - offset;
+
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
+    
+	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+
+	for(int i=offset+from;i<offset+to;i++) {
+	    cell_t *leaf = m_cells + i;
+	    if(leaf->num_children == 0 || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
+		continue;
+	    }
+	    for(int j=0;j<leaf->num_children;j++) {
+		iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
+		iris_real y = leaf->ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
+		iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
+		iris_real q = m_particles[leaf->first_child+j].xyzq[3];
+		iris_real phi, Ex, Ey, Ez;
+		
+		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
+		l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
+		
+		m_particles[leaf->first_child+j].tgt[0] += phi;
+		m_particles[leaf->first_child+j].tgt[1] += Ex;
+		m_particles[leaf->first_child+j].tgt[2] += Ey;
+		m_particles[leaf->first_child+j].tgt[3] += Ez;
+	    }
+	}
     }
+
+    tm.stop();
+    m_logger->time("L2P wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::calc_ext_boxes()

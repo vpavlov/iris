@@ -54,11 +54,11 @@ __device__ void multipole_atomic_add(iris_real *M, int l, int m, complex<iris_re
     atomicAdd(M+i+1, val.imag());
 }
 
-__device__ void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
+IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
     typedef cub::WarpReduce<complex<iris_real>> WarpReduce;
     
-    __shared__ typename WarpReduce::TempStorage temp[128];
+    __shared__ typename WarpReduce::TempStorage temp[32];
     
     iris_real r2 = x * x + y * y + z * z;
 
@@ -104,7 +104,7 @@ __device__ void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_rea
 
 __global__ void k_eval_p2m(cell_t *in_cells, int offset, bool alien_only, particle_t *m_particles, particle_t *m_xparticles, int m_order, iris_real *m_M, int m_nterms)
 {
-    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which interaction pair we're processing
+    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which leaf we are processing
     int cellID = leaf_idx + offset;
     int j = IRIS_CUDA_TID;                                // Target particle inside cellID
     

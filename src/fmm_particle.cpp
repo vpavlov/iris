@@ -33,40 +33,6 @@
 using namespace ORG_NCSA_IRIS;
 
 //
-// A comparator function used to sort the array of xparticles by cellID ascending
-//
-int ORG_NCSA_IRIS::__xcompar_asc(const void *aptr, const void *bptr)
-{
-    particle_t *a = (particle_t *)aptr;
-    particle_t *b = (particle_t *)bptr;
-    
-    if(a->cellID > b->cellID) {
-	return 1;
-    }else if(a->cellID < b->cellID) {
-	return -1;
-    }else {
-	return 0;
-    }
-}
-
-//
-// A comparator function used to sort the array of particles by cellID descending
-//
-int ORG_NCSA_IRIS::__xcompar_desc(const void *aptr, const void *bptr)
-{
-    particle_t *a = (particle_t *)aptr;
-    particle_t *b = (particle_t *)bptr;
-    
-    if(a->cellID < b->cellID) {
-	return 1;
-    }else if(a->cellID > b->cellID) {
-	return -1;
-    }else {
-	return 0;
-    }
-}
-
-//
 // A comparator function used to sort the array of particles by rank and then by index
 //
 int ORG_NCSA_IRIS::__compar_id_asc(const void *aptr, const void *bptr)
