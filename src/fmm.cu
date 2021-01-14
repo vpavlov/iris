@@ -451,10 +451,15 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
+    bool do_other_side = (list[tid].ix == 0 && list[tid].iy == 0 && list[tid].iz == 0);
     memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch);
-    
-    m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
+    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch,
+	m_M + destID * 2 * m_nterms, m_L + srcID * 2 * m_nterms, do_other_side);
+
+    atomicOr(&(m_cells[destID].flags), IRIS_FMM_CELL_VALID_L);
+    if(do_other_side) {
+	atomicOr(&(m_cells[srcID].flags), IRIS_FMM_CELL_VALID_L);
+    }
 }
 
 void fmm::eval_m2l_gpu()

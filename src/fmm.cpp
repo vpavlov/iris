@@ -386,6 +386,7 @@ void fmm::solve()
     m_p2p_list.clear();
     m_m2l_list.clear();
     m_p2p_skip.clear();
+    m_m2l_skip.clear();
     m_has_cells_cpu = false;
     
 #ifdef IRIS_CUDA
@@ -1125,6 +1126,16 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
+    if(ix == 0 && iy == 0 && iz == 0) {
+    	pair_t p(destID, srcID);
+    	auto skip = m_m2l_skip.find(p);
+    	if(skip != m_m2l_skip.end()) {
+    	    return;
+    	}
+    	pair_t pp(srcID, destID);
+    	m_m2l_skip[pp] = true;
+    }
+    
     interact_item_t t(srcID, destID, ix, iy, iz);
     m_m2l_list.push_back(t);
 
@@ -1251,13 +1262,25 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real y = ty - sy;
     iris_real z = tz - sz;
 
+    bool do_other_side = false;
+    if(ix == 0 && iy == 0 && iz == 0) {
+	do_other_side = true;
+    }
     memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-    h_m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch);
+    h_m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch,
+	  m_M + destID * 2 * m_nterms, m_L + srcID * 2 * m_nterms, do_other_side);
 
 #if defined _OPENMP
 #pragma omp atomic
 #endif
     m_cells[destID].flags |= IRIS_FMM_CELL_VALID_L;
+
+    if(do_other_side) {
+#if defined _OPENMP
+#pragma omp atomic
+#endif
+	m_cells[srcID].flags |= IRIS_FMM_CELL_VALID_L;
+    }
 }
 
 void fmm::eval_l2l()

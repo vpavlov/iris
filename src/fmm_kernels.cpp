@@ -27,7 +27,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
-#include <assert.h>
 #include "cuda.h"
 #include "fmm_kernels.h"
 
@@ -43,7 +42,6 @@ int ORG_NCSA_IRIS::multipole_index(int l, int m)
 IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::multipole_get(iris_real *M, int l, int m, iris_real *out_re, iris_real *out_im)
 {
-    assert(l >= 0);
     if(m < 0) {
 	if(-m > l) {
 	    *out_re = 0.0;
@@ -75,8 +73,6 @@ void ORG_NCSA_IRIS::multipole_get(iris_real *M, int l, int m, iris_real *out_re,
 IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::multipole_add(iris_real *M, int l, int m, complex<iris_real> &val)
 {
-    assert(l >= 0);
-    assert(m >= 0);
     int i = multipole_index(l, m);
     M[i] += val.real();
     M[i+1] += val.imag();
@@ -191,37 +187,55 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 
 
 //
-// M2L CPU Kernel
+// M2L GPU Kernel
 //
 IRIS_CUDA_DEVICE_HOST
-void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_L, iris_real *in_scratch)
+void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
+			iris_real *in_M2, iris_real *out_L1, bool do_other_side)
 {
     p2l(order, x, y, z, 1.0, in_scratch);
     for(int n=0;n<=order;n++) {
 	for(int m=0;m<=n;m++) {
-	    iris_real re = 0.0, im = 0.0;
+	    iris_real re1 = 0.0, im1 = 0.0;
+	    iris_real re2 = 0.0, im2 = 0.0;
 	    for(int k=0;k<=order-n;k++) {
 		for(int l=-k;l<=k;l++) {
 		    iris_real a, b;
-		    multipole_get(in_M, k, l, &a, &b);
+		    multipole_get(in_M1, k, l, &a, &b);
 		    b = -b;
 
 		    iris_real c, d;
 		    multipole_get(in_scratch, n+k, m+l, &c, &d);
 
-		    re += a*c - b*d;
-		    im += a*d + b*c;
+		    re2 += a*c - b*d;
+		    im2 += a*d + b*c;
+
+		    if(do_other_side) {
+			multipole_get(in_M2, k, l, &a, &b);
+			b = -b;
+
+			if((n+k) % 2) {
+			    c = -c;
+			    d = -d;
+			}
+			
+			re1 += a*c - b*d;
+			im1 += a*d + b*c;
+		    }
 		}
 	    }
 
 	    int idx = multipole_index(n, m);
 	    
 #ifdef __CUDA_ARCH__
-	    atomicAdd(out_L+idx, re);
-	    atomicAdd(out_L+idx+1, im);
+	    atomicAdd(out_L2+idx, re2);
+	    atomicAdd(out_L2+idx+1, im2);
+	    if(do_other_side) {
+		atomicAdd(out_L1+idx, re1);
+		atomicAdd(out_L1+idx+1, im1);
+	    }
 #else
-	    out_L[idx] += re;
-	    out_L[idx+1] += im;
+	    throw std::logic_error("this shouldn't happen!");
 #endif
 	}
     }

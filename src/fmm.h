@@ -280,6 +280,7 @@ namespace ORG_NCSA_IRIS {
 	int m_recvbuf_cap;
 
 	std::map<struct pair_t, bool, pair_comparator_t> m_p2p_skip;
+	std::map<struct pair_t, bool, pair_comparator_t> m_m2l_skip;
     };
 }
 
