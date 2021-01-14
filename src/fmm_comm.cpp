@@ -116,11 +116,17 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	int childID = children_offset + (cellID-this_offset)*8 + i;
 	
 	bool is_close = (level < m_local_root_level);  // all cells above local root level are to be drilled-down
-	
-	iris_real dn = in_cells[childID].ses.r;
-	iris_real cx = in_cells[childID].ses.c.r[0];
-	iris_real cy = in_cells[childID].ses.c.r[1];
-	iris_real cz = in_cells[childID].ses.c.r[2];
+
+	// FIXME: discuss the implications of using the geometrical center instead of the real one...
+	iris_real dn = m_cell_meta[childID].maxr;
+	iris_real cx = m_cell_meta[childID].geomc[0];
+	iris_real cy = m_cell_meta[childID].geomc[1];
+	iris_real cz = m_cell_meta[childID].geomc[2];
+
+	// iris_real dn = in_cells[childID].ses.r;
+	// iris_real cx = in_cells[childID].ses.c.r[0];
+	// iris_real cy = in_cells[childID].ses.c.r[1];
+	// iris_real cz = in_cells[childID].ses.c.r[2];
 	
 	for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 	    if(is_close) { break; }
@@ -164,6 +170,7 @@ void fmm::inhale_xcells(int in_count)
     	int cellID = *(int *)(m_recvbuf + unit_size * i);
 	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
 	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+	assert(m_xcells[cellID].flags == 0);
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }

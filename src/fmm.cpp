@@ -1168,7 +1168,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     int nleafs = m_tree_size - offset;
-
+    
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	pair_t p(destID, srcID);

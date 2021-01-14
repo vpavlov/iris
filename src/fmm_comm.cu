@@ -27,6 +27,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 //==============================================================================
+#include <assert.h>
 #include "cuda.h"
 #include "fmm.h"
 
@@ -48,6 +49,7 @@ __global__ void k_inhale_cells(unsigned char *m_recvbuf, int in_count, cell_t *m
 	int cellID = *(int *)(m_recvbuf + unit_size * i);
 	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
 	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+	assert(m_xcells[cellID].flags == 0);
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }
