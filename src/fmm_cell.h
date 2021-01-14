@@ -57,7 +57,7 @@ namespace ORG_NCSA_IRIS {
     
     // Once tree parameters (depth, etc.) are known, these can be calculated only once
     struct cell_meta_t {
-	int rank;
+	//int rank;
 	iris_real geomc[3];  // geometrical center
 	iris_real maxr;      // maximum theoretical radius (1/2 cell diagonal)
 	

@@ -89,7 +89,7 @@ namespace ORG_NCSA_IRIS {
     void h_m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_L, iris_real *in_scratch);
     IRIS_CUDA_DEVICE_HOST void l2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_L, iris_real *out_L, iris_real *in_scratch);
     IRIS_CUDA_DEVICE_HOST void l2p(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *in_L, iris_real *in_scratch,
-	     iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez);
+				   iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez);
 
 }
 

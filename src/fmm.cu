@@ -541,9 +541,10 @@ void fmm::eval_l2l_gpu()
 __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles, int m_order, iris_real *m_L, int m_nterms)
 {
     iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    int scratch_size = 2 * m_nterms * sizeof(iris_real);
     
-    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which interaction pair we're processing
-    int cellID = leaf_idx + offset;                       // This is C -> C, so cellID = sourceID = destID
+    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which cell we are processing
+    int cellID = leaf_idx + offset;
     int j = IRIS_CUDA_TID;                                // Target particle inside cellID
 
     cell_t *leaf = m_cells + cellID;
@@ -552,24 +553,23 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles,
     if(j >= npart || !(leaf->flags & IRIS_FMM_CELL_VALID_L)) {
 	return;
     }
-    
-    int scratch_size = 2 * m_nterms * sizeof(iris_real);
-    
+
+    particle_t *part = m_particles + leaf->first_child + j;
     iris_real *L = m_L + cellID * 2 * m_nterms;
 
-    iris_real x = leaf->ses.c.r[0] - m_particles[leaf->first_child+j].xyzq[0];
-    iris_real y = leaf->ses.c.r[1] - m_particles[leaf->first_child+j].xyzq[1];
-    iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
-    iris_real q = m_particles[leaf->first_child+j].xyzq[3];
+    iris_real x = leaf->ses.c.r[0] - part->xyzq[0];
+    iris_real y = leaf->ses.c.r[1] - part->xyzq[1];
+    iris_real z = leaf->ses.c.r[2] - part->xyzq[2];
+    iris_real q = part->xyzq[3];
     
     iris_real phi, Ex, Ey, Ez;
     memset(scratch, 0, scratch_size);
     l2p(m_order, x, y, z, q, L, scratch, &phi, &Ex, &Ey, &Ez);
 
-    m_particles[leaf->first_child+j].tgt[0] += phi;
-    m_particles[leaf->first_child+j].tgt[1] += Ex;
-    m_particles[leaf->first_child+j].tgt[2] += Ey;
-    m_particles[leaf->first_child+j].tgt[3] += Ez;
+    part->tgt[0] += phi;
+    part->tgt[1] += Ex;
+    part->tgt[2] += Ey;
+    part->tgt[3] += Ez;
 }
 
 void fmm::eval_l2p_gpu()

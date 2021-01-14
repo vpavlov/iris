@@ -77,19 +77,19 @@ void cell_meta_t::set(cell_meta_t *in_meta, int cellID, const box_t<iris_real> *
 	maxr = sqrt(dx*dx + dy*dy + dz*dz) / 2;
     }
 
-    rank = -1;
-    if(level >= in_local_root_level) {
-	int t_id = cellID;
-	int t_level = level;
-	while(t_level > in_local_root_level) {
-	    t_id = parent_of(t_id);
-	    t_level = level_of(t_id);
-	}
-	int idx = t_id - offset_for_level(t_level);
-	int bits = int(log(in_comm_size)/M_LN2);
-	int shift = (3 - bits % 3) % 3;
-	rank = idx >> shift;
-    }
+    // rank = -1;
+    // if(level >= in_local_root_level) {
+    // 	int t_id = cellID;
+    // 	int t_level = level;
+    // 	while(t_level > in_local_root_level) {
+    // 	    t_id = parent_of(t_id);
+    // 	    t_level = level_of(t_id);
+    // 	}
+    // 	int idx = t_id - offset_for_level(t_level);
+    // 	int bits = int(log(in_comm_size)/M_LN2);
+    // 	int shift = (3 - bits % 3) % 3;
+    // 	rank = idx >> shift;
+    // }
 }
 
 void cell_t::compute_ses(particle_t *in_particles)
