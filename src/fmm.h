@@ -41,6 +41,8 @@
 #include "assert.h"
 #include "logger.h"
 #include "fmm_pair.h"
+#include "timer.h"
+#include "openmp.h"
 
 #ifdef IRIS_CUDA
 #include "cuda_runtime_api.h"
@@ -87,13 +89,113 @@ namespace ORG_NCSA_IRIS {
 #ifdef IRIS_CUDA
 	void load_particles_gpu();
 #endif
-	
-	inline void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
-	void distribute_particles_cpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	    
 #ifdef IRIS_CUDA
 	void distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	void distribute_particles_gpu(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 #endif
 
+
+
+	//////////////////////////
+	// Distribute particles //
+	//////////////////////////
+
+	template <typename T>
+	inline void distribute_particles(T *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+	{
+#ifdef IRIS_CUDA
+	    if(m_iris->m_cuda) {
+		distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
+	    }else 
+#endif
+	    {
+		distribute_particles_cpu(in_particles, in_count, in_flags, out_target);
+	    }
+	}
+
+	static int __compare_cellID(const void *a, const void *b)
+	{
+	    particle_t *aptr = (particle_t *)a;
+	    particle_t *bptr = (particle_t *)b;
+	    if(aptr->cellID < bptr->cellID) {
+		return -1;
+	    }else if(aptr->cellID > bptr->cellID) {
+		return 1;
+	    }else {
+		return 0;
+	    }
+	}
+
+	template <typename T>
+	void distribute_particles_cpu(T *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+	{
+	    timer tm;
+	    tm.start();
+	    
+	    if(in_count == 0) {
+		return;
+	    }
+	    
+	    box_t<iris_real> *gbox = &m_domain->m_global_box;
+	    int nleafs = (1 << 3 * max_level());
+	    int offset = cell_meta_t::offset_for_level(max_level());
+	    
+#if defined _OPENMP
+#pragma omp parallel
+#endif
+	    {
+		int tid = THREAD_ID;
+		int from, to;
+		setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
+		for(int i=from;i<to;i++) {
+		    int cellID = offset + i;
+		    T key;
+		    key.cellID = cellID;
+		    T *tmp = (T *)bsearch(&key, in_particles, in_count, sizeof(T), __compare_cellID);
+		    if(tmp == NULL) {
+			continue;
+		    }
+		    
+		    int left = tmp - in_particles;
+		    int right = left;
+		    
+		    while(left > 0 && in_particles[left].cellID >= cellID)             { left--; }
+		    while(left < in_count && in_particles[left].cellID < cellID)       { left++; }
+		    while(right < in_count-1 && in_particles[right].cellID <= cellID)  { right++; }
+		    while(right >= 0 && in_particles[right].cellID > cellID)           { right--; }
+		    
+		    int num_children = (right - left + 1);
+		    if(num_children <= 0) {
+			continue;
+		    }
+		    
+		    out_target[cellID].first_child = left;
+		    out_target[cellID].num_children = num_children;
+		    out_target[cellID].flags = in_flags;
+		    // out_target[cellID].ses.c.r[0] = m_cell_meta[cellID].geomc[0];
+		    // out_target[cellID].ses.c.r[1] = m_cell_meta[cellID].geomc[1];
+		    // out_target[cellID].ses.c.r[2] = m_cell_meta[cellID].geomc[2];
+		    // out_target[cellID].ses.r = m_cell_meta[cellID].maxr;
+		    out_target[cellID].compute_com(in_particles);
+		    
+#if defined _OPENMP
+#pragma omp critical
+		    {
+#endif
+			m_max_particles = MAX(m_max_particles, num_children);
+#if defined _OPENMP
+		    }
+#endif
+		}
+	    }
+	    
+	    tm.stop();
+	    m_logger->time("Distribute particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+	};
+
+	
+	
 	inline void link_parents(cell_t *io_cells);
 	void link_parents_cpu(cell_t *io_cells);
 #ifdef IRIS_CUDA
@@ -145,6 +247,12 @@ namespace ORG_NCSA_IRIS {
 #endif
 	
 	void exchange_LET();
+
+	void exchange_p2p_halo();
+	void send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req);
+	void recv_particles_from_neighbour(int rank, int alien_index, int alien_flag);
+	int border_leafs(int rank);
+	
 	inline void comm_LET();
 	int comm_LET_cpu(cell_t *in_cells, iris_real *in_M);
 #ifdef IRIS_CUDA
@@ -220,7 +328,7 @@ namespace ORG_NCSA_IRIS {
 	struct particle_t  *m_particles;         // array of particles themselves
 	int                 m_nxpart_cap;        // capacity of the allocated array of halo particles
 	int                 m_nxparticles;       // number of halo particles
-	struct particle_t  *m_xparticles;        // halo particles
+	struct xparticle_t *m_xparticles[6];     // halo particles
 	bool                m_dirty;
 
 	std::deque<struct pair_t> m_queue;       // the Dual Tree Traversal queue
@@ -281,6 +389,9 @@ namespace ORG_NCSA_IRIS {
 
 	std::map<struct pair_t, bool, pair_comparator_t> m_p2p_skip;
 	std::map<struct pair_t, bool, pair_comparator_t> m_m2l_skip;
+
+	std::vector<int> m_border_leafs;
+	std::vector<struct xparticle_t> m_border_parts[2];
     };
 }
 

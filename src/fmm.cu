@@ -50,8 +50,7 @@ using namespace ORG_NCSA_IRIS;
 __global__ void k_load_charges(iris_real *charges, int ncharges, int hwm,
 			       iris_real xlo, iris_real ylo, iris_real zlo,
 			       iris_real lsx, iris_real lsy, iris_real lsz,
-			       int max_level, int offset, particle_t *m_particles, int rank,
-			       int *atom_types)
+			       int max_level, int offset, particle_t *m_particles, int rank)
 {
     IRIS_CUDA_SETUP_WS(ncharges);
     for(int i=from;i<to;i++) {
@@ -73,7 +72,6 @@ __global__ void k_load_charges(iris_real *charges, int ncharges, int hwm,
 	m_particles[i+hwm].tgt[1] = 0.0;
 	m_particles[i+hwm].tgt[2] = 0.0;
 	m_particles[i+hwm].tgt[3] = 0.0;
-	atom_types[i+hwm] = (chargeID > 0)?0:1;
     }
 }
 
@@ -85,18 +83,16 @@ __global__ void k_extract_cellID(particle_t *m_particles, int n, int *cellID_key
 
 void fmm::load_particles_gpu()
 {
-    // Find the total amount of local charges, including halo atoms
-    // This is just a simple sum of ncharges from all incoming rank
-    int total_local_charges = 0;
+    // Find the total amount of local charges. This is just a simple sum of ncharges from all incoming rank.
+    m_nparticles = 0;
     for(int rank = 0; rank < m_iris->m_client_size; rank++ ) {
-	total_local_charges += m_iris->m_ncharges[rank];
+	m_nparticles += m_iris->m_ncharges[rank];
     }
 
     // Allocate GPU memory for m_particles (and m_xparticles, it will be at the end of m_particles)
     // Also, allocate same sized array for the atom types (=1 if halo atom, =0 if own atom)
-    m_particles = (particle_t *)memory::wmalloc_gpu_cap((void *)m_particles, total_local_charges, sizeof(particle_t), &m_npart_cap);
-    m_atom_types = (int *)memory::wmalloc_gpu_cap((void *)m_atom_types, total_local_charges, sizeof(int), &m_at_cap);
-    m_keys = (int *)memory::wmalloc_gpu_cap((void *)m_keys, total_local_charges, sizeof(int), &m_keys_cap);
+    m_particles = (particle_t *)memory::wmalloc_gpu_cap((void *)m_particles, m_nparticles, sizeof(particle_t), &m_npart_cap);
+    m_keys = (int *)memory::wmalloc_gpu_cap((void *)m_keys, m_nparticles, sizeof(int), &m_keys_cap);
 
     // Allocate GPU memory for the charges coming from all client ranks
     // This is done all at once so as no to interfere with mem transfer/kernel overlapping in the next loop
@@ -109,7 +105,7 @@ void fmm::load_particles_gpu()
     // Start the particle loading itself. The <H2D, kernel> pairs runs on separate streams and thus overlaps memory transfer for more than 1 source rank
     int offset = cell_meta_t::offset_for_level(max_level());
     int nd = 1 << max_level();
-    int hwm = 0;    
+    int hwm = 0;
     for(int rank = 0; rank < m_iris->m_client_size; rank++ ) {
 	int ncharges = m_iris->m_ncharges[rank];
 	iris_real *charges = m_iris->m_charges[rank];
@@ -120,40 +116,24 @@ void fmm::load_particles_gpu()
 	k_load_charges<<<nblocks, nthreads, 0, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]>>>(m_charges_gpu[rank], ncharges, hwm,
 											      m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
 											      m_leaf_size[0], m_leaf_size[1], m_leaf_size[2],
-											      max_level(), offset, m_particles, rank,
-											      m_atom_types);
+											      max_level(), offset, m_particles, rank);
 	hwm += ncharges;
     }
         
     cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
 
-    // At this point we have the m_particles filled up, with mixed halo/own atoms, etc.
-    // We need to sort them according to the m_atom_type keys array and split into m_particles and m_xparticles
-    thrust::device_ptr<int>         atom_types(m_atom_types);
-    thrust::device_ptr<particle_t>  values(m_particles);
-    thrust::sort_by_key(thrust::cuda::par.on(m_streams[0]), atom_types, atom_types+total_local_charges, values);
-
-    // Now the first part of m_particles contains local atoms; second contains halo atoms
-    // Number of local particles are those with key = 0
-    // Number of halo particles is total_local_charges - num_local_atoms
-    m_nparticles = thrust::count(thrust::cuda::par.on(m_streams[0]), atom_types, atom_types+total_local_charges, 0);
-    m_nxparticles = total_local_charges - m_nparticles;
-    m_xparticles = m_particles + m_nparticles;
-
     // Get the cellIDs in the reordered array
-    int nthreads = MIN(IRIS_CUDA_NTHREADS, total_local_charges);
-    int nblocks = IRIS_CUDA_NBLOCKS(total_local_charges, nthreads);
-    k_extract_cellID<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, total_local_charges, m_keys);
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, m_nparticles);
+    int nblocks = IRIS_CUDA_NBLOCKS(m_nparticles, nthreads);
+    k_extract_cellID<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, m_nparticles, m_keys);
     cudaStreamSynchronize(m_streams[0]);  // we want the above to finish before we do the sorts below
     
-    // We now need to sort the m_particles and m_xparticles arrays by cellID
+    // We now need to sort the m_particles by cellID
     thrust::device_ptr<int>         keys(m_keys);
     thrust::device_ptr<particle_t>  part(m_particles);
-    thrust::device_ptr<particle_t>  xpart(m_xparticles);
     thrust::sort_by_key(thrust::cuda::par.on(m_streams[0]), keys, keys+m_nparticles, part);
-    thrust::sort_by_key(thrust::cuda::par.on(m_streams[1]), keys+m_nparticles, keys+total_local_charges, xpart);
     
-    m_logger->info("FMM/GPU: This rank owns %d + %d halo particles", m_nparticles, m_nxparticles);
+    m_logger->info("FMM/GPU: This rank owns %d halo particles", m_nparticles);
 }
 
 
@@ -203,7 +183,53 @@ __device__ void d_compute_com(particle_t *in_particles, int num_points, int firs
     out_target->ses.r = sqrt(max_dist2);
 }
 
+__device__ void d_compute_comx(xparticle_t *in_particles, int num_points, int first_child, cell_t *out_target)
+{
+    // iris_real M = 0.0;
+    // for(int i=0;i<num_points;i++) {
+    // 	M += in_particles[first_child+i].xyzq[3];
+    // }
+    for(int i=0;i<num_points;i++) {
+	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0]; // * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1]; // * in_particles[first_child+i].xyzq[3];
+	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2]; // * in_particles[first_child+i].xyzq[3];
+    }
+
+    out_target->ses.c.r[0] /= num_points;
+    out_target->ses.c.r[1] /= num_points;
+    out_target->ses.c.r[2] /= num_points;
+
+    iris_real max_dist2 = 0.0;
+    for(int i=0;i<num_points;i++) {
+	iris_real dx = in_particles[first_child+i].xyzq[0] - out_target->ses.c.r[0];
+	iris_real dy = in_particles[first_child+i].xyzq[1] - out_target->ses.c.r[1];
+	iris_real dz = in_particles[first_child+i].xyzq[2] - out_target->ses.c.r[2];
+	iris_real dist2 = dx*dx + dy*dy + dz*dz;
+	if(dist2 > max_dist2) {
+	    max_dist2 = dist2;
+	}
+    }
+    out_target->ses.r = sqrt(max_dist2);
+}
+
 __device__ int d_bsearch(particle_t *in_particles, int in_count, int cellID)
+{
+    int start = 0;
+    int end = in_count-1;
+    while (start <= end) {
+        int m = start + (end - start) / 2;
+        if (in_particles[m].cellID == cellID) {
+            return m;
+	}else if (in_particles[m].cellID < cellID) {
+            start = m + 1;
+	}else {
+	    end = m - 1;
+	}
+    }
+    return -1; 
+}
+
+__device__ int d_xbsearch(xparticle_t *in_particles, int in_count, int cellID)
 {
     int start = 0;
     int end = in_count-1;
@@ -247,7 +273,35 @@ __global__ void k_distribute_particles(particle_t *in_particles, int in_count, i
     atomicMax(m_max_particles_gpu, num_children);
 }
 
-void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+__global__ void k_distribute_xparticles(xparticle_t *in_particles, int in_count, int in_flags, cell_t *out_target, int offset, int *m_max_particles_gpu)
+{
+    int tid = IRIS_CUDA_TID;
+    int cellID = offset + tid;
+
+    int from = d_xbsearch(in_particles, in_count, cellID);
+    if(from == -1) {
+    	return;
+    }
+    int to = from;
+    
+    while(from > 0 && in_particles[from].cellID >= cellID)       { from--; }
+    while(from < in_count && in_particles[from].cellID < cellID) { from++; }
+    while(to < in_count-1 && in_particles[to].cellID <= cellID)  { to++; }
+    while(to >= 0 && in_particles[to].cellID > cellID)           { to--; }
+    
+    int num_children = (to - from + 1);
+    if(num_children <= 0) {
+	return;
+    }
+    out_target[cellID].first_child = from;
+    out_target[cellID].num_children = num_children;
+    out_target[cellID].flags = in_flags;
+    d_compute_comx(in_particles, num_children, from, out_target+cellID);
+    atomicMax(m_max_particles_gpu, num_children);
+}
+
+
+void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
     if(in_count == 0) {
 	return;
@@ -261,6 +315,20 @@ void fmm::distribute_particles_gpu(struct particle_t *in_particles, int in_count
     cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[0]); // TODO: make this async
 }
 
+
+void fmm::distribute_particles_gpu(xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+{
+    if(in_count == 0) {
+	return;
+    }
+    
+    int nleafs = (1 << 3 * max_level());
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
+    int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
+    k_distribute_xparticles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, m_max_particles_gpu);
+    cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[0]); // TODO: make this async
+}
 
 //////////////////
 // Link parents //
@@ -423,7 +491,7 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
 //////////////
 
 
-__global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+__global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, 
 			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, int m_order, iris_real *m_M, iris_real *m_L)
 {
     iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
@@ -475,7 +543,7 @@ void fmm::eval_m2l_gpu()
     
     int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_eval_m2l<<<nblocks, nthreads, 0, m_streams[0]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, m_particles, m_xparticles,
+    k_eval_m2l<<<nblocks, nthreads, 0, m_streams[0]>>>(m_m2l_list_gpu, n, m_cells, m_xcells, 
     						       m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_nterms,
     						       m_order, m_M, m_L);
     cudaEventSynchronize(m_m2l_memcpy_done);

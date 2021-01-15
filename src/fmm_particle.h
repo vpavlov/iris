@@ -44,6 +44,24 @@ namespace ORG_NCSA_IRIS {
     // a special structure. In this structure we keep the reference to the original
     // atom (rank of the sender and its # in that sender's array) and a reference
     // to the cell (leaf) in which this particle resides.
+
+    struct xparticle_t {
+	iris_real xyzq[4];
+	int cellID;
+
+	xparticle_t() {};
+	xparticle_t(int dummy) {};
+	
+	xparticle_t(iris_real in_x, iris_real in_y, iris_real in_z, iris_real in_q, int in_cellID)
+	{
+	    this->xyzq[0] = in_x;
+	    this->xyzq[1] = in_y;
+	    this->xyzq[2] = in_z;
+	    this->xyzq[3] = in_q;
+	    this->cellID = in_cellID;
+	};
+	
+    };
     
     struct particle_t {
 	iris_real xyzq[4];

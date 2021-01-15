@@ -105,32 +105,6 @@ void cell_t::compute_ses(particle_t *in_particles)
     memory::wfree(points);
 }
 
-
-void cell_t::compute_com(particle_t *in_particles)
-{
-    for(int i=0;i<num_children;i++) {
-	ses.c.r[0] += in_particles[first_child+i].xyzq[0];
-	ses.c.r[1] += in_particles[first_child+i].xyzq[1];
-	ses.c.r[2] += in_particles[first_child+i].xyzq[2];
-    }
-
-    ses.c.r[0] /= num_children;
-    ses.c.r[1] /= num_children;
-    ses.c.r[2] /= num_children;
-
-    iris_real max_dist2 = 0.0;
-    for(int i=0;i<num_children;i++) {
-	iris_real dx = in_particles[first_child+i].xyzq[0] - ses.c.r[0];
-	iris_real dy = in_particles[first_child+i].xyzq[1] - ses.c.r[1];
-	iris_real dz = in_particles[first_child+i].xyzq[2] - ses.c.r[2];
-	iris_real dist2 = dx*dx + dy*dy + dz*dz;
-	if(dist2 > max_dist2) {
-	    max_dist2 = dist2;
-	}
-    }
-    ses.r = sqrt(max_dist2);
-}
-
 IRIS_CUDA_DEVICE_HOST int cell_meta_t::offset_for_level(int level)
 {
     return ((1 << 3 * level)-1) / 7;

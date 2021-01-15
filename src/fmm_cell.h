@@ -38,19 +38,25 @@
 namespace ORG_NCSA_IRIS {
 
 #define IRIS_FMM_CELL_LOCAL      0x00001
-#define IRIS_FMM_CELL_ALIEN_NL   0x00002  // non-leaf alien cell
-#define IRIS_FMM_CELL_ALIEN_LEAF 0x00004  // leaf alien cell
-#define IRIS_FMM_CELL_HAS_CHILD1 0x00008  // child slot 1 is occupied
-#define IRIS_FMM_CELL_HAS_CHILD2 0x00010  // child slot 2 is occupied
-#define IRIS_FMM_CELL_HAS_CHILD3 0x00020  // ...
-#define IRIS_FMM_CELL_HAS_CHILD4 0x00040
-#define IRIS_FMM_CELL_HAS_CHILD5 0x00080
-#define IRIS_FMM_CELL_HAS_CHILD6 0x00100
-#define IRIS_FMM_CELL_HAS_CHILD7 0x00200
-#define IRIS_FMM_CELL_HAS_CHILD8 0x00400
-#define IRIS_FMM_CELL_VALID_M    0x00800  // cell has valid multipole expansion
-#define IRIS_FMM_CELL_VALID_L    0x01000  // cell has valid local expansion
+#define IRIS_FMM_CELL_ALIEN_L1   0x00002
+#define IRIS_FMM_CELL_ALIEN_L2   0x00004
+#define IRIS_FMM_CELL_ALIEN_L3   0x00008
+#define IRIS_FMM_CELL_ALIEN_L4   0x00010
+#define IRIS_FMM_CELL_ALIEN_L5   0x00020
+#define IRIS_FMM_CELL_ALIEN_L6   0x00040
+#define IRIS_FMM_CELL_ALIEN_NL   0x00080  // non-leaf alien cell
+#define IRIS_FMM_CELL_HAS_CHILD1 0x00100  // child slot 1 is occupied
+#define IRIS_FMM_CELL_HAS_CHILD2 0x00200  // child slot 2 is occupied
+#define IRIS_FMM_CELL_HAS_CHILD3 0x00400  // ...
+#define IRIS_FMM_CELL_HAS_CHILD4 0x00800
+#define IRIS_FMM_CELL_HAS_CHILD5 0x01000
+#define IRIS_FMM_CELL_HAS_CHILD6 0x02000
+#define IRIS_FMM_CELL_HAS_CHILD7 0x04000
+#define IRIS_FMM_CELL_HAS_CHILD8 0x08000
+#define IRIS_FMM_CELL_VALID_M    0x10000  // cell has valid multipole expansion
+#define IRIS_FMM_CELL_VALID_L    0x20000  // cell has valid local expansion
     
+#define IRIS_FMM_CELL_ALIEN_LEAF (IRIS_FMM_CELL_ALIEN_L1 | IRIS_FMM_CELL_ALIEN_L2 | IRIS_FMM_CELL_ALIEN_L3 | IRIS_FMM_CELL_ALIEN_L4 | IRIS_FMM_CELL_ALIEN_L5 | IRIS_FMM_CELL_ALIEN_L6)
 #define IRIS_FMM_CELL_ALIEN (IRIS_FMM_CELL_ALIEN_LEAF | IRIS_FMM_CELL_ALIEN_NL)
 #define IRIS_FMM_CELL_HAS_CHILDREN (IRIS_FMM_CELL_HAS_CHILD1 | IRIS_FMM_CELL_HAS_CHILD2 | IRIS_FMM_CELL_HAS_CHILD3 | IRIS_FMM_CELL_HAS_CHILD4 | \
 				    IRIS_FMM_CELL_HAS_CHILD5 | IRIS_FMM_CELL_HAS_CHILD6 | IRIS_FMM_CELL_HAS_CHILD7 | IRIS_FMM_CELL_HAS_CHILD8)
@@ -78,7 +84,33 @@ namespace ORG_NCSA_IRIS {
 	
 	cell_t(int dummy = 0) {};  // to satisfy the compiler
 	void compute_ses(struct particle_t *in_particles);
-	void compute_com(struct particle_t *in_particles);
+
+	template <typename T>
+	void compute_com(T *in_particles)
+	{
+	    for(int i=0;i<num_children;i++) {
+		ses.c.r[0] += in_particles[first_child+i].xyzq[0];
+		ses.c.r[1] += in_particles[first_child+i].xyzq[1];
+		ses.c.r[2] += in_particles[first_child+i].xyzq[2];
+	    }
+	    
+	    ses.c.r[0] /= num_children;
+	    ses.c.r[1] /= num_children;
+	    ses.c.r[2] /= num_children;
+	    
+	    iris_real max_dist2 = 0.0;
+	    for(int i=0;i<num_children;i++) {
+		iris_real dx = in_particles[first_child+i].xyzq[0] - ses.c.r[0];
+		iris_real dy = in_particles[first_child+i].xyzq[1] - ses.c.r[1];
+		iris_real dz = in_particles[first_child+i].xyzq[2] - ses.c.r[2];
+		iris_real dist2 = dx*dx + dy*dy + dz*dz;
+		if(dist2 > max_dist2) {
+		    max_dist2 = dist2;
+		}
+	    }
+	    ses.r = sqrt(max_dist2);
+	};
+	
     };
 
 

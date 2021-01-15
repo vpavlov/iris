@@ -164,7 +164,7 @@ __device__ __forceinline__ void __reduce_warpy(iris_real4 &phie, int tid)
     }
 }
 
-__global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, particle_t *m_xparticles,
+__global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, xparticle_t **m_xparticles,
 			    iris_real gxsize, iris_real gysize, iris_real gzsize)
 {
     int pair_idx = blockIdx.y * gridDim.z + blockIdx.z;                  // Which interaction pair we're processing
@@ -174,7 +174,7 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     int block_tid = threadIdx.y * 8 + threadIdx.x;                       // Unique thread index inside the block
     int si = blockIdx.x*64 + block_tid;                                  // Index of the source particle to start from
 
-    particle_t *sparticles;                                              // Source particles
+    particle_t *sparticles;                                             // Source particles
     particle_t *dparticles = m_particles + m_cells[destID].first_child;  // Destination particles
 
     
@@ -183,10 +183,22 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     bool do_other_side;
     if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
 	do_other_side = false;
-	sparticles = m_xparticles + m_xcells[srcID].first_child;
+	if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L1) {
+	    sparticles = (particle_t *)(m_xparticles[0] + m_xcells[srcID].first_child + si);
+	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L2) {
+	    sparticles = (particle_t *)(m_xparticles[1] + m_xcells[srcID].first_child + si);
+	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L3) {
+	    sparticles = (particle_t *)(m_xparticles[2] + m_xcells[srcID].first_child + si);
+	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L4) {
+	    sparticles = (particle_t *)(m_xparticles[3] + m_xcells[srcID].first_child + si);
+	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L5) {
+	    sparticles = (particle_t *)(m_xparticles[4] + m_xcells[srcID].first_child + si);
+	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L6) {
+	    sparticles = (particle_t *)(m_xparticles[5] + m_xcells[srcID].first_child + si);
+	}
     }else {
 	do_other_side = true;
-	sparticles = m_particles + m_xcells[srcID].first_child;
+	sparticles = m_particles + m_xcells[srcID].first_child + si;
     }
 
     
@@ -198,10 +210,10 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     // Shared buffer is used to avoid fetches from RAM and cache misses in the inner loop
     __shared__ iris_real4 src[64];
     if(si < m_xcells[srcID].num_children) {
-	src[block_tid].x = __fma(list[pair_idx].ix, gxsize, sparticles[si].xyzq[0]);
-	src[block_tid].y = __fma(list[pair_idx].iy, gysize, sparticles[si].xyzq[1]);
-	src[block_tid].z = __fma(list[pair_idx].iz, gzsize, sparticles[si].xyzq[2]);
-	src[block_tid].w = sparticles[si].xyzq[3];
+	src[block_tid].x = __fma(list[pair_idx].ix, gxsize, sparticles->xyzq[0]);
+	src[block_tid].y = __fma(list[pair_idx].iy, gysize, sparticles->xyzq[1]);
+	src[block_tid].z = __fma(list[pair_idx].iz, gzsize, sparticles->xyzq[2]);
+	src[block_tid].w = sparticles->xyzq[3];
     }else {
 	src[block_tid] = make_iris_real4(1.0e+32, 1.0e+32, 1.0e+32, 0.0);
     }
@@ -279,10 +291,11 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     // to the source particle. For particles coming from other ranks this is not needed.
     if(do_other_side) {
 	for(int k=0;k<8;k++) {
-	    int si = blockIdx.x*64 + k*8 + threadIdx.x;
+	    int ssi = blockIdx.x*64 + k*8 + threadIdx.x;
+	    sparticles += ssi - si;
 	    __reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
 	    if ((threadIdx.y & 3) < 4) {
-		atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
+		atomicAdd(sparticles->tgt + (threadIdx.y & 3), s_phie[k].x);
 	    }
 	}
     }
