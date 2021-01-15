@@ -628,6 +628,10 @@ void fmm::distribute_particles_cpu(particle_t *in_particles, int in_count, int i
 	    out_target[cellID].first_child = left;
 	    out_target[cellID].num_children = num_children;
 	    out_target[cellID].flags = in_flags;
+	    // out_target[cellID].ses.c.r[0] = m_cell_meta[cellID].geomc[0];
+	    // out_target[cellID].ses.c.r[1] = m_cell_meta[cellID].geomc[1];
+	    // out_target[cellID].ses.c.r[2] = m_cell_meta[cellID].geomc[2];
+	    // out_target[cellID].ses.r = m_cell_meta[cellID].maxr;
 	    out_target[cellID].compute_com(in_particles);
 
 #if defined _OPENMP
@@ -1168,7 +1172,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 {
     int offset = cell_meta_t::offset_for_level(max_level());
     int nleafs = m_tree_size - offset;
-    
+
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	pair_t p(destID, srcID);
@@ -1263,7 +1267,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real z = tz - sz;
 
     bool do_other_side = false;
-    if(ix == 0 && iy == 0 && iz == 0) {
+    if(ix == 0 && iy == 0 && iz == 0 && !(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_NL)) {
 	do_other_side = true;
     }
     memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
@@ -1374,6 +1378,7 @@ void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 	iris_real sum_ex = 0.0;
 	iris_real sum_ey = 0.0;
 	iris_real sum_ez = 0.0;
+	
 	for(int j=0;j<m_xcells[srcID].num_children;j++) {
 	    iris_real sx, sy, sz, sq;
 	    if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
