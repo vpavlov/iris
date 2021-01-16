@@ -97,7 +97,7 @@ void fmm::send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_se
 	part_count += m_xcells[m_border_leafs[i]].num_children;
     }
 
-    m_logger->trace("Will be sending %d particles (from %d border leafs) to neighbour %d", part_count, bl_count, rank);
+    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d", part_count, bl_count, rank);
     
     MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
 
@@ -166,7 +166,7 @@ int fmm::border_leafs(int rank)
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
 		    iris_real rn = m_domain->m_local_boxes[rank].distance_to(x, y, z);
-		    if (m_mac_let_corr * dn/rn < m_mac) {
+		    if (2 * dn/rn < m_mac) {
 			continue;
 		    }
 		    // D(n)/r(n) >= θ - this means that this cell is too close to the border

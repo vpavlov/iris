@@ -436,14 +436,14 @@ void fmm::local_tree_construction()
 	eval_p2p_self_cpu();
     }
     
-// #ifdef IRIS_CUDA
-//     if(m_iris->m_cuda) {
-// 	print_tree_gpu("Cell", m_cells);
-//     }else
-// #endif
-//     {
-// 	print_tree("Cell", m_cells, 0, m_M);
-//     }
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	print_tree_gpu("Cell", m_cells);
+    }else
+#endif
+    {
+	print_tree("Cell", m_cells, 0, m_M);
+    }
 }
 
 
@@ -830,14 +830,14 @@ void fmm::exchange_LET()
 	recalculate_LET();
     }
     
-// #ifdef IRIS_CUDA
-//     if(m_iris->m_cuda) {
-// 	print_tree_gpu("Xcell", m_xcells);
-//     }else
-// #endif
-//     {
-// 	print_tree("Xcell", m_xcells, 0, m_M);
-//     }
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	print_tree_gpu("Xcell", m_xcells);
+    }else
+#endif
+    {
+	print_tree("Xcell", m_xcells, 0, m_M);
+    }
     
    // tm.stop();
    // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
@@ -1281,6 +1281,10 @@ void fmm::eval_p2p_self_cpu()
 
 void fmm::eval_p2p(int srcID, int destID, int ix, int iy, int iz)
 {
+    if(m_xcells[srcID].num_children == 0) {
+	m_logger->warn("********** (%d %d %d %d %d) Source Cell ID %d is empty! This is probably a bug in the halo exchange!", srcID, destID, ix, iy, iz, srcID);
+    }
+    
     for(int i=0;i<m_cells[destID].num_children;i++) {
 	iris_real tx = m_particles[m_cells[destID].first_child + i].xyzq[0];
 	iris_real ty = m_particles[m_cells[destID].first_child + i].xyzq[1];
