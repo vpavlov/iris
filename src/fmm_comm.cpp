@@ -295,7 +295,7 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
 		    iris_real rn = m_iris->m_domain->m_local_boxes[rank].distance_to(x, y, z);
 
-		    if (m_mac_let_corr * dn/rn < m_mac) {
+		    if (2 * dn/rn < m_mac) {
 			continue;
 		    }
 		    // D(n)/r(n) >= θ - this means that this cell is too close to the border
