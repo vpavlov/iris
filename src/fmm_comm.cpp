@@ -44,9 +44,6 @@ using namespace ORG_NCSA_IRIS;
 //
 void fmm::exchange_p2p_halo()
 {
-    timer tm;
-    tm.start();
-    
     int alien_index = 0;
     int alien_flag = IRIS_FMM_CELL_ALIEN_L1;
     for(int i=0;i<3;i++) {
@@ -83,9 +80,6 @@ void fmm::exchange_p2p_halo()
     	    MPI_Wait(data_req+j, MPI_STATUS_IGNORE);
     	}
     }
-
-    tm.stop();
-    m_logger->time("Halo exchange wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
@@ -152,7 +146,7 @@ int fmm::border_leafs(int rank)
 	
 	bool send = false;
 	
-	iris_real dn = m_xcells[n].ses.r;
+	iris_real dn = m_xcells[n].ses.r + m_let_corr;
 	iris_real cx = m_xcells[n].ses.c.r[0];
 	iris_real cy = m_xcells[n].ses.c.r[1];
 	iris_real cz = m_xcells[n].ses.c.r[2];
@@ -166,7 +160,7 @@ int fmm::border_leafs(int rank)
 		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
 		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
 		    iris_real rn = m_domain->m_local_boxes[rank].distance_to(x, y, z);
-		    if (2 * dn/rn < m_mac) {
+		    if (dn/rn < m_mac) {
 			continue;
 		    }
 		    // D(n)/r(n) >= θ - this means that this cell is too close to the border
@@ -274,13 +268,7 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	
 	bool is_close = (level < m_local_root_level);  // all cells above local root level are to be drilled-down
 
-	// FIXME: discuss the implications of using the geometrical center instead of the real one...
-	// iris_real dn = m_cell_meta[childID].maxr;
-	// iris_real cx = m_cell_meta[childID].geomc[0];
-	// iris_real cy = m_cell_meta[childID].geomc[1];
-	// iris_real cz = m_cell_meta[childID].geomc[2];
-
-	iris_real dn = in_cells[childID].ses.r;
+	iris_real dn = in_cells[childID].ses.r + m_let_corr;
 	iris_real cx = in_cells[childID].ses.c.r[0];
 	iris_real cy = in_cells[childID].ses.c.r[1];
 	iris_real cz = in_cells[childID].ses.c.r[2];
@@ -327,7 +315,6 @@ void fmm::inhale_xcells(int in_count)
     	int cellID = *(int *)(m_recvbuf + unit_size * i);
 	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
 	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
-	assert(m_xcells[cellID].flags == 0);
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }

@@ -290,12 +290,12 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     // This is only needed in case we want to assign the calculated potential/field
     // to the source particle. For particles coming from other ranks this is not needed.
     if(do_other_side) {
+	sparticles -= si;
 	for(int k=0;k<8;k++) {
-	    int ssi = blockIdx.x*64 + k*8 + threadIdx.x;
-	    sparticles += ssi - si;
+	    int si = blockIdx.x*64 + k*8 + threadIdx.x;
 	    __reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
 	    if ((threadIdx.y & 3) < 4) {
-		atomicAdd(sparticles->tgt + (threadIdx.y & 3), s_phie[k].x);
+		atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
 	    }
 	}
     }

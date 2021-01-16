@@ -784,7 +784,7 @@ bool iris::handle_charges(event_t *event)
     }
 
     int ncharges = event->size / unit;
-    m_logger->info("Received %d atoms from %d", ncharges, event->peer);
+    m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
 
     m_ncharges[event->peer] = ncharges;
 #ifdef IRIS_CUDA

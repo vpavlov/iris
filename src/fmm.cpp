@@ -58,7 +58,7 @@ using namespace ORG_NCSA_IRIS;
 #define MAX_DEPTH 12
 
 fmm::fmm(iris *obj):
-    solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_mac_let_corr(0.0), m_nterms(0),
+    solver(obj), m_order(0), m_depth(0), m_mac(0.0), m_let_corr(0.0), m_nterms(0),
     m_leaf_size{0.0, 0.0, 0.0}, m_local_root_level(0), 
     m_tree_size(0), m_cell_meta(NULL), m_M(NULL), m_L(NULL),
     m_cells(NULL), m_xcells(NULL), m_nparticles(0), m_npart_cap(0), m_particles(NULL),
@@ -84,11 +84,11 @@ fmm::fmm(iris *obj):
 	}
 	cudaEventCreate(&m_m2l_memcpy_done);
 	cudaEventCreate(&m_p2p_memcpy_done);
+	cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
+	cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
+	cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
+	IRIS_CUDA_CHECK_ERROR;
     }
-    cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
-    cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
-    cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
-    IRIS_CUDA_CHECK_ERROR;
 #endif
     
 }
@@ -176,9 +176,6 @@ void fmm::commit()
 	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_MAC);
 	m_mac = t.r;
 
-	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_MAC_CORR);
-	m_mac_let_corr = t.r;
-	
 	m_nterms = (m_order + 1) * (m_order + 2) / 2;
 
 	m_local_root_level = int(log(m_local_comm->m_size-1) / _LN8) + 1;
@@ -262,6 +259,10 @@ void fmm::set_leaf_size()
     m_leaf_size[0] = m_domain->m_global_box.xsize / nd;
     m_leaf_size[1] = m_domain->m_global_box.ysize / nd;
     m_leaf_size[2] = m_domain->m_global_box.zsize / nd;
+    m_let_corr = 0.0;
+    m_let_corr = MAX(m_let_corr, sqrt(m_leaf_size[0] + m_leaf_size[1])/2);
+    m_let_corr = MAX(m_let_corr, sqrt(m_leaf_size[0] + m_leaf_size[2])/2);
+    m_let_corr = MAX(m_let_corr, sqrt(m_leaf_size[1] + m_leaf_size[2])/2);
 }
 
 void fmm::handle_box_resize()
@@ -436,14 +437,14 @@ void fmm::local_tree_construction()
 	eval_p2p_self_cpu();
     }
     
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	print_tree_gpu("Cell", m_cells);
-    }else
-#endif
-    {
-	print_tree("Cell", m_cells, 0, m_M);
-    }
+// #ifdef IRIS_CUDA
+//     if(m_iris->m_cuda) {
+// 	print_tree_gpu("Cell", m_cells);
+//     }else
+// #endif
+//     {
+// 	print_tree("Cell", m_cells, 0, m_M);
+//     }
 }
 
 
@@ -812,8 +813,8 @@ void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 
 void fmm::exchange_LET()
 {
-    // timer tm, tm3;
-    // tm.start();
+    timer tm;
+    tm.start();
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
@@ -830,17 +831,17 @@ void fmm::exchange_LET()
 	recalculate_LET();
     }
     
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	print_tree_gpu("Xcell", m_xcells);
-    }else
-#endif
-    {
-	print_tree("Xcell", m_xcells, 0, m_M);
-    }
+// #ifdef IRIS_CUDA
+//     if(m_iris->m_cuda) {
+// 	print_tree_gpu("Xcell", m_xcells);
+//     }else
+// #endif
+//     {
+// 	print_tree("Xcell", m_xcells, 0, m_M);
+//     }
     
-   // tm.stop();
-   // m_logger->info("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
+   tm.stop();
+   m_logger->time("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::comm_LET()
@@ -1164,7 +1165,7 @@ void fmm::eval_m2l_cpu()
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
     iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-    
+
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
 
     iris_real sx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
