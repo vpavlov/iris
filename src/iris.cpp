@@ -62,6 +62,7 @@ using namespace ORG_NCSA_IRIS;
 #define _SQRT_2PI 2.506628274631000502415765284811
 #define _2PI      6.283185307179586476925286766559
 #define _PI2      1.570796326794896619231321691639
+#define _SQRT3_2  0.8660254037844386    // sqrt(3)/2
 
 #define FACTOR_QUALITY_THRESHOLD 3
 
@@ -241,7 +242,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     // def_param.r = 2;
     // set_solver_param(IRIS_SOLVER_FMM_MAC_CORR, def_param);
     
-    def_param.r = 0.866025404 + 1e-6;  // sqrt(3)/2
+    def_param.r = _SQRT3_2;
     set_solver_param(IRIS_SOLVER_FMM_MAC, def_param);
 
     def_param.r = 1.5;

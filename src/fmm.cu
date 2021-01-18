@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <thrust/sort.h>
 #include <thrust/device_ptr.h>
+#include <thrust/device_vector.h>
 #include "cuda.h"
 #include "comm_rec.h"
 #include "fmm.h"
@@ -277,7 +278,6 @@ __global__ void k_distribute_xparticles(xparticle_t *in_particles, int in_count,
 {
     int tid = IRIS_CUDA_TID;
     int cellID = offset + tid;
-
     int from = d_xbsearch(in_particles, in_count, cellID);
     if(from == -1) {
     	return;
@@ -315,7 +315,6 @@ void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int i
     cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[0]); // TODO: make this async
 }
 
-
 void fmm::distribute_particles_gpu(xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
     if(in_count == 0) {
@@ -344,7 +343,7 @@ __global__ void k_link_parents_proper(cell_t *io_cells, int start, int end)
 	   (io_cells[j].flags & IRIS_FMM_CELL_HAS_CHILDREN) ||  // or cell is a non-leaf and has some children
 	   (io_cells[j].flags & IRIS_FMM_CELL_ALIEN_NL)) {        // or is an alien cell
 	    int parent = cell_meta_t::parent_of(j);
-	    atomicAdd(&io_cells[parent].flags, IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
+	    atomicOr(&io_cells[parent].flags, IRIS_FMM_CELL_HAS_CHILD1 << ((j - start) % 8));
 	}
     }
 }
@@ -662,7 +661,7 @@ void fmm::eval_l2p_gpu()
 
 
 // TODO: compute virial
-__global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *out_ener)
+__global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *out_ener, int npart)
 {
     __shared__ iris_real ener_acc[IRIS_CUDA_NTHREADS];
     int iacc = threadIdx.x;
@@ -672,7 +671,9 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
     if(tid == 0) {
 	*out_ener = 0.0;
     }
-    ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
+    if(tid < npart) {
+	ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
+    }
 
     __syncthreads();
 
@@ -696,7 +697,7 @@ void fmm::compute_energy_and_virial_gpu()
     int n = m_nparticles;
     int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
     int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
-    k_compute_energy_and_virial<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, m_evir_gpu);
+    k_compute_energy_and_virial<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, m_evir_gpu, n);
     cudaMemcpyAsync(&(m_iris->m_Ek), m_evir_gpu, sizeof(iris_real), cudaMemcpyDefault, m_streams[0]);
     cudaStreamSynchronize(m_streams[0]); // must be synchronous
     m_iris->m_Ek *= 0.5 * m_units->ecf;
@@ -728,6 +729,21 @@ void fmm::send_back_forces_gpu()
     cudaMemcpyAsync(m_particles_cpu, m_particles, m_nparticles * sizeof(particle_t), cudaMemcpyDefault, m_streams[0]);
     cudaStreamSynchronize(m_streams[0]); // must be sync
     send_back_forces_cpu(m_particles_cpu, false);
+}
+
+void fmm::cuda_specific_construct()
+{
+    m_halo_parts_gpu[0] = new thrust::device_vector<xparticle_t>();
+    m_halo_parts_gpu[1] = new thrust::device_vector<xparticle_t>();
+    for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	cudaStreamCreate(&m_streams[i]);
+    }
+    cudaEventCreate(&m_m2l_memcpy_done);
+    cudaEventCreate(&m_p2p_memcpy_done);
+    cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
+    cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
+    cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
+    IRIS_CUDA_CHECK_ERROR;
 }
 
 #endif

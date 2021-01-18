@@ -66,12 +66,12 @@ fmm::fmm(iris *obj):
     m_dirty(true), m_sendcnt(NULL), m_senddisp(NULL), m_recvcnt(NULL), m_recvdisp(NULL),
     m_p2m_count(0), m_m2m_count(0), m_m2l_count(0), m_p2p_count(0),
     m_l2l_count(0), m_l2p_count(0), m_p2m_alien_count(0), m_m2m_alien_count(0),
-    m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0)
+    m_sendbuf(NULL), m_recvbuf(NULL), m_sendbuf_cap(0), m_recvbuf_cap(0), m_halo_cell_cnt{NULL, NULL}, m_halo_cell_disp{NULL, NULL}
 #ifdef IRIS_CUDA
     ,m_atom_types(NULL), m_at_cap(0), m_keys(NULL), m_keys_cap(0),
     m_cells_cpu(NULL), m_xcells_cpu(NULL), m_M_cpu(NULL), m_recvbuf_gpu(NULL), m_recvbuf_gpu_cap(0),
     m_p2p_list_gpu(NULL), m_p2p_list_cap(0), m_m2l_list_gpu(NULL), m_m2l_list_cap(0),
-    m_particles_cpu(NULL), m_particles_cpu_cap(0)
+    m_particles_cpu(NULL), m_particles_cpu_cap(0), m_halo_parts_gpu{NULL, NULL}
 #endif
 {
     int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
@@ -79,15 +79,7 @@ fmm::fmm(iris *obj):
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
-	    cudaStreamCreate(&m_streams[i]);
-	}
-	cudaEventCreate(&m_m2l_memcpy_done);
-	cudaEventCreate(&m_p2p_memcpy_done);
-	cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
-	cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
-	cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
-	IRIS_CUDA_CHECK_ERROR;
+	cuda_specific_construct();
     }
 #endif
     
@@ -126,6 +118,11 @@ fmm::~fmm()
 	if(m_recvbuf_gpu != NULL) { memory::wfree_gpu(m_recvbuf_gpu); }
 	if(m_p2p_list_gpu != NULL) { memory::wfree_gpu(m_p2p_list_gpu); }
 	if(m_m2l_list_gpu != NULL) { memory::wfree_gpu(m_m2l_list_gpu); }
+
+	if(m_halo_cell_cnt[0] != NULL) { memory::wfree_gpu(m_halo_cell_cnt[0]); }
+	if(m_halo_cell_cnt[1] != NULL) { memory::wfree_gpu(m_halo_cell_cnt[1]); }
+	if(m_halo_cell_disp[0] != NULL) { memory::wfree_gpu(m_halo_cell_disp[0]); }
+	if(m_halo_cell_disp[1] != NULL) { memory::wfree_gpu(m_halo_cell_disp[1]); }
     }else 
 #endif
     {
@@ -139,6 +136,9 @@ fmm::~fmm()
 	for(int i=0;i<6;i++) {
 	    if(m_xparticles[i] != NULL)  { memory::wfree(m_xparticles[i]); }
 	}
+	
+	if(m_halo_cell_cnt[0] != NULL) { memory::wfree(m_halo_cell_cnt[0]); }
+	if(m_halo_cell_disp[0] != NULL) { memory::wfree(m_halo_cell_disp[0]); }
     }
     if(m_sendcnt != NULL) { memory::wfree(m_sendcnt); }
     if(m_senddisp != NULL) { memory::wfree(m_senddisp); }
@@ -187,6 +187,8 @@ void fmm::commit()
 
 	handle_box_resize();
 
+	int nleafs = m_tree_size - cell_meta_t::offset_for_level(max_level());
+	
 #ifdef IRIS_CUDA
 	if(m_iris->m_cuda) {
 	    memory::destroy_1d_gpu(m_M);
@@ -207,6 +209,19 @@ void fmm::commit()
 	    
 	    if(m_xcells != NULL) { memory::wfree_gpu(m_xcells); }
 	    m_xcells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
+
+	    if(m_halo_cell_cnt[0] != NULL) { memory::wfree_gpu(m_halo_cell_cnt[0]); }
+	    m_halo_cell_cnt[0] = (int *)memory::wmalloc_gpu(nleafs * sizeof(int));
+
+	    if(m_halo_cell_cnt[1] != NULL) { memory::wfree_gpu(m_halo_cell_cnt[1]); }
+	    m_halo_cell_cnt[1] = (int *)memory::wmalloc_gpu(nleafs * sizeof(int));
+
+	    if(m_halo_cell_disp[0] != NULL) { memory::wfree_gpu(m_halo_cell_disp[0]); }
+	    m_halo_cell_disp[0] = (int *)memory::wmalloc_gpu(nleafs * sizeof(int));
+
+	    if(m_halo_cell_disp[1] != NULL) { memory::wfree_gpu(m_halo_cell_disp[1]); }
+	    m_halo_cell_disp[1] = (int *)memory::wmalloc_gpu(nleafs * sizeof(int));
+	    
 	}else
 #endif
 	{
@@ -220,6 +235,12 @@ void fmm::commit()
 	    
 	    memory::destroy_1d(m_xcells);
 	    memory::create_1d(m_xcells, m_tree_size);
+
+	    if(m_halo_cell_cnt[0] != NULL) { memory::wfree(m_halo_cell_cnt[0]); }
+	    m_halo_cell_cnt[0] = (int *)memory::wmalloc(nleafs * sizeof(int));
+
+	    if(m_halo_cell_disp[0] != NULL) { memory::wfree(m_halo_cell_disp[0]); }
+	    m_halo_cell_disp[0] = (int *)memory::wmalloc(nleafs * sizeof(int));
 	}
 
 	memory::destroy_1d(m_sendcnt);
@@ -411,7 +432,7 @@ void fmm::solve()
     m_p2m_count = m_m2m_count = m_m2l_count = m_p2p_count = m_l2l_count = m_l2p_count = m_p2m_alien_count = m_m2m_alien_count = 0;
 
     local_tree_construction();
-    exchange_LET();    
+    exchange_LET();
     dual_tree_traversal();
     compute_energy_and_virial();
     send_back_forces();
@@ -861,7 +882,7 @@ void fmm::comm_LET()
 void fmm::recalculate_LET()
 {
     relink_parents(m_xcells);
-    eval_p2m(m_xcells, true);
+    //eval_p2m(m_xcells, true);  // this is no longer needed -- all necessary leaf cells's multipoles are also sent...
     eval_m2m(m_xcells, true);
 }
 

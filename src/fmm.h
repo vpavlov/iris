@@ -70,6 +70,10 @@ namespace ORG_NCSA_IRIS {
 	fmm(class iris *obj);
 	~fmm();
 
+#ifdef IRIS_CUDA
+	void cuda_specific_construct();
+#endif
+	
 	void commit();
 	void solve();
 	void handle_box_resize();
@@ -136,8 +140,7 @@ namespace ORG_NCSA_IRIS {
 	    if(in_count == 0) {
 		return;
 	    }
-	    
-	    box_t<iris_real> *gbox = &m_domain->m_global_box;
+
 	    int nleafs = (1 << 3 * max_level());
 	    int offset = cell_meta_t::offset_for_level(max_level());
 	    
@@ -145,7 +148,6 @@ namespace ORG_NCSA_IRIS {
 #pragma omp parallel
 #endif
 	    {
-		int tid = THREAD_ID;
 		int from, to;
 		setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
 		for(int i=from;i<to;i++) {
@@ -249,9 +251,18 @@ namespace ORG_NCSA_IRIS {
 	void exchange_LET();
 
 	void exchange_p2p_halo();
-	void send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req);
-	void recv_particles_from_neighbour(int rank, int alien_index, int alien_flag);
-	int border_leafs(int rank);
+	void send_particles_to_neighbour_cpu(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req);
+#ifdef IRIS_CUDA
+	void send_particles_to_neighbour_gpu(int rank, void *out_sendbuf_gpu, std::vector<xparticle_t> *out_sendbuf_cpu,
+					     MPI_Request *out_cnt_req, MPI_Request *out_data_req, cudaStream_t &stream,
+					     int *in_halo_cnt, int *in_halo_disp);
+#endif
+	void recv_particles_from_neighbour_cpu(int rank, int alien_index, int alien_flag);
+#ifdef IRIS_CUDA
+	void recv_particles_from_neighbour_gpu(int rank, int alien_index, int alien_flag);
+#endif
+	
+	void border_leafs(int rank);
 	
 	inline void comm_LET();
 	int comm_LET_cpu(cell_t *in_cells, iris_real *in_M);
@@ -378,6 +389,10 @@ namespace ORG_NCSA_IRIS {
 	particle_t *m_particles_cpu;
 	int m_particles_cpu_cap;
 	int *m_max_particles_gpu;
+
+	void *m_halo_parts_gpu[2];
+
+	int m_xparticles_cap[6];
 #endif
 
 	int m_max_particles;
@@ -389,8 +404,11 @@ namespace ORG_NCSA_IRIS {
 	std::map<struct pair_t, bool, pair_comparator_t> m_p2p_skip;
 	std::map<struct pair_t, bool, pair_comparator_t> m_m2l_skip;
 
-	std::vector<int> m_border_leafs;
+	int *m_halo_cell_cnt[2];
+	int *m_halo_cell_disp[2];
+	
 	std::vector<struct xparticle_t> m_border_parts[2];
+	
 	iris_real m_let_corr;
     };
 }

@@ -28,8 +28,11 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <assert.h>
+#include <thrust/device_vector.h>
 #include "cuda.h"
 #include "fmm.h"
+#include "tags.h"
+#include "comm_rec.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -63,4 +66,189 @@ void fmm::inhale_xcells_gpu(int in_count)
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(in_count, nthreads);
     k_inhale_cells<<<nblocks, nthreads>>>(m_recvbuf_gpu, in_count, m_xcells, m_M, unit_size, m_nterms);
+}
+
+
+///////////////////
+// Exchange halo //
+///////////////////
+
+__device__ iris_real d_distance_to(box_t<iris_real> &box, iris_real x, iris_real y, iris_real z)
+{
+    iris_real dx = (x > box.xhi) * (x - box.xhi) + (x < box.xlo) * (box.xlo - x);
+    iris_real dy = (y > box.yhi) * (y - box.yhi) + (y < box.ylo) * (box.ylo - y);
+    iris_real dz = (z > box.zhi) * (z - box.zhi) + (z < box.zlo) * (box.zlo - z);
+    return sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+__global__ void k_border_leafs(box_t<iris_real> rank_box, volatile int *m_border_leafs, int start, int end, cell_t *m_xcells, iris_real m_let_corr,
+			       iris_real gxsize, iris_real gysize, iris_real gzsize, iris_real m_mac)
+{
+    int n = IRIS_CUDA_TID + start;
+    if(n >= end) {
+	return;
+    }
+
+    if(m_xcells[n].num_children == 0) {  // only full cells
+    	return;
+    }
+
+    int per_idx = blockIdx.y;
+    int ix = per_idx % 3 - 1;
+    per_idx /= 3;
+    int iy = per_idx % 3 - 1;
+    per_idx /= 3;
+    int iz = per_idx % 3 - 1;
+
+    iris_real dn = m_xcells[n].ses.r + m_let_corr;
+    iris_real cx = m_xcells[n].ses.c.r[0];
+    iris_real cy = m_xcells[n].ses.c.r[1];
+    iris_real cz = m_xcells[n].ses.c.r[2];
+
+    iris_real x = __fma(ix, gxsize, cx);
+    iris_real y = __fma(iy, gysize, cy);
+    iris_real z = __fma(iz, gzsize, cz);
+    iris_real rn = d_distance_to(rank_box, x, y, z);
+    
+    if (dn/rn < m_mac) {
+    	return;
+    }
+
+    
+    m_border_leafs[n-start] = m_xcells[n].num_children;
+    // WTF: If you remove this nonsese, the kernel always returns 0 in m_border_leafs?!?!? Bug in CUDA compiler optimization????
+    if(m_border_leafs[n-start] == 0) {
+    	printf("WTF CUDA???\n");
+    }
+}
+
+// __global__ void k_part_count(int *in_border_leafs, cell_t *in_xcells, int offset, int end, int *out_count)
+// {
+//     __shared__ int acc[IRIS_CUDA_NTHREADS];
+//     int iacc = threadIdx.x;
+//     acc[iacc] = 0;
+    
+//     int tid = IRIS_CUDA_TID;
+//     if(tid == 0) {
+// 	*out_count = 0;
+//     }
+
+//     if(tid+offset < end && in_border_leafs[tid] != 0) {
+// 	acc[iacc] += in_xcells[tid+offset].num_children;
+//     }
+
+//     __syncthreads();
+
+//     for(int i=blockDim.x; i>0; i/=2) {
+// 	int stride = blockDim.x/i;
+// 	if(iacc < (blockDim.x - stride) && iacc % (2*stride) == 0) {
+// 	    acc[iacc] += acc[iacc+stride];
+// 	}
+// 	__syncthreads();
+//     }
+//     if(iacc == 0) {
+// 	atomicAdd(out_count, acc[0]);
+//     }
+// }
+
+__global__ void k_prepare_sendbuf(xparticle_t *out_sendbuf, particle_t *m_particles,
+				  xparticle_t *m_xparticles1, xparticle_t *m_xparticles2, xparticle_t *m_xparticles3,
+				  xparticle_t *m_xparticles4, xparticle_t *m_xparticles5, xparticle_t *m_xparticles6,
+				  cell_t *m_xcells, int *in_halo_cnt, int *in_halo_disp, int offset, int end)
+{
+    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which leaf ?
+    int cellID = leaf_idx + offset;
+    int j = IRIS_CUDA_TID;                                // Target particle inside cellID
+    int npart = m_xcells[cellID].num_children;            // Number of particles in the cell
+
+    if(j >= npart) {                                      // Make sure this is a valid particle
+    	return;
+    }
+
+    if(in_halo_cnt[leaf_idx] == 0) {
+    	return;
+    }
+    
+    cell_t *leaf = &m_xcells[cellID];
+
+    int disp = in_halo_disp[leaf_idx];
+    
+    xparticle_t *ptr;
+    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
+    	if(leaf->flags & IRIS_FMM_CELL_ALIEN_L1) {
+    	    ptr = m_xparticles1;
+    	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L2) {
+    	    ptr = m_xparticles2;
+    	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L3) {
+    	    ptr = m_xparticles3;
+    	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L4) {
+    	    ptr = m_xparticles4;
+    	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L5) {
+    	    ptr = m_xparticles5;
+    	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L6) {
+    	    ptr = m_xparticles6;
+    	}
+    	memcpy(out_sendbuf + disp + j, ptr[leaf->first_child + j].xyzq, sizeof(xparticle_t));
+    }else {
+    	memcpy(out_sendbuf + disp + j, m_particles[leaf->first_child + j].xyzq, sizeof(xparticle_t));
+    }
+}
+
+void fmm::send_particles_to_neighbour_gpu(int rank, void *out_sendbuf_void, std::vector<xparticle_t> *out_sendbuf_cpu,
+					  MPI_Request *out_cnt_req, MPI_Request *out_data_req, cudaStream_t &stream,
+					  int *in_halo_cell_cnt, int *in_halo_cell_disp)
+{
+    thrust::device_vector<xparticle_t> *out_sendbuf = (thrust::device_vector<xparticle_t> *)out_sendbuf_void;
+
+    int start = cell_meta_t::offset_for_level(max_level());
+    int end = m_tree_size;
+    int nleafs = end - start;
+
+    // TODO: figure out partial periodic and non-periodic PBC
+    cudaMemsetAsync(in_halo_cell_cnt, 0, nleafs * sizeof(int), stream);
+    dim3 nthreads(MIN(IRIS_CUDA_NTHREADS, nleafs), 1, 1);
+    dim3 nblocks((nleafs - 1)/IRIS_CUDA_NTHREADS + 1, 27, 1);
+    k_border_leafs<<<nblocks, nthreads, 0, stream>>>(m_domain->m_local_boxes[rank], in_halo_cell_cnt, start, end, m_xcells, m_let_corr,
+						     m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, m_mac);
+
+    thrust::exclusive_scan(thrust::cuda::par.on(stream), in_halo_cell_cnt, in_halo_cell_cnt + nleafs, in_halo_cell_disp, 0);
+    int last_count, last_disp;
+    cudaMemcpyAsync(&last_count, in_halo_cell_cnt + nleafs-1, sizeof(int), cudaMemcpyDefault, stream);
+    cudaMemcpyAsync(&last_disp, in_halo_cell_disp + nleafs-1, sizeof(int), cudaMemcpyDefault, stream);
+    cudaStreamSynchronize(stream);
+    int part_count = last_count + last_disp;
+    
+    m_logger->info("Will be sending %d particles to neighbour %d", part_count, rank);
+    MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
+
+    out_sendbuf_cpu->resize(part_count);
+    out_sendbuf->resize(part_count);
+    dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
+    dim3 nblocks2((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
+    k_prepare_sendbuf<<<nblocks2, nthreads2, 0, stream>>>(out_sendbuf->data().get(), m_particles,
+							  m_xparticles[0], m_xparticles[1], m_xparticles[2],
+							  m_xparticles[3], m_xparticles[4], m_xparticles[5],
+							  m_xcells, in_halo_cell_cnt, in_halo_cell_disp, start, end);
+    cudaMemcpyAsync(out_sendbuf_cpu->data(), out_sendbuf->data().get(), part_count * sizeof(xparticle_t), cudaMemcpyDefault, stream);
+    cudaStreamSynchronize(stream);
+    
+    MPI_Isend(out_sendbuf_cpu->data(), part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
+}
+
+void fmm::recv_particles_from_neighbour_gpu(int rank, int alien_index, int alien_flag)
+{
+    int part_count;
+    MPI_Recv(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, MPI_STATUS_IGNORE);
+
+    m_logger->info("Will be receiving %d paricles from neighbour %d", part_count, rank);
+
+    xparticle_t *tmp;
+    cudaMallocHost((void **)&tmp, part_count * sizeof(xparticle_t));
+    m_xparticles[alien_index] = (xparticle_t *)memory::wmalloc_gpu_cap(m_xparticles[alien_index], part_count, sizeof(xparticle_t), &m_xparticles_cap[alien_index]);
+
+    MPI_Recv(tmp, part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, MPI_STATUS_IGNORE);
+    
+    cudaMemcpyAsync(m_xparticles[alien_index], tmp, part_count * sizeof(xparticle_t), cudaMemcpyDefault, m_streams[0]);
+    distribute_particles(m_xparticles[alien_index], part_count, alien_flag, m_xcells);
+    cudaFreeHost(tmp);
 }

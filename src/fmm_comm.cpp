@@ -58,9 +58,16 @@ void fmm::exchange_p2p_halo()
     	    {
     		continue;
     	    }
-    	    send_particles_to_neighbour(rank, m_border_parts + j, cnt_req+j, data_req+j);
+#ifdef IRIS_CUDA
+	    if(m_iris->m_cuda) {
+		send_particles_to_neighbour_gpu(rank, m_halo_parts_gpu[j], m_border_parts + j, cnt_req+j, data_req+j, m_streams[2+j], m_halo_cell_cnt[j], m_halo_cell_disp[j]);
+	    }else
+#endif
+	    {
+		send_particles_to_neighbour_cpu(rank, m_border_parts + j, cnt_req+j, data_req+j);
+	    }
     	}
-
+	
     	for(int j=0;j<2;j++) {
     	    int rank = m_proc_grid->m_hood[i][1-j];
     	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
@@ -71,7 +78,15 @@ void fmm::exchange_p2p_halo()
 		alien_flag *= 2;
 		continue;
 	    }
-	    recv_particles_from_neighbour(rank, alien_index, alien_flag);
+#ifdef IRIS_CUDA
+	    if(m_iris->m_cuda) {
+		recv_particles_from_neighbour_gpu(rank, alien_index, alien_flag);
+	    }else
+#endif
+	    {
+		recv_particles_from_neighbour_cpu(rank, alien_index, alien_flag);
+	    }
+	    
 	    alien_index++;
 	    alien_flag *= 2;
     	}
@@ -82,22 +97,31 @@ void fmm::exchange_p2p_halo()
     }
 }
 
-void fmm::send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
+void fmm::send_particles_to_neighbour_cpu(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
 {
-    int bl_count = border_leafs(rank);
+    
+    border_leafs(rank);
     
     int part_count = 0;
-    for(int i=0;i<bl_count;i++) {
-	part_count += m_xcells[m_border_leafs[i]].num_children;
+    int offset = cell_meta_t::offset_for_level(max_level());
+    int nleafs = m_tree_size - offset;
+    for(int i=0;i<nleafs;i++) {
+	if(m_halo_cell_cnt[0][i] != 1) {
+	    continue;
+	}
+	part_count += m_xcells[offset+i].num_children;
     }
 
-    m_logger->info("Will be sending %d particles (from %d border leafs) to neighbour %d", part_count, bl_count, rank);
+    m_logger->info("Will be sending %d particles to neighbour %d", part_count, rank);
     
     MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
 
     out_sendbuf->clear();
-    for(int i=0;i<bl_count;i++) {
-	cell_t *leaf = &m_xcells[m_border_leafs[i]];
+    for(int i=0;i<nleafs;i++) {
+	if(m_halo_cell_cnt[0][i] != 1) {
+	    continue;
+	}
+	cell_t *leaf = &m_xcells[offset+i];
 	for(int j=0;j<leaf->num_children;j++) {
 	    xparticle_t *ptr;
 	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
@@ -130,15 +154,17 @@ void fmm::send_particles_to_neighbour(int rank, std::vector<xparticle_t> *out_se
 	    }
 	}
     }
-    
+
     MPI_Isend(out_sendbuf->data(), part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
 }
 
-int fmm::border_leafs(int rank)
+void fmm::border_leafs(int rank)
 {
-    m_border_leafs.clear();
     int start = cell_meta_t::offset_for_level(max_level());
     int end = m_tree_size;
+    
+    memset(m_halo_cell_cnt[0], 0, (end-start)*sizeof(int));
+    
     for(int n = start; n<end; n++) {  // iterate through all the leafs
 	if(m_xcells[n].num_children == 0) {  // only full cells
 	    continue;
@@ -172,13 +198,12 @@ int fmm::border_leafs(int rank)
 	}
 	
 	if(send) {
-	    m_border_leafs.push_back(n);
+	    m_halo_cell_cnt[0][n-start] = 1;
 	}
     }
-    return m_border_leafs.size();
 }
 
-void fmm::recv_particles_from_neighbour(int rank, int alien_index, int alien_flag)
+void fmm::recv_particles_from_neighbour_cpu(int rank, int alien_index, int alien_flag)
 {
     int part_count;
     MPI_Recv(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, MPI_STATUS_IGNORE);
@@ -189,7 +214,6 @@ void fmm::recv_particles_from_neighbour(int rank, int alien_index, int alien_fla
     memory::create_1d(m_xparticles[alien_index], part_count);
     
     MPI_Recv(m_xparticles[alien_index], part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, MPI_STATUS_IGNORE);
-
     distribute_particles(m_xparticles[alien_index], part_count, alien_flag, m_xcells);
 }
 

@@ -164,7 +164,9 @@ __device__ __forceinline__ void __reduce_warpy(iris_real4 &phie, int tid)
     }
 }
 
-__global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles, xparticle_t **m_xparticles,
+__global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles,
+			    xparticle_t *m_xparticles1, xparticle_t *m_xparticles2, xparticle_t *m_xparticles3,
+			    xparticle_t *m_xparticles4, xparticle_t *m_xparticles5, xparticle_t *m_xparticles6,
 			    iris_real gxsize, iris_real gysize, iris_real gzsize)
 {
     int pair_idx = blockIdx.y * gridDim.z + blockIdx.z;                  // Which interaction pair we're processing
@@ -177,31 +179,44 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     particle_t *sparticles;                                             // Source particles
     particle_t *dparticles = m_particles + m_cells[destID].first_child;  // Destination particles
 
-    
     // When the source cell is an alien cell, look at xparticles instead of particles.
     // Moreover, don't bother setting its calculated potential and field -- we won't use it...
     bool do_other_side;
+    iris_real sx = 1.0e+32, sy = 1.0e+32, sz = 1.0e+32, sq = 0.0;
     if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_LEAF) {
 	do_other_side = false;
+	xparticle_t *xparticles;
 	if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L1) {
-	    sparticles = (particle_t *)(m_xparticles[0] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles1 + m_xcells[srcID].first_child;
 	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L2) {
-	    sparticles = (particle_t *)(m_xparticles[1] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles2 + m_xcells[srcID].first_child;
 	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L3) {
-	    sparticles = (particle_t *)(m_xparticles[2] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles3 + m_xcells[srcID].first_child;
 	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L4) {
-	    sparticles = (particle_t *)(m_xparticles[3] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles4 + m_xcells[srcID].first_child;
 	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L5) {
-	    sparticles = (particle_t *)(m_xparticles[4] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles5 + m_xcells[srcID].first_child;
 	}else if(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_L6) {
-	    sparticles = (particle_t *)(m_xparticles[5] + m_xcells[srcID].first_child + si);
+	    xparticles = m_xparticles6 + m_xcells[srcID].first_child;
+	}
+	if(si < m_xcells[srcID].num_children) {
+	    sx = xparticles[si].xyzq[0];
+	    sy = xparticles[si].xyzq[1];
+	    sz = xparticles[si].xyzq[2];
+	    sq = xparticles[si].xyzq[3];
 	}
     }else {
 	do_other_side = true;
-	sparticles = m_particles + m_xcells[srcID].first_child + si;
+	sparticles = m_particles + m_xcells[srcID].first_child;
+	if(si < m_xcells[srcID].num_children) {
+	    sx = sparticles[si].xyzq[0];
+	    sy = sparticles[si].xyzq[1];
+	    sz = sparticles[si].xyzq[2];
+	    sq = sparticles[si].xyzq[3];
+	}
     }
-
     
+
     // Store 64 source particles (one per thread) in the src shared buffer.
     // In case there are not enough particles, store a dummy particle
     // that is sufficiently far from all the others. This is crucially needed for the
@@ -209,14 +224,10 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     //
     // Shared buffer is used to avoid fetches from RAM and cache misses in the inner loop
     __shared__ iris_real4 src[64];
-    if(si < m_xcells[srcID].num_children) {
-	src[block_tid].x = __fma(list[pair_idx].ix, gxsize, sparticles->xyzq[0]);
-	src[block_tid].y = __fma(list[pair_idx].iy, gysize, sparticles->xyzq[1]);
-	src[block_tid].z = __fma(list[pair_idx].iz, gzsize, sparticles->xyzq[2]);
-	src[block_tid].w = sparticles->xyzq[3];
-    }else {
-	src[block_tid] = make_iris_real4(1.0e+32, 1.0e+32, 1.0e+32, 0.0);
-    }
+    src[block_tid].x = __fma(list[pair_idx].ix, gxsize, sx);
+    src[block_tid].y = __fma(list[pair_idx].iy, gysize, sy);
+    src[block_tid].z = __fma(list[pair_idx].iz, gzsize, sz);
+    src[block_tid].w = sq;
     __syncthreads();
 
     
@@ -230,6 +241,7 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     int nc = m_cells[destID].num_children;                               // original # of destination particles
     int batches = nc/8;                                                  // # of batches
     int di = threadIdx.y;                                                // index of destination particle
+    
     for(int k=0;k<=batches;k++) {
 	// Move particle data in dest. The last batch may not be whole, in which
 	// case set a dummy dest of a faraway particle (but not same as the
@@ -290,7 +302,6 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     // This is only needed in case we want to assign the calculated potential/field
     // to the source particle. For particles coming from other ranks this is not needed.
     if(do_other_side) {
-	sparticles -= si;
 	for(int k=0;k<8;k++) {
 	    int si = blockIdx.x*64 + k*8 + threadIdx.x;
 	    __reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
@@ -315,7 +326,9 @@ void fmm::eval_p2p_gpu()
     // NOTE: The whole thing only works for 8x8x1 blocks, so don't try to change it.
     dim3 nthreads(8, 8, 1);
     dim3 nblocks((m_max_particles-1)/64 + 1, n, 1);
-    k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[1]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles, m_xparticles,
+    k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[1]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles,
+							m_xparticles[0], m_xparticles[1], m_xparticles[2],
+							m_xparticles[3], m_xparticles[4], m_xparticles[5],
 							m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
     cudaEventSynchronize(m_p2p_memcpy_done);
     m_p2p_list.clear();

@@ -34,7 +34,7 @@ char **split(char *line, int max)
     return tokens;
 }
 
-#define SUBSTR(DEST, SRC, START, END) \
+#define SUBSTR(DEST, SRC, START, END)				\
     memcpy((DEST), ((SRC)+(START)-1), ((END)-(START)+1));	\
     (DEST)[((END)-(START)+1)] = '\0';
 
@@ -400,7 +400,7 @@ int main(int argc, char **argv)
 {
     int depth = get_int_env("DEPTH", 4);
     int order = get_int_env("ORDER", 10);
-    float mac = get_float_env("MAC", 0.866025404 + 1e-6);
+    float mac = get_float_env("MAC", 0.866025404);
     
     if(argc != 3) {
 	printf("Usage: %s <path-to-bob-trj dir> <mode>\n", argv[0]);
