@@ -433,8 +433,8 @@ namespace ORG_NCSA_IRIS {
 	void *m_a2a_cell_cnt_gpu;
 	void *m_a2a_cell_disp_gpu;
 	void *m_a2a_sendbuf_gpu;
-	std::vector<struct xparticle_t, HostAlloc<struct xparticle_T>> m_a2a_recvbuf;
-	std::vector<struct xparticle_t, HostAlloc<struct xparticle_T>> m_a2a_sendbuf_cpu;
+	std::vector<struct xparticle_t, HostAlloc<struct xparticle_t>> m_a2a_recvbuf;
+	std::vector<struct xparticle_t, HostAlloc<struct xparticle_t>> m_a2a_sendbuf_cpu;
 #endif
 	
     };
