@@ -733,8 +733,6 @@ void fmm::send_back_forces_gpu()
 
 void fmm::cuda_specific_construct()
 {
-    m_halo_parts_gpu[0] = new thrust::device_vector<xparticle_t>();
-    m_halo_parts_gpu[1] = new thrust::device_vector<xparticle_t>();
     for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	cudaStreamCreate(&m_streams[i]);
     }
@@ -743,6 +741,12 @@ void fmm::cuda_specific_construct()
     cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
     cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
     cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
+
+    // TODO: these must be deleted in a destruct (but not in fmm.cpp, which doesn't know about thrust potentially)
+    m_a2a_cell_cnt_gpu = new thrust::device_vector<int>();
+    m_a2a_cell_disp_gpu = new thrust::device_vector<int>();
+    m_a2a_sendbuf_gpu = new thrust::device_vector<xparticle_t>();
+
     IRIS_CUDA_CHECK_ERROR;
 }
 

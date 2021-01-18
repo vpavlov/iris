@@ -101,6 +101,7 @@ namespace ORG_NCSA_IRIS {
 	template <class U> HostAlloc (const HostAlloc<U>&) throw() {}
 	~HostAlloc() throw() {}
     };
+    
 }
 
 #endif

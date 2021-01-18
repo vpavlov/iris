@@ -39,46 +39,33 @@
 using namespace ORG_NCSA_IRIS;
 
 
-void fmm::a2a_halo()
-{
-    timer tm;
-    tm.start();
-    
-    get_send_rank();
-    get_send_count();
+/////////////////////////
+// Exchange halo (CPU) //
+/////////////////////////
 
-    tm.stop();
-    m_logger->info("A2A: %g s", tm.read_wall());
-}
 
-void fmm::get_send_rank()
+void h_border_leafs(int nleafs, int nthreads, int offset, cell_t *m_xcells, iris_real m_let_corr, proc_grid *m_proc_grid, domain *m_domain, int rank, iris_real m_mac,
+		    std::vector<int> &m_a2a_cell_cnt)
 {
-    m_a2a_halo_ranks.clear();
-    m_a2a_halo_cell_cnt.clear();
-    m_a2a_halo_cells.clear();
-    
-    int start = cell_meta_t::offset_for_level(max_level());
-    int end = m_tree_size;
-    
-    int old = 0;
-    for(int rank=0;rank<m_local_comm->m_size;rank++) {
-	    
-	if(rank == m_local_comm->m_rank) {
-	    continue;
-	}
-	   
-	for(int n = start; n<end; n++) {
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int from, to;
+	setup_work_sharing(nleafs, nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    int n = i + offset;
 	    if(m_xcells[n].num_children == 0) {
 		continue;
 	    }
-	    
+
 	    bool send = false;
 	    
 	    iris_real dn = m_xcells[n].ses.r + m_let_corr;
 	    iris_real cx = m_xcells[n].ses.c.r[0];
 	    iris_real cy = m_xcells[n].ses.c.r[1];
 	    iris_real cz = m_xcells[n].ses.c.r[2];
-
+	    
 	    for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
 		if(send) { break; }
 		for(int iy = -m_proc_grid->m_pbc[1]; iy <= m_proc_grid->m_pbc[1]; iy++) {
@@ -100,37 +87,91 @@ void fmm::get_send_rank()
 	    }
 	    
 	    if(send) {
-		m_a2a_halo_cells.push_back(n);
+		m_a2a_cell_cnt[i] = m_xcells[n].num_children;
 	    }
 	}
-	m_a2a_halo_ranks.push_back(rank);
-	m_a2a_halo_cell_cnt.push_back(m_a2a_halo_cells.size() - old);
-	old = m_a2a_halo_cells.size();
     }
 }
 
-void fmm::get_send_count()
+void h_excl_scan(const int *in, int *out, int size, int initial)
 {
+    if (size > 0) {
+	//#pragma omp simd reduction(inscan, +:initial)
+	for (int i=0;i<size-1;i++) {
+	    out[i] = initial;
+	    //#pragma omp scan exclusive(initial)
+	    initial += in[i];
+	}
+	out[size - 1] = initial;
+    }
+}
+
+void h_fill_sendbuf(int nleafs, int nthreads, int offset, std::vector<int> &m_a2a_cell_cnt, std::vector<int> &m_a2a_cell_disp, xparticle_t *out_sendbuf,
+		    particle_t *m_particles, cell_t *m_xcells)
+{
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+    {
+	int tid = THREAD_ID;
+	int from, to;
+	setup_work_sharing(nleafs, nthreads, &from, &to);
+	for(int i=from;i<to;i++) {
+	    int n = i + offset;
+	    int cnt = m_a2a_cell_cnt[i];
+	    int disp = m_a2a_cell_disp[i];
+	    particle_t *src = m_particles + m_xcells[n].first_child;
+	    xparticle_t *dest = out_sendbuf + disp;
+	    for(int j=0;j<cnt;j++) {
+	    	dest->xyzq[0] = src->xyzq[0];
+	    	dest->xyzq[1] = src->xyzq[1];
+	    	dest->xyzq[2] = src->xyzq[2];
+	    	dest->xyzq[3] = src->xyzq[3];
+	    	dest->cellID = src->cellID;
+	    	src++;
+	    	dest++;
+	    }
+	}
+    }
+}
+
+int fmm::collect_halo_for(int rank, int hwm)
+{
+    int start = cell_meta_t::offset_for_level(max_level());
+    int end = m_tree_size;
+    int nleafs = end - start;
+
+    m_a2a_cell_cnt.assign(nleafs, 0);
+    m_a2a_cell_disp.resize(nleafs);
+    
+    h_border_leafs(nleafs, m_iris->m_nthreads, start, m_xcells, m_let_corr, m_proc_grid, m_domain, rank, m_mac, m_a2a_cell_cnt);
+    h_excl_scan(m_a2a_cell_cnt.data(), m_a2a_cell_disp.data(), nleafs, 0);
+    int halo_size = m_a2a_cell_cnt[nleafs-1] + m_a2a_cell_disp[nleafs-1];
+    m_a2a_sendbuf.resize(m_a2a_sendbuf.size() + halo_size);
+    h_fill_sendbuf(nleafs, m_iris->m_nthreads, start, m_a2a_cell_cnt, m_a2a_cell_disp, m_a2a_sendbuf.data() + hwm, m_particles, m_xcells);
+    return halo_size;
+}
+
+void fmm::exchange_p2p_halo_cpu()
+{
+    timer tm;
+    tm.start();
+    
     m_a2a_send_cnt.assign(m_local_comm->m_size, 0);
     m_a2a_send_disp.assign(m_local_comm->m_size, 0);
     m_a2a_recv_cnt.resize(m_local_comm->m_size);
     m_a2a_recv_disp.resize(m_local_comm->m_size);
     m_a2a_sendbuf.clear();
-    
-    int n = 0, old = 0;
-    for(int i=0;i<m_a2a_halo_ranks.size();i++) {
-	int rank = m_a2a_halo_ranks[i];
-	for(int j=0;j<m_a2a_halo_cell_cnt[i];j++) {
-	    int cellID = m_a2a_halo_cells[n++];
-	    for(int k=0;k<m_xcells[cellID].num_children;k++) {
-		particle_t *ptr = m_particles + m_xcells[cellID].first_child + k;
-		xparticle_t p(ptr->xyzq[0], ptr->xyzq[1], ptr->xyzq[2], ptr->xyzq[3], ptr->cellID);
-		m_a2a_sendbuf.push_back(p);
-	    }
-	}
-	m_a2a_send_cnt[rank] = m_a2a_sendbuf.size() - old;
-	m_a2a_send_disp[rank] = old;
-	old += m_a2a_send_cnt[rank];
+
+    int hwm = 0;
+    for(int rank=0;rank<m_local_comm->m_size;rank++) {
+    	if(rank == m_local_comm->m_rank) {
+    	    continue;
+    	}
+    	int cnt = collect_halo_for(rank, hwm);
+    	m_a2a_send_cnt[rank] = cnt;
+    	m_a2a_send_disp[rank] = hwm;
+    	hwm += cnt;
     }
 
     // for(int i=0;i<m_local_comm->m_size;i++) {
@@ -141,213 +182,38 @@ void fmm::get_send_count()
 
     int rsize = 0;
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_a2a_recv_disp[i] = rsize;
-	rsize += m_a2a_recv_cnt[i];
+    	m_a2a_recv_disp[i] = rsize;
+    	rsize += m_a2a_recv_cnt[i];
     }
 
-    m_xparticles[0] = (xparticle_t *)memory::wmalloc_cap(m_xparticles[0], rsize, sizeof(xparticle_t), m_xparticles_cap + 0);
+    m_xparticles[0] = (xparticle_t *)memory::wmalloc_cap(m_xparticles[0], rsize, sizeof(xparticle_t), m_xparticles_cap);
     
     // for(int i=0;i<m_local_comm->m_size;i++) {
     // 	m_logger->info("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
     // }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_a2a_send_cnt[i] *= sizeof(xparticle_t);
-	m_a2a_send_disp[i] *= sizeof(xparticle_t);
-	m_a2a_recv_cnt[i] *= sizeof(xparticle_t);
-	m_a2a_recv_disp[i] *= sizeof(xparticle_t);
+    	m_a2a_send_cnt[i] *= sizeof(xparticle_t);
+    	m_a2a_send_disp[i] *= sizeof(xparticle_t);
+    	m_a2a_recv_cnt[i] *= sizeof(xparticle_t);
+    	m_a2a_recv_disp[i] *= sizeof(xparticle_t);
     }
 
     MPI_Alltoallv(m_a2a_sendbuf.data(), m_a2a_send_cnt.data(), m_a2a_send_disp.data(), MPI_BYTE,
-		  m_xparticles[0], m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
-		  MPI_COMM_WORLD);
+    		  m_xparticles[0], m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
+    		  MPI_COMM_WORLD);
     
     distribute_particles(m_xparticles[0], rsize, IRIS_FMM_CELL_ALIEN_L1, m_xcells);
-}
-
-//
-// Using the multipole acceptance criteria it finds out which leafs are too close and so need to participate
-// in P2P and sends the leaf metainfo and particle details to that neighbour.
-//
-void fmm::exchange_p2p_halo()
-{
-    timer tm;
-    tm.start();
     
-    int alien_index = 0;
-    int alien_flag = IRIS_FMM_CELL_ALIEN_L1;
-    for(int i=0;i<3;i++) {
-    	MPI_Request cnt_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
-    	MPI_Request data_req[2] = { MPI_REQUEST_NULL, MPI_REQUEST_NULL };
-
-    	for(int j=0;j<2;j++) {
-    	    int rank = m_proc_grid->m_hood[i][j];
-    	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
-    	       rank == m_local_comm->m_rank ||                 // not same rank
-    	       (j == 1 && rank == m_proc_grid->m_hood[i][0]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
-    	    {
-    		continue;
-    	    }
-#ifdef IRIS_CUDA
-	    if(m_iris->m_cuda) {
-		send_particles_to_neighbour_gpu(rank, m_halo_parts_gpu[j], m_border_parts + j, cnt_req+j, data_req+j, m_streams[2+j], m_halo_cell_cnt[j], m_halo_cell_disp[j]);
-	    }else
-#endif
-	    {
-		send_particles_to_neighbour_cpu(rank, m_border_parts + j, cnt_req+j, data_req+j);
-	    }
-    	}
-	
-    	for(int j=0;j<2;j++) {
-    	    int rank = m_proc_grid->m_hood[i][1-j];
-    	    if(rank < 0 ||                                     // no pbc and no neighbour in this dir
-    	       rank == m_local_comm->m_rank ||                 // not same rank
-    	       (j == 1 && rank == m_proc_grid->m_hood[i][1]))  // this rank was processed on the previous iteration (e.g. PBC, 2 in dir, 0 has 1 as both left and right neighbours)
-	    {
-		alien_index++;
-		alien_flag *= 2;
-		continue;
-	    }
-#ifdef IRIS_CUDA
-	    if(m_iris->m_cuda) {
-		recv_particles_from_neighbour_gpu(rank, alien_index, alien_flag);
-	    }else
-#endif
-	    {
-		recv_particles_from_neighbour_cpu(rank, alien_index, alien_flag);
-	    }
-	    
-	    alien_index++;
-	    alien_flag *= 2;
-    	}
-    	for(int j=0;j<2;j++) {
-    	    MPI_Wait(cnt_req+j, MPI_STATUS_IGNORE);
-    	    MPI_Wait(data_req+j, MPI_STATUS_IGNORE);
-    	}
-    }
     tm.stop();
-    m_logger->info("P2P %g s", tm.read_wall());
+    m_logger->time("Halo exchange wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
-void fmm::send_particles_to_neighbour_cpu(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)
-{
-    
-    border_leafs(rank);
-    
-    int part_count = 0;
-    int offset = cell_meta_t::offset_for_level(max_level());
-    int nleafs = m_tree_size - offset;
-    for(int i=0;i<nleafs;i++) {
-	if(m_halo_cell_cnt[0][i] != 1) {
-	    continue;
-	}
-	part_count += m_xcells[offset+i].num_children;
-    }
 
-    m_logger->info("Will be sending %d particles to neighbour %d", part_count, rank);
-    
-    MPI_Isend(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, out_cnt_req);
+//////////////
+// Comm LET //
+//////////////
 
-    out_sendbuf->clear();
-    for(int i=0;i<nleafs;i++) {
-	if(m_halo_cell_cnt[0][i] != 1) {
-	    continue;
-	}
-	cell_t *leaf = &m_xcells[offset+i];
-	for(int j=0;j<leaf->num_children;j++) {
-	    xparticle_t *ptr;
-	    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		if(leaf->flags & IRIS_FMM_CELL_ALIEN_L1) {
-		    ptr = m_xparticles[0];
-		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L2) {
-		    ptr = m_xparticles[1];
-		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L3) {
-		    ptr = m_xparticles[2];
-		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L4) {
-		    ptr = m_xparticles[3];
-		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L5) {
-		    ptr = m_xparticles[4];
-		}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L6) {
-		    ptr = m_xparticles[5];
-		}
-		xparticle_t p(ptr[leaf->first_child + j].xyzq[0],
-			      ptr[leaf->first_child + j].xyzq[1],
-			      ptr[leaf->first_child + j].xyzq[2],
-			      ptr[leaf->first_child + j].xyzq[3],
-			      ptr[leaf->first_child + j].cellID);
-		out_sendbuf->push_back(p);
-	    }else {
-		xparticle_t p(m_particles[leaf->first_child + j].xyzq[0],
-			      m_particles[leaf->first_child + j].xyzq[1],
-			      m_particles[leaf->first_child + j].xyzq[2],
-			      m_particles[leaf->first_child + j].xyzq[3],
-			      m_particles[leaf->first_child + j].cellID);
-		out_sendbuf->push_back(p);
-	    }
-	}
-    }
-
-    MPI_Isend(out_sendbuf->data(), part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, out_data_req);
-}
-
-void fmm::border_leafs(int rank)
-{
-    int start = cell_meta_t::offset_for_level(max_level());
-    int end = m_tree_size;
-    
-    memset(m_halo_cell_cnt[0], 0, (end-start)*sizeof(int));
-    
-    for(int n = start; n<end; n++) {  // iterate through all the leafs
-	if(m_xcells[n].num_children == 0) {  // only full cells
-	    continue;
-	}
-	
-	bool send = false;
-	
-	iris_real dn = m_xcells[n].ses.r + m_let_corr;
-	iris_real cx = m_xcells[n].ses.c.r[0];
-	iris_real cy = m_xcells[n].ses.c.r[1];
-	iris_real cz = m_xcells[n].ses.c.r[2];
-	
-	for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
-	    if(send) { break; }
-	    for(int iy = -m_proc_grid->m_pbc[1]; iy <= m_proc_grid->m_pbc[1]; iy++) {
-		if(send) { break; }
-		for(int iz = -m_proc_grid->m_pbc[2]; iz <= m_proc_grid->m_pbc[2]; iz++) {
-		    iris_real x = cx + ix * m_domain->m_global_box.xsize;
-		    iris_real y = cy + iy * m_domain->m_global_box.ysize;
-		    iris_real z = cz + iz * m_domain->m_global_box.zsize;
-		    iris_real rn = m_domain->m_local_boxes[rank].distance_to(x, y, z);
-		    if (dn/rn < m_mac) {
-			continue;
-		    }
-		    // D(n)/r(n) >= θ - this means that this cell is too close to the border
-		    // and is needed by the other processor to do P2P
-		    send = true;
-		    break;
-		}
-	    }
-	}
-	
-	if(send) {
-	    m_halo_cell_cnt[0][n-start] = 1;
-	}
-    }
-}
-
-void fmm::recv_particles_from_neighbour_cpu(int rank, int alien_index, int alien_flag)
-{
-    int part_count;
-    MPI_Recv(&part_count, 1, MPI_INT, rank, IRIS_TAG_FMM_P2P_HALO_CNT, m_local_comm->m_comm, MPI_STATUS_IGNORE);
-
-    m_logger->trace("Will be receiving %d paricles from neighbour %d", part_count, rank);
-    
-    memory::destroy_1d(m_xparticles[alien_index]);
-    memory::create_1d(m_xparticles[alien_index], part_count);
-    
-    MPI_Recv(m_xparticles[alien_index], part_count*sizeof(xparticle_t), MPI_BYTE, rank, IRIS_TAG_FMM_P2P_HALO, m_local_comm->m_comm, MPI_STATUS_IGNORE);
-    distribute_particles(m_xparticles[alien_index], part_count, alien_flag, m_xcells);
-}
 
 int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
 {    

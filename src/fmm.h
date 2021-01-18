@@ -250,7 +250,14 @@ namespace ORG_NCSA_IRIS {
 	
 	void exchange_LET();
 
-	void exchange_p2p_halo();
+	
+	inline void exchange_p2p_halo();
+#ifdef IRIS_CUDA
+	void exchange_p2p_halo_gpu();
+#endif
+	void exchange_p2p_halo_cpu();
+
+	
 	void send_particles_to_neighbour_cpu(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req);
 #ifdef IRIS_CUDA
 	void send_particles_to_neighbour_gpu(int rank, void *out_sendbuf_gpu, std::vector<xparticle_t> *out_sendbuf_cpu,
@@ -411,19 +418,24 @@ namespace ORG_NCSA_IRIS {
 	
 	iris_real m_let_corr;
 
-	void a2a_halo();
-	void get_send_rank();
-	void get_send_count();
-	    
-	std::vector<int> m_a2a_halo_ranks;
-	std::vector<int> m_a2a_halo_cell_cnt;
-	std::vector<int> m_a2a_halo_cells;
+	
+	int collect_halo_for(int rank, int hwm);
+	std::vector<int> m_a2a_cell_cnt;
+	std::vector<int> m_a2a_cell_disp;
 	std::vector<int> m_a2a_send_cnt;
 	std::vector<int> m_a2a_send_disp;
 	std::vector<int> m_a2a_recv_cnt;
 	std::vector<int> m_a2a_recv_disp;
 	std::vector<xparticle_t> m_a2a_sendbuf;
-	std::vector<xparticle_t> m_a2a_recvbuf;
+
+#ifdef IRIS_CUDA
+	int collect_halo_for_gpu(int rank, int hwm);
+	void *m_a2a_cell_cnt_gpu;
+	void *m_a2a_cell_disp_gpu;
+	void *m_a2a_sendbuf_gpu;
+	std::vector<struct xparticle_t, HostAlloc<struct xparticle_T>> m_a2a_recvbuf;
+	std::vector<struct xparticle_t, HostAlloc<struct xparticle_T>> m_a2a_sendbuf_cpu;
+#endif
 	
     };
 }

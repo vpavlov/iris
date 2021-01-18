@@ -29,7 +29,6 @@
 //==============================================================================
 #include <assert.h>
 #include <algorithm>
-#include <execution>
 #include "fmm.h"
 #include "fmm_cell.h"
 #include "fmm_particle.h"
@@ -123,6 +122,7 @@ fmm::~fmm()
 	if(m_halo_cell_cnt[1] != NULL) { memory::wfree_gpu(m_halo_cell_cnt[1]); }
 	if(m_halo_cell_disp[0] != NULL) { memory::wfree_gpu(m_halo_cell_disp[0]); }
 	if(m_halo_cell_disp[1] != NULL) { memory::wfree_gpu(m_halo_cell_disp[1]); }
+
     }else 
 #endif
     {
@@ -846,8 +846,7 @@ void fmm::exchange_LET()
     }
     
     if(m_local_comm->m_size > 1) {
-	a2a_halo();
-	//exchange_p2p_halo();
+	exchange_p2p_halo();
 	comm_LET();
 	recalculate_LET();
     }
@@ -863,6 +862,18 @@ void fmm::exchange_LET()
     
    tm.stop();
    m_logger->time("FMM: Exchange LET Total wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+}
+
+void fmm::exchange_p2p_halo()
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	exchange_p2p_halo_gpu();
+    }else
+#endif
+    {
+	exchange_p2p_halo_cpu();
+    }
 }
 
 void fmm::comm_LET()
