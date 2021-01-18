@@ -38,12 +38,142 @@
 
 using namespace ORG_NCSA_IRIS;
 
+
+void fmm::a2a_halo()
+{
+    timer tm;
+    tm.start();
+    
+    get_send_rank();
+    get_send_count();
+
+    tm.stop();
+    m_logger->info("A2A: %g s", tm.read_wall());
+}
+
+void fmm::get_send_rank()
+{
+    m_a2a_halo_ranks.clear();
+    m_a2a_halo_cell_cnt.clear();
+    m_a2a_halo_cells.clear();
+    
+    int start = cell_meta_t::offset_for_level(max_level());
+    int end = m_tree_size;
+    
+    int old = 0;
+    for(int rank=0;rank<m_local_comm->m_size;rank++) {
+	    
+	if(rank == m_local_comm->m_rank) {
+	    continue;
+	}
+	   
+	for(int n = start; n<end; n++) {
+	    if(m_xcells[n].num_children == 0) {
+		continue;
+	    }
+	    
+	    bool send = false;
+	    
+	    iris_real dn = m_xcells[n].ses.r + m_let_corr;
+	    iris_real cx = m_xcells[n].ses.c.r[0];
+	    iris_real cy = m_xcells[n].ses.c.r[1];
+	    iris_real cz = m_xcells[n].ses.c.r[2];
+
+	    for(int ix = -m_proc_grid->m_pbc[0]; ix <= m_proc_grid->m_pbc[0]; ix++) {
+		if(send) { break; }
+		for(int iy = -m_proc_grid->m_pbc[1]; iy <= m_proc_grid->m_pbc[1]; iy++) {
+		    if(send) { break; }
+		    for(int iz = -m_proc_grid->m_pbc[2]; iz <= m_proc_grid->m_pbc[2]; iz++) {
+			iris_real x = cx + ix * m_domain->m_global_box.xsize;
+			iris_real y = cy + iy * m_domain->m_global_box.ysize;
+			iris_real z = cz + iz * m_domain->m_global_box.zsize;
+			iris_real rn = m_domain->m_local_boxes[rank].distance_to(x, y, z);
+			if (dn/rn < m_mac) {
+			    continue;
+			}
+			// D(n)/r(n) >= θ - this means that this cell is too close to the border
+			// and is needed by the other processor to do P2P
+			send = true;
+			break;
+		    }
+		}
+	    }
+	    
+	    if(send) {
+		m_a2a_halo_cells.push_back(n);
+	    }
+	}
+	m_a2a_halo_ranks.push_back(rank);
+	m_a2a_halo_cell_cnt.push_back(m_a2a_halo_cells.size() - old);
+	old = m_a2a_halo_cells.size();
+    }
+}
+
+void fmm::get_send_count()
+{
+    m_a2a_send_cnt.assign(m_local_comm->m_size, 0);
+    m_a2a_send_disp.assign(m_local_comm->m_size, 0);
+    m_a2a_recv_cnt.resize(m_local_comm->m_size);
+    m_a2a_recv_disp.resize(m_local_comm->m_size);
+    m_a2a_sendbuf.clear();
+    
+    int n = 0, old = 0;
+    for(int i=0;i<m_a2a_halo_ranks.size();i++) {
+	int rank = m_a2a_halo_ranks[i];
+	for(int j=0;j<m_a2a_halo_cell_cnt[i];j++) {
+	    int cellID = m_a2a_halo_cells[n++];
+	    for(int k=0;k<m_xcells[cellID].num_children;k++) {
+		particle_t *ptr = m_particles + m_xcells[cellID].first_child + k;
+		xparticle_t p(ptr->xyzq[0], ptr->xyzq[1], ptr->xyzq[2], ptr->xyzq[3], ptr->cellID);
+		m_a2a_sendbuf.push_back(p);
+	    }
+	}
+	m_a2a_send_cnt[rank] = m_a2a_sendbuf.size() - old;
+	m_a2a_send_disp[rank] = old;
+	old += m_a2a_send_cnt[rank];
+    }
+
+    // for(int i=0;i<m_local_comm->m_size;i++) {
+    // 	m_logger->info("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
+    // }
+    
+    MPI_Alltoall(m_a2a_send_cnt.data(), 1, MPI_INT, m_a2a_recv_cnt.data(), 1, MPI_INT, m_local_comm->m_comm);
+
+    int rsize = 0;
+    for(int i=0;i<m_local_comm->m_size;i++) {
+	m_a2a_recv_disp[i] = rsize;
+	rsize += m_a2a_recv_cnt[i];
+    }
+
+    m_xparticles[0] = (xparticle_t *)memory::wmalloc_cap(m_xparticles[0], rsize, sizeof(xparticle_t), m_xparticles_cap + 0);
+    
+    // for(int i=0;i<m_local_comm->m_size;i++) {
+    // 	m_logger->info("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
+    // }
+
+    for(int i=0;i<m_local_comm->m_size;i++) {
+	m_a2a_send_cnt[i] *= sizeof(xparticle_t);
+	m_a2a_send_disp[i] *= sizeof(xparticle_t);
+	m_a2a_recv_cnt[i] *= sizeof(xparticle_t);
+	m_a2a_recv_disp[i] *= sizeof(xparticle_t);
+    }
+
+    MPI_Alltoallv(m_a2a_sendbuf.data(), m_a2a_send_cnt.data(), m_a2a_send_disp.data(), MPI_BYTE,
+		  m_xparticles[0], m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
+		  MPI_COMM_WORLD);
+    
+    distribute_particles(m_xparticles[0], rsize, IRIS_FMM_CELL_ALIEN_L1, m_xcells);
+}
+
 //
 // Using the multipole acceptance criteria it finds out which leafs are too close and so need to participate
 // in P2P and sends the leaf metainfo and particle details to that neighbour.
 //
 void fmm::exchange_p2p_halo()
 {
+    timer tm;
+    tm.start();
+    
     int alien_index = 0;
     int alien_flag = IRIS_FMM_CELL_ALIEN_L1;
     for(int i=0;i<3;i++) {
@@ -95,6 +225,8 @@ void fmm::exchange_p2p_halo()
     	    MPI_Wait(data_req+j, MPI_STATUS_IGNORE);
     	}
     }
+    tm.stop();
+    m_logger->info("P2P %g s", tm.read_wall());
 }
 
 void fmm::send_particles_to_neighbour_cpu(int rank, std::vector<xparticle_t> *out_sendbuf, MPI_Request *out_cnt_req, MPI_Request *out_data_req)

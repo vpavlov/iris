@@ -499,7 +499,6 @@ void h_load_charges(iris_real *charges, int ncharges, int hwm,
 #pragma omp parallel
 #endif
     {
-	int tid = THREAD_ID;
 	int from, to;
 	setup_work_sharing(ncharges, nthreads, &from, &to);
 	for(int i=from;i<to;i++) {
@@ -560,7 +559,7 @@ void fmm::load_particles_cpu()
     std::sort(m_particles, m_particles+m_nparticles, [](const particle_t &a, const particle_t &b) { return a.cellID < b.cellID; });
     
     tm.stop();
-    m_logger->time("Load particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());    
+    m_logger->time("Load particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 void fmm::relink_parents(cell_t *io_cells)
@@ -847,7 +846,8 @@ void fmm::exchange_LET()
     }
     
     if(m_local_comm->m_size > 1) {
-	exchange_p2p_halo();
+	a2a_halo();
+	//exchange_p2p_halo();
 	comm_LET();
 	recalculate_LET();
     }

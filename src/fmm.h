@@ -410,6 +410,21 @@ namespace ORG_NCSA_IRIS {
 	std::vector<struct xparticle_t> m_border_parts[2];
 	
 	iris_real m_let_corr;
+
+	void a2a_halo();
+	void get_send_rank();
+	void get_send_count();
+	    
+	std::vector<int> m_a2a_halo_ranks;
+	std::vector<int> m_a2a_halo_cell_cnt;
+	std::vector<int> m_a2a_halo_cells;
+	std::vector<int> m_a2a_send_cnt;
+	std::vector<int> m_a2a_send_disp;
+	std::vector<int> m_a2a_recv_cnt;
+	std::vector<int> m_a2a_recv_disp;
+	std::vector<xparticle_t> m_a2a_sendbuf;
+	std::vector<xparticle_t> m_a2a_recvbuf;
+	
     };
 }
 
