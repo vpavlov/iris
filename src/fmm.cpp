@@ -1460,7 +1460,6 @@ void fmm::eval_l2p_cpu()
 #pragma omp parallel
 #endif
     {
-	int tid = THREAD_ID;
 	int from, to;
 	setup_work_sharing(nleafs, m_iris->m_nthreads, &from, &to);
     
