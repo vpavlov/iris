@@ -1389,7 +1389,6 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
 	int scratch_size = 2*m_nterms*sizeof(iris_real);
 	
-	int tid = THREAD_ID;
 	int from, to;
 	setup_work_sharing(nscells, nthreads, &from, &to);
 	for(int i = from;i<to;i++) {
@@ -1397,7 +1396,7 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 	    if(!(in_cells[scellID].flags & IRIS_FMM_CELL_VALID_L)) {
 		continue;
 	    }
-	    
+
 	    iris_real cx = in_cells[scellID].ses.c.r[0];
 	    iris_real cy = in_cells[scellID].ses.c.r[1];
 	    iris_real cz = in_cells[scellID].ses.c.r[2];
@@ -1405,11 +1404,11 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 	    iris_real *L = m_L + scellID * 2 * m_nterms;
 	    
 	    for(int j=0;j<8;j++) {
-		int tcellID = children_offset + 8*i + j;
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
 		if(!(in_cells[scellID].flags & mask)) {
 		    continue;
 		}
+		int tcellID = children_offset + 8*i + j;
 		iris_real x = cx - in_cells[tcellID].ses.c.r[0];
 		iris_real y = cy - in_cells[tcellID].ses.c.r[1];
 		iris_real z = cz - in_cells[tcellID].ses.c.r[2];
