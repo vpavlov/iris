@@ -181,7 +181,7 @@ void fmm::exchange_p2p_halo_gpu()
     }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-    	m_logger->info("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
+    	m_logger->tace("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
     }
     
     MPI_Alltoall(m_a2a_send_cnt.data(), 1, MPI_INT, m_a2a_recv_cnt.data(), 1, MPI_INT, m_local_comm->m_comm);
@@ -193,7 +193,7 @@ void fmm::exchange_p2p_halo_gpu()
     }
     
     for(int i=0;i<m_local_comm->m_size;i++) {
-    	m_logger->info("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
+    	m_logger->trace("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
     }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
