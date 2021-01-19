@@ -384,8 +384,8 @@ namespace ORG_NCSA_IRIS {
 	unsigned char *m_recvbuf_gpu;
 	int m_recvbuf_gpu_cap;
 
-	std::vector<struct interact_item_t, HostAlloc<interact_item_t>> m_p2p_list;
-	std::vector<struct interact_item_t, HostAlloc<interact_item_t>> m_m2l_list;
+	std::vector<struct interact_item_t> m_p2p_list;
+	std::vector<struct interact_item_t> m_m2l_list;
 
 	struct interact_item_t *m_p2p_list_gpu;
 	struct interact_item_t *m_m2l_list_gpu;
