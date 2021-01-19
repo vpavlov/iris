@@ -819,9 +819,17 @@ void fmm::eval_m2m_cpu(cell_t *in_cells, bool invalid_only)
 {
     timer tm;
     tm.start();
+
+    int from, to;
+    if(invalid_only) {
+	from = m_local_root_level-1;
+	to = 0;
+    }else {
+	from = max_level()-1;
+	to = m_local_root_level;
+    }
     
-    int last_level = invalid_only ? 0 : m_local_root_level;
-    for(int level = max_level()-1;level>=last_level;level--) {
+    for(int level = from;level>=to;level--) {
 	int start = cell_meta_t::offset_for_level(level);
 	int end = cell_meta_t::offset_for_level(level+1);
 	h_eval_m2m(in_cells, invalid_only, start, end, m_M, m_nterms, m_order, m_iris->m_nthreads);	
@@ -1199,7 +1207,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
 
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
-
+    
     iris_real sx = m_xcells[srcID].ses.c.r[0] + ix * m_domain->m_global_box.xsize;
     iris_real sy = m_xcells[srcID].ses.c.r[1] + iy * m_domain->m_global_box.ysize;
     iris_real sz = m_xcells[srcID].ses.c.r[2] + iz * m_domain->m_global_box.zsize;

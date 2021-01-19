@@ -107,7 +107,7 @@ void cell_t::compute_ses(particle_t *in_particles)
 
 IRIS_CUDA_DEVICE_HOST int cell_meta_t::offset_for_level(int level)
 {
-    return ((1 << 3 * level)-1) / 7;
+    return (level>=0)?(((1 << 3 * level)-1) / 7):-1;
 }
 
 //
@@ -127,6 +127,9 @@ IRIS_CUDA_DEVICE_HOST int cell_meta_t::level_of(int in_cellID)
 //
 IRIS_CUDA_DEVICE_HOST int cell_meta_t::parent_of(int in_cellID)
 {
+    if(in_cellID == 0) {
+	return -1;
+    }
     int level = level_of(in_cellID);
     int curr_off = offset_for_level(level);
     int parent_off = offset_for_level(level-1);

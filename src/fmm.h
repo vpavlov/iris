@@ -277,7 +277,7 @@ namespace ORG_NCSA_IRIS {
 	int comm_LET_gpu();
 #endif
 	void recalculate_LET();
-	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M);
+	void get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M, std::map<int, int> *scheduled_parents);
 	void inhale_xcells(int in_count);
 #ifdef IRIS_CUDA
 	void inhale_xcells_gpu(int in_count);

@@ -224,6 +224,8 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
     int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
 
     m_sendbuf = (unsigned char *)memory::wmalloc_cap(m_sendbuf, m_tree_size, unit_size, &m_sendbuf_cap);
+
+    std::map<int, int> scheduled_cells;
     
     int hwm = 0;  // high-water-mark in sendbuf
     for(int rank=0;rank<m_local_comm->m_size;rank++) {
@@ -234,7 +236,8 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
 	}
 	
 	int num_cits = 0; // number of cells-in-transit	for this rank
-	get_LET(rank, 0, m_sendbuf + hwm, unit_size, &num_cits, in_cells, in_M);
+	scheduled_cells.clear();
+	get_LET(rank, 0, m_sendbuf + hwm, unit_size, &num_cits, in_cells, in_M, &scheduled_cells);
 	m_sendcnt[rank] = num_cits;
 	m_senddisp[rank] = hwm;
 	hwm += num_cits * unit_size;
@@ -242,13 +245,13 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
     }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->trace("sendcnt to rank %d = %d", i, m_sendcnt[i]);
+	m_logger->info("sendcnt to rank %d = %d", i, m_sendcnt[i]);
     }
     
     MPI_Alltoall(m_sendcnt, 1 , MPI_INT, m_recvcnt, 1, MPI_INT, m_local_comm->m_comm);
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->trace("recvcnt from rank %d = %d", i, m_recvcnt[i]);
+	m_logger->info("recvcnt from rank %d = %d", i, m_recvcnt[i]);
     }
     
     for(int i=0;i<m_local_comm->m_size;i++) {
@@ -272,7 +275,7 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
 }
 
 
-void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M)
+void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, int *out_cits, cell_t *in_cells, iris_real *in_M, std::map<int, int> *scheduled_cells)
 {
     int level = cell_meta_t::level_of(cellID);
 
@@ -318,16 +321,23 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 	}
 
 	if(is_close && level < max_level()-1) {
-	    get_LET(rank, childID, sendbuf, unit_size, out_cits, in_cells, in_M);
+	    get_LET(rank, childID, sendbuf, unit_size, out_cits, in_cells, in_M, scheduled_cells);
 	}else {
-	    memcpy(sendbuf + (*out_cits)*unit_size, &childID, sizeof(int));
-	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(in_cells[childID].ses), sizeof(sphere_t));
-	    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), in_M + childID*2*m_nterms, 2*m_nterms*sizeof(iris_real));
-	    *out_cits = *out_cits + 1;
+	    int l2 = level + 1;
+	    do {
+		if(scheduled_cells->find(childID) == scheduled_cells->end()) {
+		    memcpy(sendbuf + (*out_cits)*unit_size, &childID, sizeof(int));
+		    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(in_cells[childID].ses), sizeof(sphere_t));
+		    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), in_M + childID*2*m_nterms, 2*m_nterms*sizeof(iris_real));
+		    *out_cits = *out_cits + 1;
+		    scheduled_cells->insert(std::pair<int, int>(childID, 1));
+		}
+		childID = cell_meta_t::parent_of(childID);
+		l2--;
+	    }while(l2 >= m_local_root_level);
 	}
     }
 }
-
 
 void fmm::inhale_xcells(int in_count)
 {

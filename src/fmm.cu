@@ -435,8 +435,16 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
 
 void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 {
-    int last_level = invalid_only ? 0 : m_local_root_level;
-    for(int level = max_level()-1;level>=last_level;level--) {
+    int from, to;
+    if(invalid_only) {
+	from = m_local_root_level-1;
+	to = 0;
+    }else {
+	from = max_level()-1;
+	to = m_local_root_level;
+    }
+    
+    for(int level = from;level>=to;level--) {
 	int start = cell_meta_t::offset_for_level(level);
 	int end = cell_meta_t::offset_for_level(level+1);
 	int n = end - start;
@@ -738,7 +746,7 @@ void fmm::cuda_specific_construct()
     }
     cudaEventCreate(&m_m2l_memcpy_done);
     cudaEventCreate(&m_p2p_memcpy_done);
-    cudaDeviceSetLimit(cudaLimitStackSize, 32768);  // otherwise distribute_particles won't work because of the welzl recursion
+    //cudaDeviceSetLimit(cudaLimitStackSize, 8192);  // otherwise distribute_particles won't work because of the welzl recursion
     cudaMalloc((void **)&m_evir_gpu, 7*sizeof(iris_real));
     cudaMalloc((void **)&m_max_particles_gpu, sizeof(int));
 
