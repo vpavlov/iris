@@ -174,9 +174,9 @@ void fmm::exchange_p2p_halo_cpu()
     	hwm += cnt;
     }
 
-    // for(int i=0;i<m_local_comm->m_size;i++) {
-    // 	m_logger->info("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
-    // }
+    for(int i=0;i<m_local_comm->m_size;i++) {
+    	m_logger->trace("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
+    }
     
     MPI_Alltoall(m_a2a_send_cnt.data(), 1, MPI_INT, m_a2a_recv_cnt.data(), 1, MPI_INT, m_local_comm->m_comm);
 
@@ -188,9 +188,9 @@ void fmm::exchange_p2p_halo_cpu()
 
     m_xparticles[0] = (xparticle_t *)memory::wmalloc_cap(m_xparticles[0], rsize, sizeof(xparticle_t), m_xparticles_cap);
     
-    // for(int i=0;i<m_local_comm->m_size;i++) {
-    // 	m_logger->info("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
-    // }
+    for(int i=0;i<m_local_comm->m_size;i++) {
+    	m_logger->trace("Will be receiving %d particles from %d, starting from %d", m_a2a_recv_cnt[i], i, m_a2a_recv_disp[i]);
+    }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
     	m_a2a_send_cnt[i] *= sizeof(xparticle_t);
@@ -245,13 +245,13 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
     }
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->info("sendcnt to rank %d = %d", i, m_sendcnt[i]);
+	m_logger->trace("sendcnt to rank %d = %d", i, m_sendcnt[i]);
     }
     
     MPI_Alltoall(m_sendcnt, 1 , MPI_INT, m_recvcnt, 1, MPI_INT, m_local_comm->m_comm);
 
     for(int i=0;i<m_local_comm->m_size;i++) {
-	m_logger->info("recvcnt from rank %d = %d", i, m_recvcnt[i]);
+	m_logger->trace("recvcnt from rank %d = %d", i, m_recvcnt[i]);
     }
     
     for(int i=0;i<m_local_comm->m_size;i++) {
