@@ -134,7 +134,7 @@ void fmm::load_particles_gpu()
     thrust::device_ptr<particle_t>  part(m_particles);
     thrust::sort_by_key(thrust::cuda::par.on(m_streams[0]), keys, keys+m_nparticles, part);
     
-    m_logger->info("FMM/GPU: This rank owns %d halo particles", m_nparticles);
+    m_logger->info("FMM/GPU: This rank owns %d particles", m_nparticles);
 }
 
 
@@ -162,9 +162,9 @@ __device__ void d_compute_com(particle_t *in_particles, int num_points, int firs
     // 	M += in_particles[first_child+i].xyzq[3];
     // }
     for(int i=0;i<num_points;i++) {
-	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0]; // * in_particles[first_child+i].xyzq[3];
-	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1]; // * in_particles[first_child+i].xyzq[3];
-	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2]; // * in_particles[first_child+i].xyzq[3];
+    	out_target->ses.c.r[0] += in_particles[first_child+i].xyzq[0]; // * in_particles[first_child+i].xyzq[3];
+    	out_target->ses.c.r[1] += in_particles[first_child+i].xyzq[1]; // * in_particles[first_child+i].xyzq[3];
+    	out_target->ses.c.r[2] += in_particles[first_child+i].xyzq[2]; // * in_particles[first_child+i].xyzq[3];
     }
 
     out_target->ses.c.r[0] /= num_points;
@@ -301,19 +301,114 @@ __global__ void k_distribute_xparticles(xparticle_t *in_particles, int in_count,
 }
 
 
+__global__ void k_init_first_child(cell_t *out_target, int offset)
+{
+    out_target[IRIS_CUDA_TID + offset].first_child = INT_MAX;
+}
+
+
+__global__ void k_find_range(particle_t *in_particles, int in_count, cell_t *out_target, int tile_size, int tile_offset)
+{
+    int i = IRIS_CUDA_TID;
+    if(i >= tile_size) {
+	return;
+    }
+    
+    i += tile_offset;  // particle index
+    if(i >= in_count) {
+	return;
+    }
+
+    int cellID = in_particles[i].cellID;
+    atomicMin(&(out_target[cellID].first_child), i);
+    atomicAdd(&(out_target[cellID].num_children), 1);
+
+    // prepare to find the center of mass
+    atomicAdd(&(out_target[cellID].ses.c.r[0]), in_particles[i].xyzq[0]);
+    atomicAdd(&(out_target[cellID].ses.c.r[1]), in_particles[i].xyzq[1]);
+    atomicAdd(&(out_target[cellID].ses.c.r[2]), in_particles[i].xyzq[2]);
+}
+
+__global__ void k_find_max_particles(cell_t *out_target, int offset, int *m_max_particles_gpu)
+{
+    int tid = IRIS_CUDA_TID;
+    int cellID = offset + tid;
+    cell_t *leaf = &(out_target[cellID]);
+    atomicMax(m_max_particles_gpu, leaf->num_children);
+}
+
+__global__ void k_find_ses(particle_t *in_particles, int in_flags, cell_t *out_target, int offset)
+{
+    int tid = IRIS_CUDA_TID;
+    int cellID = offset + tid;
+    cell_t *leaf = &(out_target[cellID]);
+    int num_points = leaf->num_children;
+
+    leaf->ses.c.r[0] /= num_points;
+    leaf->ses.c.r[1] /= num_points;
+    leaf->ses.c.r[2] /= num_points;
+
+    iris_real max_dist2 = 0.0;
+    for(int i=0;i<num_points;i++) {
+	iris_real dx = in_particles[leaf->first_child+i].xyzq[0] - leaf->ses.c.r[0];
+	iris_real dy = in_particles[leaf->first_child+i].xyzq[1] - leaf->ses.c.r[1];
+	iris_real dz = in_particles[leaf->first_child+i].xyzq[2] - leaf->ses.c.r[2];
+	iris_real dist2 = dx*dx + dy*dy + dz*dz;
+	if(dist2 > max_dist2) {
+	    max_dist2 = dist2;
+	}
+    }
+    leaf->ses.r = sqrt(max_dist2);
+    leaf->flags = in_flags;
+}
+
+
 void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
     if(in_count == 0) {
 	return;
     }
-    
+
+    // First, set first_child of all leafs to INT_MAX to facilitate MIN in the next kernel
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
-    k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, m_max_particles_gpu);
-    cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[0]); // TODO: make this async
+    k_init_first_child<<<nblocks, nthreads>>>(out_target, offset);
+
+    // Then, find the first_child and num_children for each leaf
+    // Also, sum all particle coordinates for each cell to prepare to find the center of mass
+    // Do this in several streams to reduce atomic conflicts inside threads
+    int nstreams = 4;
+    int tile_offset;
+    int tile_size = in_count / nstreams + ((in_count % nstreams)?1:0);
+    dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
+    dim3 nblocks2((tile_size-1)/IRIS_CUDA_NTHREADS + 1, 1, 1);
+
+    for(int i=0;i<nstreams;i++) {
+	tile_offset = i * tile_size;
+	k_find_range<<<nblocks2, nthreads2, 0, m_streams[i]>>>(in_particles, in_count, out_target, tile_size, tile_offset);
+    }
+    cudaDeviceSynchronize();
+    
+    k_find_ses<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_flags, out_target, offset);
+    k_find_max_particles<<<nblocks, nthreads, 0, m_streams[1]>>>(out_target, offset, m_max_particles_gpu);
+    cudaMemcpy(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault);
 }
+
+// void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+// {
+//     if(in_count == 0) {
+// 	return;
+//     }
+    
+//     int nleafs = (1 << 3 * max_level());
+//     int offset = cell_meta_t::offset_for_level(max_level());
+//     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
+//     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
+//     k_distribute_particles<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_count, in_flags, out_target, offset, m_max_particles_gpu);
+//     cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[0]); // TODO: make this async
+// }
 
 void fmm::distribute_particles_gpu(xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
 {
