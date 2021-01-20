@@ -446,9 +446,7 @@ void fmm::local_tree_construction()
 {
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
-    link_parents(m_cells);                                     // link parents and calculate parent's SES
-    eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
-    eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
+
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	eval_p2p_self_gpu();
@@ -457,6 +455,10 @@ void fmm::local_tree_construction()
     {
 	eval_p2p_self_cpu();
     }
+    
+    eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
+    link_parents(m_cells);                                     // link parents and calculate parent's SES
+    eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
 // #ifdef IRIS_CUDA
 //     if(m_iris->m_cuda) {

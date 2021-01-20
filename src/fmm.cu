@@ -530,6 +530,8 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
 
 void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 {
+    cudaStreamSynchronize(m_streams[0]);  // wait for link parents
+    cudaStreamSynchronize(m_streams[1]);  // wait for p2m
     int from, to;
     if(invalid_only) {
 	from = m_local_root_level-1;
@@ -545,7 +547,7 @@ void fmm::eval_m2m_gpu(cell_t *in_cells, bool invalid_only)
 	int n = end - start;
 	dim3 nthreads(MIN(IRIS_CUDA_NTHREADS, n), 1, 1);
 	dim3 nblocks((n-1)/IRIS_CUDA_NTHREADS+1, 8, 1);
-	k_eval_m2m<<<nblocks, nthreads, 0, m_streams[0]>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_order);
+	k_eval_m2m<<<nblocks, nthreads, 0, m_streams[1]>>>(in_cells, invalid_only, start, end, m_M, m_nterms, m_order);
     }
 }
 

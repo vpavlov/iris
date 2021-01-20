@@ -113,7 +113,7 @@ void fmm::eval_p2p_self_gpu()
     
     dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
     dim3 nblocks((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
-    k_p2p_self<<<nblocks, nthreads, 0, m_streams[1]>>>(m_cells, m_particles, offset);
+    k_p2p_self<<<nblocks, nthreads, 0, m_streams[2]>>>(m_cells, m_particles, offset);
 }
 
 
@@ -320,13 +320,13 @@ void fmm::eval_p2p_gpu()
     }
 
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
-    cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[1]);
-    cudaEventRecord(m_p2p_memcpy_done, m_streams[1]);
+    cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[2]);
+    cudaEventRecord(m_p2p_memcpy_done, m_streams[2]);
 
     // NOTE: The whole thing only works for 8x8x1 blocks, so don't try to change it.
     dim3 nthreads(8, 8, 1);
     dim3 nblocks((m_max_particles-1)/64 + 1, n, 1);
-    k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[1]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles,
+    k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[2]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles,
 							m_xparticles[0], m_xparticles[1], m_xparticles[2],
 							m_xparticles[3], m_xparticles[4], m_xparticles[5],
 							m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
