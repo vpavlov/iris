@@ -924,7 +924,8 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID, iris_real 
 {
     int level = cell_meta_t::level_of(cellID);
     if(level == max_level()) {
-	m_logger->info("%*s%s %d (L%d) N=%d F=0x%x C=(%f,%f,%f) R=%f M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].num_children, in_cells[cellID].flags,
+	m_logger->info("%*s%s %d (L%d) N=%d (%d) F=0x%x C=(%f,%f,%f) R=%f M[0] = %f", level+1, " ", label, cellID, level, in_cells[cellID].num_children, in_cells[cellID].first_child,
+		       in_cells[cellID].flags,
 		       in_cells[cellID].ses.c.r[0],
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],

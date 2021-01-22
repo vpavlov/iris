@@ -292,11 +292,9 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
 	// Threads (Y, 1,2,3) d_phie.y,z,w contain the field
 	// Threads (Y, 4..7) contain garbage
 
-	if(di < nc) {
-	    __reduce_warpx(d_phie, threadIdx.x);
-	    if (threadIdx.x <  4) {
-		atomicAdd(dparticles[di].tgt + threadIdx.x, d_phie.x);
-	    }
+	__reduce_warpx(d_phie, threadIdx.x);
+	if (threadIdx.x <  4 && di < nc) {
+	    atomicAdd(dparticles[di].tgt + threadIdx.x, d_phie.x);
 	}
 	
 	di += 8;
@@ -307,11 +305,9 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     if(do_other_side) {
 	for(int k=0;k<8;k++) {
 	    int si = blockIdx.x*64 + k*8 + threadIdx.x;
-	    if(si < m_xcells[srcID].num_children) {
-		__reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
-		if ((threadIdx.y & 3) < 4) {
-		    atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
-		}
+	    __reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
+	    if ((threadIdx.y & 3) < 4 && si < m_xcells[srcID].num_children) {
+		atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
 	    }
 	}
     }
