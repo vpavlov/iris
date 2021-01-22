@@ -291,9 +291,12 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
 	// Threads (Y, 0)     d_phie.x contains the potential
 	// Threads (Y, 1,2,3) d_phie.y,z,w contain the field
 	// Threads (Y, 4..7) contain garbage
-	__reduce_warpx(d_phie, threadIdx.x);
-	if (threadIdx.x <  4) {
-	    atomicAdd(dparticles[di].tgt + threadIdx.x, d_phie.x);
+
+	if(di < nc) {
+	    __reduce_warpx(d_phie, threadIdx.x);
+	    if (threadIdx.x <  4) {
+		atomicAdd(dparticles[di].tgt + threadIdx.x, d_phie.x);
+	    }
 	}
 	
 	di += 8;
@@ -304,9 +307,11 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
     if(do_other_side) {
 	for(int k=0;k<8;k++) {
 	    int si = blockIdx.x*64 + k*8 + threadIdx.x;
-	    __reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
-	    if ((threadIdx.y & 3) < 4) {
-		atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
+	    if(si < m_xcells[srcID].num_children) {
+		__reduce_warpy(s_phie[k], threadIdx.y);  // Similar to the warpx above
+		if ((threadIdx.y & 3) < 4) {
+		    atomicAdd(sparticles[si].tgt + (threadIdx.y & 3), s_phie[k].x);
+		}
 	    }
 	}
     }
@@ -322,7 +327,7 @@ void fmm::eval_p2p_gpu()
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
     cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[2]);
     cudaEventRecord(m_p2p_memcpy_done, m_streams[2]);
-
+    
     // NOTE: The whole thing only works for 8x8x1 blocks, so don't try to change it.
     dim3 nthreads(8, 8, 1);
     dim3 nblocks((m_max_particles-1)/64 + 1, n, 1);
@@ -331,6 +336,7 @@ void fmm::eval_p2p_gpu()
 							m_xparticles[3], m_xparticles[4], m_xparticles[5],
 							m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
     cudaEventSynchronize(m_p2p_memcpy_done);
+    
     m_p2p_list.clear();
 }
 
