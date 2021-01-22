@@ -420,6 +420,7 @@ void fmm::solve()
        	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[1]);
 	cudaMemsetAsync(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[2]);
 	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[3]);
+	cudaDeviceSynchronize();
     }else
 #endif
     {
@@ -563,6 +564,33 @@ void fmm::load_particles_cpu()
     tm.stop();
     m_logger->time("Load particles wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
+
+
+void fmm::distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
+    }else
+#endif
+    {
+	distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
+    }
+}
+
+void fmm::distribute_xparticles(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target)
+{
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	distribute_xparticles_gpu(in_particles, in_count, in_flags, out_target);
+    }else
+#endif
+    {
+	distribute_particles_cpu(in_particles, in_count, in_flags, out_target);
+    }
+}
+
+
 
 void fmm::relink_parents(cell_t *io_cells)
 {
@@ -848,6 +876,7 @@ void fmm::exchange_LET()
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
+	cudaDeviceSynchronize();
 	cudaMemcpyAsync(m_xcells, m_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault, m_streams[0]);  // copy local tree to LET
     }else
 #endif

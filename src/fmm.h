@@ -93,30 +93,18 @@ namespace ORG_NCSA_IRIS {
 #ifdef IRIS_CUDA
 	void load_particles_gpu();
 #endif
-	    
+
+	void distribute_particles(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	void distribute_xparticles(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	
 #ifdef IRIS_CUDA
+	void distribute_particles_gpu_v1(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	void distribute_xparticles_gpu_v1(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+
 	void distribute_particles_gpu(struct particle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
-	void distribute_particles_gpu(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
+	void distribute_xparticles_gpu(struct xparticle_t *in_particles, int in_count, int in_flags, struct cell_t *out_target);
 #endif
 
-
-
-	//////////////////////////
-	// Distribute particles //
-	//////////////////////////
-
-	template <typename T>
-	inline void distribute_particles(T *in_particles, int in_count, int in_flags, struct cell_t *out_target)
-	{
-#ifdef IRIS_CUDA
-	    if(m_iris->m_cuda) {
-		distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
-	    }else 
-#endif
-	    {
-		distribute_particles_cpu(in_particles, in_count, in_flags, out_target);
-	    }
-	}
 
 	static int __compare_cellID(const void *a, const void *b)
 	{
