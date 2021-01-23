@@ -574,7 +574,7 @@ void fmm::distribute_particles(struct particle_t *in_particles, int in_count, in
     }else
 #endif
     {
-	distribute_particles_gpu(in_particles, in_count, in_flags, out_target);
+	distribute_particles_cpu(in_particles, in_count, in_flags, out_target);
     }
 }
 
