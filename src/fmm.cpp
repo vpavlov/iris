@@ -1213,8 +1213,9 @@ void fmm::eval_m2l_cpu()
 {
     timer tm;
     tm.start();
-    
+
     int n = m_m2l_list.size();
+    printf("n = %d\n", n);
 #if defined _OPENMP
 #pragma omp parallel
 #endif
@@ -1227,7 +1228,6 @@ void fmm::eval_m2l_cpu()
 	    eval_m2l(item->sourceID, item->targetID, item->ix, item->iy, item->iz);
 	}
     }
-
     m_m2l_list.clear();
     
     tm.stop();
@@ -1259,6 +1259,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
     h_m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch,
 	  m_M + destID * 2 * m_nterms, m_L + srcID * 2 * m_nterms, do_other_side);
+	
 
 #if defined _OPENMP
 #pragma omp atomic
