@@ -30,7 +30,9 @@
 #include <string.h>
 #include "utils.h"
 #include "openmp.h"
+#include "fmm.h"
 #include "fmm_kernels.h"
+#include "fmm_swapxz.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -133,4 +135,105 @@ void ORG_NCSA_IRIS::h_m2l(int order, iris_real x, iris_real y, iris_real z, iris
 	    }
 	}
     }
+}
+
+void mrot(iris_real *out, iris_real *in, iris_real alpha, int p)
+{    
+    for(int n=0;n<=p;n++) {
+	int idx = n * (n + 1);
+
+	// no need to rotate for m=0
+	iris_real re, im;
+	mget(in, n, 0, &re, &im);
+	out[idx] = re;
+	
+	for(int m=1;m<=n;m++) {
+	    iris_real re, im;
+	    iris_real cos_ma = cos_fn(m*alpha);
+	    iris_real sin_ma = sin_fn(m*alpha);
+	    mget(in, n, m, &re, &im);
+	    out[idx + m] = cos_ma * re - sin_ma * im;
+	    out[idx - m] = sin_ma * re + cos_ma * im;
+	}
+    }
+}
+
+void swapT_xz(iris_real *mult, int p)
+{
+    iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
+    
+    for(int i=1;i<=p;i++) {
+	iris_real *src = mult + i*i;
+	int cnt = 2*i + 1;
+	swapT_fns[i-1](tmp, src);
+	memcpy(src, tmp, cnt * sizeof(iris_real));
+    }
+}
+
+void swap_xz(iris_real *mult, int p)
+{
+    iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
+    
+    for(int i=1;i<=p;i++) {
+	iris_real *src = mult + i*i;
+	int cnt = 2*i + 1;
+	swap_fns[i-1](tmp, src);
+	memcpy(src, tmp, cnt * sizeof(iris_real));
+    }
+}
+
+iris_real fact[] = {
+		    1.0,
+		    1.0,
+		    2.0,
+		    6.0,
+		    24.0,
+		    120.0,
+		    720.0,
+		    5040.0,
+		    40320.0,
+		    362880.0,
+		    3628800.0
+};
+
+void ORG_NCSA_IRIS::h_m2l_v2(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
+			     iris_real *in_M2, iris_real *out_L1, bool do_other_side)
+{
+    iris_real f[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
+    memset(f, 0, (IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)*sizeof(iris_real));
+
+    iris_real xxyy = x * x + y * y;
+    iris_real az = atan_fn(x, y);
+    iris_real ax = - atan_fn(sqrt_fn(xxyy), z);
+    iris_real r2 = xxyy + z * z;
+    iris_real r = sqrt_fn(r2);
+    
+    mrot(in_scratch, in_M1, az, order);
+    swapT_xz(in_scratch, order);
+    mrot(in_scratch, in_scratch, ax, order);
+    swapT_xz(in_scratch, order);
+
+    for(int n=0;n<=order;n++) {
+	int idx = n * (n + 1);
+	for(int m=0;m<=n;m++) {
+	    iris_real s = 1.0;
+	    for(int k=m;k<=order-n;k++) {
+		iris_real re, im;
+		mget(in_scratch, k, m, &re, &im);
+
+		iris_real fct = s * fact[n+k] / pow_fn(r, n+k+1);
+		re *= fct;
+		im *= fct;
+		
+		f[idx + m] += re;
+		f[idx - m] += im;
+	    }
+	    s *= -1.0;
+	}
+    }
+
+    swap_xz(f, order);
+    mrot(f, f, -ax, order);
+    swap_xz(f, order);
+    mrot(out_L2, f, -az, order);
 }

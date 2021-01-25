@@ -39,6 +39,9 @@ typedef double iris_real;
 #define sqrt_fn sqrt
 #define pow_fn  pow
 #define exp_fn  exp
+#define atan_fn atan2
+#define cos_fn cos
+#define sin_fn sin
 #define __rsqrt __drsqrt_rn
 #define __fma   __fma_rn
 #define iris_real3 double3
@@ -55,6 +58,9 @@ typedef float iris_real;
 #define sqrt_fn sqrtf
 #define pow_fn  powf
 #define exp_fn  expf
+#define atan_fn atan2f
+#define cos_fn cosf
+#define sin_fn sinf
 #define __rsqrt __frsqrt_rn
 #define __fma   __fmaf_rn
 #define iris_real3 float3

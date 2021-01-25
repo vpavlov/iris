@@ -1120,15 +1120,15 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
-    if(ix == 0 && iy == 0 && iz == 0) {
-    	pair_t p(destID, srcID);
-    	auto skip = m_m2l_skip.find(p);
-    	if(skip != m_m2l_skip.end()) {
-    	    return;
-    	}
-    	pair_t pp(srcID, destID);
-    	m_m2l_skip[pp] = true;
-    }
+    // if(ix == 0 && iy == 0 && iz == 0) {
+    // 	pair_t p(destID, srcID);
+    // 	auto skip = m_m2l_skip.find(p);
+    // 	if(skip != m_m2l_skip.end()) {
+    // 	    return;
+    // 	}
+    // 	pair_t pp(srcID, destID);
+    // 	m_m2l_skip[pp] = true;
+    // }
     
     interact_item_t t(srcID, destID, ix, iy, iz);
     m_m2l_list.push_back(t);
@@ -1219,7 +1219,7 @@ void fmm::eval_m2l_cpu()
     tm.start();
 
     int n = m_m2l_list.size();
-    printf("n = %d\n", n);
+    m_logger->info("M2L list size = %d", n);
 #if defined _OPENMP
 #pragma omp parallel
 #endif
@@ -1260,8 +1260,9 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     if(ix == 0 && iy == 0 && iz == 0 && !(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_NL)) {
 	do_other_side = true;
     }
+    do_other_side = false;
     memset(scratch, 0, m_nterms*sizeof(iris_real));
-    h_m2l(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
+    h_m2l_v2(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
 	  m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
 	
 
