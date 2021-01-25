@@ -86,6 +86,7 @@ if(IRIS_CUDA)
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/sphere.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/fmm_cell.cpp")
   list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/fmm_kernels.cpp")
+  list(REMOVE_ITEM IRIS_SOURCES "${IRIS_SOURCE_DIR}/fmm_swapxz.cpp")
 endif()
 
 option(IRIS_OPENMP "Build OpenMP version" ON)

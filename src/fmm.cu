@@ -537,13 +537,13 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
 	return;
     }
     
-    int scratch_size = 2*m_nterms*sizeof(iris_real);
+    int scratch_size = m_nterms*sizeof(iris_real);
 
     iris_real cx = in_cells[tcellID].ses.c.r[0];
     iris_real cy = in_cells[tcellID].ses.c.r[1];
     iris_real cz = in_cells[tcellID].ses.c.r[2];
     
-    iris_real *M = m_M + tcellID * 2 * m_nterms;
+    iris_real *M = m_M + tcellID * m_nterms;
     
     int scellID = children_offset + 8*tid + j;
     iris_real x = in_cells[scellID].ses.c.r[0] - cx;
@@ -551,7 +551,7 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
     iris_real z = in_cells[scellID].ses.c.r[2] - cz;
     
     memset(scratch, 0, scratch_size);
-    m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch);
+    m2m(m_order, x, y, z, m_M + scellID * m_nterms, M, scratch);
     in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
 }
 
@@ -651,9 +651,9 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real z = tz - sz;
 
     bool do_other_side = (list[tid].ix == 0 && list[tid].iy == 0 && list[tid].iz == 0);
-    memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch,
-	m_M + destID * 2 * m_nterms, m_L + srcID * 2 * m_nterms, do_other_side);
+    memset(scratch, 0, m_nterms*sizeof(iris_real));
+    m2l(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
+	m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
 
     atomicOr(&(m_cells[destID].flags), IRIS_FMM_CELL_VALID_L);
     if(do_other_side) {
@@ -707,13 +707,13 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
 	return;
     }
     
-    int scratch_size = 2*m_nterms*sizeof(iris_real);
+    int scratch_size = m_nterms*sizeof(iris_real);
     
     iris_real cx = m_cells[scellID].ses.c.r[0];
     iris_real cy = m_cells[scellID].ses.c.r[1];
     iris_real cz = m_cells[scellID].ses.c.r[2];
 
-    iris_real *L = m_L + scellID * 2 * m_nterms;
+    iris_real *L = m_L + scellID * m_nterms;
     
     int tcellID = children_offset + 8*tid + j;
     iris_real x = cx - m_cells[tcellID].ses.c.r[0];
@@ -721,7 +721,7 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
     iris_real z = cz - m_cells[tcellID].ses.c.r[2];
     
     memset(scratch, 0, scratch_size);
-    l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, scratch);
+    l2l(m_order, x, y, z, L, m_L + tcellID * m_nterms, scratch);
     m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 }
 
@@ -745,7 +745,7 @@ void fmm::eval_l2l_gpu()
 __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles, int m_order, iris_real *m_L, int m_nterms)
 {
     iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-    int scratch_size = 2 * m_nterms * sizeof(iris_real);
+    int scratch_size = m_nterms * sizeof(iris_real);
     
     int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which cell we are processing
     int cellID = leaf_idx + offset;
@@ -759,7 +759,7 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles,
     }
 
     particle_t *part = m_particles + leaf->first_child + j;
-    iris_real *L = m_L + cellID * 2 * m_nterms;
+    iris_real *L = m_L + cellID * m_nterms;
 
     iris_real x = leaf->ses.c.r[0] - part->xyzq[0];
     iris_real y = leaf->ses.c.r[1] - part->xyzq[1];

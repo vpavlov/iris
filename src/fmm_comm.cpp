@@ -221,7 +221,7 @@ int fmm::comm_LET_cpu(cell_t *in_cells, iris_real *in_M)
     //   - cellID (int)
     //   - ses (3 coordinates of centre + 1 radius)
     //   - m_nterms complex numbers for the multipole expansions
-    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
+    int unit_size = sizeof(int) + sizeof(sphere_t) + m_nterms*sizeof(iris_real);
 
     m_sendbuf = (unsigned char *)memory::wmalloc_cap(m_sendbuf, m_tree_size, unit_size, &m_sendbuf_cap);
 
@@ -328,7 +328,7 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 		if(scheduled_cells->find(childID) == scheduled_cells->end()) {
 		    memcpy(sendbuf + (*out_cits)*unit_size, &childID, sizeof(int));
 		    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int), &(in_cells[childID].ses), sizeof(sphere_t));
-		    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), in_M + childID*2*m_nterms, 2*m_nterms*sizeof(iris_real));
+		    memcpy(sendbuf + (*out_cits)*unit_size + sizeof(int) + sizeof(sphere_t), in_M + childID*m_nterms, m_nterms*sizeof(iris_real));
 		    *out_cits = *out_cits + 1;
 		    scheduled_cells->insert(std::pair<int, int>(childID, 1));
 		}
@@ -341,12 +341,12 @@ void fmm::get_LET(int rank, int cellID, unsigned char *sendbuf, int unit_size, i
 
 void fmm::inhale_xcells(int in_count)
 {
-    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
+    int unit_size = sizeof(int) + sizeof(sphere_t) + m_nterms*sizeof(iris_real);
 
     for(int i=0;i<in_count;i++) {
     	int cellID = *(int *)(m_recvbuf + unit_size * i);
 	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
-	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+	memcpy(m_M + cellID*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), m_nterms*sizeof(iris_real));
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }

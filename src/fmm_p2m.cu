@@ -125,7 +125,7 @@ __global__ void k_eval_p2m(cell_t *in_cells, int offset, bool alien_only, partic
 	return;
     }
     
-    iris_real *M = m_M + cellID * 2 * m_nterms;
+    iris_real *M = m_M + cellID * m_nterms;
 
     iris_real x, y, z, q;
     if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {

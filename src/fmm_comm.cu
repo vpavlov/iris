@@ -224,7 +224,7 @@ void fmm::exchange_p2p_halo_gpu()
 int fmm::comm_LET_gpu()
 {
     cudaMemcpyAsync(m_cells_cpu, m_cells, m_tree_size*sizeof(cell_t), cudaMemcpyDefault, m_streams[1]);
-    cudaMemcpyAsync(m_M_cpu, m_M, m_tree_size*2*m_nterms*sizeof(iris_real), cudaMemcpyDefault, m_streams[1]);
+    cudaMemcpyAsync(m_M_cpu, m_M, m_tree_size*m_nterms*sizeof(iris_real), cudaMemcpyDefault, m_streams[1]);
     cudaStreamSynchronize(m_streams[1]);
     m_has_cells_cpu = true;
     return comm_LET_cpu(m_cells_cpu, m_M_cpu);
@@ -236,14 +236,14 @@ __global__ void k_inhale_cells(unsigned char *m_recvbuf, int in_count, cell_t *m
     if(i < in_count) {
 	int cellID = *(int *)(m_recvbuf + unit_size * i);
 	memcpy(&(m_xcells[cellID].ses), m_recvbuf + unit_size * i + sizeof(int), sizeof(sphere_t));
-	memcpy(m_M + cellID*2*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), 2*m_nterms*sizeof(iris_real));
+	memcpy(m_M + cellID*m_nterms, m_recvbuf + unit_size * i + sizeof(int) + sizeof(sphere_t), m_nterms*sizeof(iris_real));
 	m_xcells[cellID].flags |= (IRIS_FMM_CELL_ALIEN_NL | IRIS_FMM_CELL_VALID_M);
     }
 }
 
 void fmm::inhale_xcells_gpu(int in_count)
 {
-    int unit_size = sizeof(int) + sizeof(sphere_t) + 2*m_nterms*sizeof(iris_real);
+    int unit_size = sizeof(int) + sizeof(sphere_t) + m_nterms*sizeof(iris_real);
     int rsize = in_count * unit_size;
     m_recvbuf_gpu = (unsigned char *)memory::wmalloc_gpu_cap(m_recvbuf_gpu, rsize, 1, &m_recvbuf_gpu_cap);
     cudaMemcpy(m_recvbuf_gpu, m_recvbuf, rsize, cudaMemcpyDefault);

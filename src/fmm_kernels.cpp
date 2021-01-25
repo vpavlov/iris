@@ -32,51 +32,47 @@
 
 using namespace ORG_NCSA_IRIS;
 
-
 IRIS_CUDA_DEVICE_HOST
-int ORG_NCSA_IRIS::multipole_index(int l, int m)
+void ORG_NCSA_IRIS::mget(iris_real *M, int n, int m, iris_real *out_re, iris_real *out_im)  // n lower, m upper index
 {
-    return l*(l+1) + 2*m;
-}
-
-IRIS_CUDA_DEVICE_HOST
-void ORG_NCSA_IRIS::multipole_get(iris_real *M, int l, int m, iris_real *out_re, iris_real *out_im)
-{
-    if(m < 0) {
-	if(-m > l) {
+    int c = n * (n + 1);
+    int r = c + m;
+    int l = c - m;
+    
+    if(m == 0) {
+	*out_re = M[c];
+	*out_im = 0;
+    }else if(m > 0) {
+	if(m > n) {
 	    *out_re = 0.0;
 	    *out_im = 0.0;
-	    return;
-	}
-	int i = multipole_index(l, -m);
-	iris_real a = M[i];
-	iris_real b = M[i+1];
-	if(m % 2) {
-	    a = -a;
 	}else {
-	    b = -b;
+	    *out_re = M[r];
+	    *out_im = M[l];
 	}
-	*out_re = a;
-	*out_im = b;
     }else {
-	if(m > l) {
+	if(-m > n) {
 	    *out_re = 0.0;
 	    *out_im = 0.0;
-	    return;
+	}else if(m % 2 == 0) {
+	    *out_re = M[l];
+	    *out_im = -M[r];
+	}else {
+	    *out_re = -M[l];
+	    *out_im = M[r];
 	}
-	int i = multipole_index(l, m);
-	*out_re = M[i];
-	*out_im = M[i+1];
     }
 }
 
+
 IRIS_CUDA_DEVICE_HOST
-void ORG_NCSA_IRIS::multipole_add(iris_real *M, int l, int m, complex<iris_real> &val)
+void ORG_NCSA_IRIS::madd(iris_real *M, int n, int m, complex<iris_real> &val)
 {
-    int i = multipole_index(l, m);
-    M[i] += val.real();
-    M[i+1] += val.imag();
+    int c = n * (n + 1);
+    M[c+m] += val.real();
+    M[c-m] += val.imag();
 }
+
 
 // This version is used by the CPU kernel and by the M2M, L2L and L2P CPU/GPU kernels
 void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
@@ -87,17 +83,17 @@ void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_r
     complex<iris_real> xy(x, y);
     
     for(int m = 0; m < order; m++) {
-	multipole_add(out_M, m, m, R_m_m);
+	madd(out_M, m, m, R_m_m);
 
 	complex<iris_real> R_mplus1_m = z * R_m_m;
-	multipole_add(out_M, m+1, m, R_mplus1_m);
+	madd(out_M, m+1, m, R_mplus1_m);
 
 	complex<iris_real> prev2 = R_m_m;
 	complex<iris_real> prev1 = R_mplus1_m;
 	for(int l = m+2; l <= order; l++) {
 	    complex<iris_real> R_l_m = (2*l-1) * z * prev1 - r2 * prev2;
 	    R_l_m /= (l * l - m * m);
-	    multipole_add(out_M, l, m, R_l_m);
+	    madd(out_M, l, m, R_l_m);
 	    
 	    prev2 = prev1;
 	    prev1 = R_l_m;
@@ -106,7 +102,7 @@ void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_r
 	R_m_m *= xy;
 	R_m_m /= 2*(m+1);
     }
-    multipole_add(out_M, order, order, R_m_m);
+    madd(out_M, order, order, R_m_m);
 }
 
 
@@ -126,23 +122,24 @@ void ORG_NCSA_IRIS::m2m(int order, iris_real x, iris_real y, iris_real z,
 		for(int l=-k;l<=k;l++) {
 
 		    iris_real a, b;
-		    multipole_get(scratch, k, l, &a, &b);
+		    mget(scratch, k, l, &a, &b);
 
 		    iris_real c, d;
-		    multipole_get(in_M, n-k, m-l, &c, &d);
+		    mget(in_M, n-k, m-l, &c, &d);
 
 		    re += a*c - b*d;
 		    im += a*d + b*c;
 		}
 	    }
 
-	    int idx=multipole_index(n, m);
+	    int idx = n * (n + 1);
+	    
 #ifdef __CUDA_ARCH__
-	    atomicAdd(out_M+idx, re);
-	    atomicAdd(out_M+idx+1, im);
+	    atomicAdd(out_M + idx + m, re);
+	    atomicAdd(out_M + idx - m, im);
 #else
-	    out_M[idx] += re;
-	    out_M[idx+1] += im;
+	    out_M[idx + m] += re;
+	    out_M[idx - m] += im;
 #endif
 	}
     }
@@ -161,10 +158,10 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
     complex<iris_real> xy(x, y);
 
     for(int m = 0; m < order; m++) {
-	multipole_add(out_L, m, m, I_m_m);
+	madd(out_L, m, m, I_m_m);
 
 	complex<iris_real> I_mplus1_m = ((2*m+1)*z/r2) * I_m_m;
-	multipole_add(out_L, m+1, m, I_mplus1_m);
+	madd(out_L, m+1, m, I_mplus1_m);
 
 	complex<iris_real> prev2 = I_m_m;
 	complex<iris_real> prev1 = I_mplus1_m;
@@ -173,7 +170,7 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    t *= ((l-1)*(l-1) - m*m);
 	    complex<iris_real> I_l_m = (2*l-1) * z * prev1 - t;
 	    I_l_m /= r2;
-	    multipole_add(out_L, l, m, I_l_m);
+	    madd(out_L, l, m, I_l_m);
 	    prev2 = prev1;
 	    prev1 = I_l_m;
 	}
@@ -182,9 +179,11 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 	I_m_m *= xy;
 	I_m_m /= r2;
     }
-    multipole_add(out_L, order, order, I_m_m);
+    madd(out_L, order, order, I_m_m);
 }
 
+
+#ifdef IRIS_CUDA
 
 //
 // M2L GPU Kernel
@@ -227,20 +226,17 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 
 	    int idx = multipole_index(n, m);
 	    
-#ifdef __CUDA_ARCH__
 	    atomicAdd(out_L2+idx, re2);
 	    atomicAdd(out_L2+idx+1, im2);
 	    if(do_other_side) {
 		atomicAdd(out_L1+idx, re1);
 		atomicAdd(out_L1+idx+1, im1);
 	    }
-#else
-	    throw std::logic_error("this shouldn't happen!");
-#endif
 	}
     }
 }
 
+#endif
 
 //
 // L2L CPU Kernel
@@ -258,24 +254,24 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
 		for(int l=-k;l<=k;l++) {
 
 		    iris_real a, b;
-		    multipole_get(scratch, k, l, &a, &b);
+		    mget(scratch, k, l, &a, &b);
 		    b = -b;
 		    
 		    iris_real c, d;
-		    multipole_get(in_L, n+k, m+l, &c, &d);
+		    mget(in_L, n+k, m+l, &c, &d);
 
 		    re += a*c - b*d;
 		    im += a*d + b*c;
 		}
 	    }
 
-	    int idx=multipole_index(n, m);
+	    int idx = n * (n + 1);
 #ifdef __CUDA_ARCH__
-	    atomicAdd(out_L+idx, re);
-	    atomicAdd(out_L+idx+1, im);
+	    atomicAdd(out_L + idx + m, re);
+	    atomicAdd(out_L + idx - m, im);
 #else
-	    out_L[idx] += re;
-	    out_L[idx+1] += im;
+	    out_L[idx + m] += re;
+	    out_L[idx - m] += im;
 #endif
 	}
     }
@@ -298,11 +294,11 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
 		for(int l=-k; l<=k; l++) {
 		    
 		    iris_real a, b;
-		    multipole_get(scratch, k, l, &a, &b);
+		    mget(scratch, k, l, &a, &b);
 		    b = -b;
 
 		    iris_real c, d;
-		    multipole_get(in_L, n+k, m+l, &c, &d);
+		    mget(in_L, n+k, m+l, &c, &d);
 
 		    re += a*c - b*d;
 		    im += a*d + b*c;

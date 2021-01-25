@@ -334,6 +334,8 @@ namespace ORG_NCSA_IRIS {
 	int                 m_nxpart_cap;        // capacity of the allocated array of halo particles
 	int                 m_nxparticles;       // number of halo particles
 	struct xparticle_t *m_xparticles[6];     // halo particles
+	int                 m_xparticles_cap[6];
+
 	bool                m_dirty;
 
 	std::deque<struct pair_t> m_queue;       // the Dual Tree Traversal queue
@@ -351,6 +353,9 @@ namespace ORG_NCSA_IRIS {
 	box_t<iris_real> m_ext_box;
 	box_t<iris_real> *m_ext_boxes;
 
+	std::vector<struct interact_item_t> m_p2p_list;
+	std::vector<struct interact_item_t> m_m2l_list;
+	
 #ifdef IRIS_CUDA
 	std::map<int, iris_real *> m_charges_gpu;
 	std::map<int, int> m_charges_gpu_cap;
@@ -372,9 +377,6 @@ namespace ORG_NCSA_IRIS {
 	unsigned char *m_recvbuf_gpu;
 	int m_recvbuf_gpu_cap;
 
-	std::vector<struct interact_item_t> m_p2p_list;
-	std::vector<struct interact_item_t> m_m2l_list;
-
 	struct interact_item_t *m_p2p_list_gpu;
 	struct interact_item_t *m_m2l_list_gpu;
 	int m_p2p_list_cap;
@@ -387,7 +389,6 @@ namespace ORG_NCSA_IRIS {
 
 	void *m_halo_parts_gpu[2];
 
-	int m_xparticles_cap[6];
 #endif
 
 	int m_max_particles;

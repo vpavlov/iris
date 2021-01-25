@@ -176,7 +176,7 @@ void fmm::commit()
 	t = m_iris->get_solver_param(IRIS_SOLVER_FMM_MAC);
 	m_mac = t.r;
 
-	m_nterms = (m_order + 1) * (m_order + 2) / 2;
+	m_nterms = (m_order + 1) * (m_order + 1);
 
 	m_local_root_level = int(log(m_local_comm->m_size-1) / _LN8) + 1;
 	if(m_local_comm->m_size == 1) {
@@ -192,11 +192,11 @@ void fmm::commit()
 #ifdef IRIS_CUDA
 	if(m_iris->m_cuda) {
 	    memory::destroy_1d_gpu(m_M);
-	    memory::create_1d_gpu(m_M, m_tree_size*2*m_nterms);
+	    memory::create_1d_gpu(m_M, m_tree_size*m_nterms);
 	    if(m_M_cpu != NULL) { memory::wfree_gpu(m_M_cpu); };
-	    m_M_cpu = (iris_real *)memory::wmalloc_gpu(m_tree_size*2*m_nterms*sizeof(iris_real), false, true);
+	    m_M_cpu = (iris_real *)memory::wmalloc_gpu(m_tree_size*m_nterms*sizeof(iris_real), false, true);
 	    memory::destroy_1d_gpu(m_L);
-	    memory::create_1d_gpu(m_L, m_tree_size*2*m_nterms);
+	    memory::create_1d_gpu(m_L, m_tree_size*m_nterms);
 
 	    if(m_cells != NULL) { memory::wfree_gpu(m_cells); }
 	    m_cells = (cell_t *)memory::wmalloc_gpu(m_tree_size * sizeof(cell_t));
@@ -226,9 +226,9 @@ void fmm::commit()
 #endif
 	{
 	    memory::destroy_1d(m_M);
-	    memory::create_1d(m_M, m_tree_size*2*m_nterms);
+	    memory::create_1d(m_M, m_tree_size*m_nterms);
 	    memory::destroy_1d(m_L);
-	    memory::create_1d(m_L, m_tree_size*2*m_nterms);
+	    memory::create_1d(m_L, m_tree_size*m_nterms);
 	    
 	    memory::destroy_1d(m_cells);
 	    memory::create_1d(m_cells, m_tree_size);
@@ -412,21 +412,21 @@ void fmm::solve()
     m_m2l_list.clear();
     m_p2p_skip.clear();
     m_m2l_skip.clear();
-    m_has_cells_cpu = false;
     
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	cudaMemsetAsync(m_max_particles_gpu, 0, sizeof(int), m_streams[0]);
-       	cudaMemsetAsync(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[1]);
-	cudaMemsetAsync(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real), m_streams[2]);
+       	cudaMemsetAsync(m_M, 0, m_tree_size*m_nterms*sizeof(iris_real), m_streams[1]);
+	cudaMemsetAsync(m_L, 0, m_tree_size*m_nterms*sizeof(iris_real), m_streams[2]);
 	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[3]);
 	cudaDeviceSynchronize();
+	m_has_cells_cpu = false;
     }else
 #endif
     {
 	m_max_particles = 0;
-	memset(m_M, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
-	memset(m_L, 0, m_tree_size*2*m_nterms*sizeof(iris_real));
+	memset(m_M, 0, m_tree_size*m_nterms*sizeof(iris_real));
+	memset(m_L, 0, m_tree_size*m_nterms*sizeof(iris_real));
 	memset(m_cells, 0, m_tree_size*sizeof(cell_t));
     }
     
@@ -776,7 +776,7 @@ void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
 		    q = m_particles[leaf->first_child+j].xyzq[3];
 		}
 		
-		p2m(m_order, x, y, z, q, m_M + i * 2 * m_nterms);
+		p2m(m_order, x, y, z, q, m_M + i * m_nterms);
 		in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    }
 	}
@@ -806,7 +806,7 @@ void h_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_of
 #endif
     {
 	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-	int scratch_size = 2*m_nterms*sizeof(iris_real);
+	int scratch_size = m_nterms*sizeof(iris_real);
 	
 	int tid = THREAD_ID;
 	int from, to;
@@ -822,7 +822,7 @@ void h_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_of
 	    iris_real cy = in_cells[tcellID].ses.c.r[1];
 	    iris_real cz = in_cells[tcellID].ses.c.r[2];
 	    
-	    iris_real *M = m_M + tcellID * 2 * m_nterms;
+	    iris_real *M = m_M + tcellID * m_nterms;
 	    
 	    bool valid_m = false;
 	    for(int j=0;j<8;j++) {
@@ -835,7 +835,7 @@ void h_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_of
 		iris_real y = in_cells[scellID].ses.c.r[1] - cy;
 		iris_real z = in_cells[scellID].ses.c.r[2] - cz;
 		memset(scratch, 0, scratch_size);
-		m2m(m_order, x, y, z, m_M + scellID * 2 * m_nterms, M, scratch);
+		m2m(m_order, x, y, z, m_M + scellID * m_nterms, M, scratch);
 		valid_m = true;
 	    }
 	    if(valid_m) {
@@ -940,9 +940,9 @@ void fmm::recalculate_LET()
 void fmm::print_tree_gpu(const char *label, cell_t *in_cells)
 {
     cell_t *tmp = (cell_t *)memory::wmalloc(m_tree_size * sizeof(cell_t));
-    iris_real *tmpM = (iris_real *)memory::wmalloc(m_tree_size * 2 * m_nterms * sizeof(iris_real));
+    iris_real *tmpM = (iris_real *)memory::wmalloc(m_tree_size * m_nterms * sizeof(iris_real));
     cudaMemcpy(tmp, in_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault);
-    cudaMemcpy(tmpM, m_M, m_tree_size * 2 * m_nterms * sizeof(iris_real), cudaMemcpyDefault);
+    cudaMemcpy(tmpM, m_M, m_tree_size * m_nterms * sizeof(iris_real), cudaMemcpyDefault);
     print_tree(label, tmp, 0, tmpM);
     memory::wfree(tmp);
     memory::wfree(tmpM);
@@ -959,7 +959,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID, iris_real 
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       in_M[cellID*2*m_nterms]);
+		       in_M[cellID*m_nterms]);
     }else {
 	int num_children = 0;
 	int mask = IRIS_FMM_CELL_HAS_CHILD1;
@@ -975,7 +975,7 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID, iris_real 
 		       in_cells[cellID].ses.c.r[1],
 		       in_cells[cellID].ses.c.r[2],
 		       in_cells[cellID].ses.r,
-		       in_M[cellID*2*m_nterms]);
+		       in_M[cellID*m_nterms]);
     }
     if(level < max_level()) {
 	int this_offset = cell_meta_t::offset_for_level(level);
@@ -1016,6 +1016,8 @@ void fmm::dual_tree_traversal()
     // m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
+#ifdef IRIS_CUDA
+
 void fmm::dual_tree_traversal_gpu()
 {
     if(!m_has_cells_cpu) {
@@ -1025,6 +1027,8 @@ void fmm::dual_tree_traversal_gpu()
     cudaStreamSynchronize(m_streams[0]);
     dual_tree_traversal_cpu(m_xcells_cpu, m_cells_cpu);
 }
+
+#endif
 
 void fmm::dual_tree_traversal_cpu(cell_t *src_cells, cell_t *dest_cells)
 {
@@ -1256,9 +1260,9 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     if(ix == 0 && iy == 0 && iz == 0 && !(m_xcells[srcID].flags & IRIS_FMM_CELL_ALIEN_NL)) {
 	do_other_side = true;
     }
-    memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-    h_m2l(m_order, x, y, z, m_M + srcID * 2 * m_nterms, m_L + destID * 2 * m_nterms, scratch,
-	  m_M + destID * 2 * m_nterms, m_L + srcID * 2 * m_nterms, do_other_side);
+    memset(scratch, 0, m_nterms*sizeof(iris_real));
+    h_m2l(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
+	  m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
 	
 
 #if defined _OPENMP
@@ -1420,7 +1424,7 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 #endif
     {
 	iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-	int scratch_size = 2*m_nterms*sizeof(iris_real);
+	int scratch_size = m_nterms*sizeof(iris_real);
 	
 	int from, to;
 	setup_work_sharing(nscells, nthreads, &from, &to);
@@ -1434,7 +1438,7 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 	    iris_real cy = in_cells[scellID].ses.c.r[1];
 	    iris_real cz = in_cells[scellID].ses.c.r[2];
 
-	    iris_real *L = m_L + scellID * 2 * m_nterms;
+	    iris_real *L = m_L + scellID * m_nterms;
 	    
 	    for(int j=0;j<8;j++) {
 		int mask = IRIS_FMM_CELL_HAS_CHILD1 << j;
@@ -1447,7 +1451,7 @@ void h_eval_l2l(cell_t *in_cells, int offset, int children_offset, iris_real *m_
 		iris_real z = cz - in_cells[tcellID].ses.c.r[2];
 
 		memset(scratch, 0, scratch_size);
-		l2l(m_order, x, y, z, L, m_L + tcellID * 2 * m_nterms, scratch);
+		l2l(m_order, x, y, z, L, m_L + tcellID * m_nterms, scratch);
 		in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 	    }
 	}
@@ -1510,8 +1514,8 @@ void fmm::eval_l2p_cpu()
 		iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 		iris_real phi, Ex, Ey, Ez;
 		
-		memset(scratch, 0, 2*m_nterms*sizeof(iris_real));
-		l2p(m_order, x, y, z, q, m_L + i * 2 * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
+		memset(scratch, 0, m_nterms*sizeof(iris_real));
+		l2p(m_order, x, y, z, q, m_L + i * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
 		
 		m_particles[leaf->first_child+j].tgt[0] += phi;
 		m_particles[leaf->first_child+j].tgt[1] += Ex;

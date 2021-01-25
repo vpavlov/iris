@@ -45,10 +45,10 @@ void ORG_NCSA_IRIS::h_p2l(int order, iris_real x, iris_real y, iris_real z, iris
     complex<iris_real> xy(x, y);
 
     for(int m = 0; m < order; m++) {
-	multipole_add(out_L, m, m, I_m_m);
+	madd(out_L, m, m, I_m_m);
 
 	complex<iris_real> I_mplus1_m = ((2*m+1)*z/r2) * I_m_m;
-	multipole_add(out_L, m+1, m, I_mplus1_m);
+	madd(out_L, m+1, m, I_mplus1_m);
 
 	complex<iris_real> prev2 = I_m_m;
 	complex<iris_real> prev1 = I_mplus1_m;
@@ -57,7 +57,7 @@ void ORG_NCSA_IRIS::h_p2l(int order, iris_real x, iris_real y, iris_real z, iris
 	    t *= ((l-1)*(l-1) - m*m);
 	    complex<iris_real> I_l_m = (2*l-1) * z * prev1 - t;
 	    I_l_m /= r2;
-	    multipole_add(out_L, l, m, I_l_m);
+	    madd(out_L, l, m, I_l_m);
 	    prev2 = prev1;
 	    prev1 = I_l_m;
 	}
@@ -66,7 +66,7 @@ void ORG_NCSA_IRIS::h_p2l(int order, iris_real x, iris_real y, iris_real z, iris
 	I_m_m *= xy;
 	I_m_m /= r2;
     }
-    multipole_add(out_L, order, order, I_m_m);
+    madd(out_L, order, order, I_m_m);
 }
 
 
@@ -84,16 +84,16 @@ void ORG_NCSA_IRIS::h_m2l(int order, iris_real x, iris_real y, iris_real z, iris
 	    for(int k=0;k<=order-n;k++) {
 		for(int l=-k;l<=k;l++) {
 		    iris_real a, b;
-		    multipole_get(in_M1, k, l, &a, &b);
+		    mget(in_M1, k, l, &a, &b);
 		    b = -b;
 
 		    iris_real c, d;
-		    multipole_get(in_scratch, n+k, m+l, &c, &d);
+		    mget(in_scratch, n+k, m+l, &c, &d);
 
 		    re2 += a*c - b*d;
 		    im2 += a*d + b*c;
 
-		    multipole_get(in_M2, k, l, &a, &b);
+		    mget(in_M2, k, l, &a, &b);
 		    b = -b;
 
 		    if(do_other_side) {
@@ -108,28 +108,28 @@ void ORG_NCSA_IRIS::h_m2l(int order, iris_real x, iris_real y, iris_real z, iris
 		}
 	    }
 
-	    int idx = multipole_index(n, m);
+	    int idx = n * (n + 1);
 	    
 #if defined _OPENMP
 #pragma omp atomic
 #endif
-	    out_L2[idx] += re2;
+	    out_L2[idx + m] += re2;
 	    
 #if defined _OPENMP
 #pragma omp atomic
 #endif
-	    out_L2[idx+1] += im2;
+	    out_L2[idx - m] += im2;
 
 	    if(do_other_side) {
 #if defined _OPENMP
 #pragma omp atomic
 #endif
-		out_L1[idx] += re1;
+		out_L1[idx + m] += re1;
 		
 #if defined _OPENMP
 #pragma omp atomic
 #endif
-		out_L1[idx+1] += im1;
+		out_L1[idx - m] += im1;
 	    }
 	}
     }
