@@ -158,6 +158,37 @@ void mrot(iris_real *out, iris_real *in, iris_real alpha, int p)
     }
 }
 
+void mrot_add(iris_real *out, iris_real *in, iris_real alpha, int p)
+{    
+    for(int n=0;n<=p;n++) {
+	int idx = n * (n + 1);
+
+	// no need to rotate for m=0
+	iris_real re, im;
+	mget(in, n, 0, &re, &im);
+	
+#if defined _OPENMP
+#pragma omp atomic
+#endif	    
+	out[idx] += re;
+	
+	for(int m=1;m<=n;m++) {
+	    iris_real re, im;
+	    iris_real cos_ma = cos_fn(m*alpha);
+	    iris_real sin_ma = sin_fn(m*alpha);
+	    mget(in, n, m, &re, &im);
+#if defined _OPENMP
+#pragma omp atomic
+#endif	    
+	    out[idx + m] += (cos_ma * re - sin_ma * im);
+#if defined _OPENMP
+#pragma omp atomic
+#endif	    
+	    out[idx - m] += (sin_ma * re + cos_ma * im);
+	}
+    }
+}
+
 void swapT_xz(iris_real *mult, int p)
 {
     iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
@@ -215,8 +246,8 @@ void ORG_NCSA_IRIS::h_m2l_v2(int order, iris_real x, iris_real y, iris_real z, i
 
     for(int n=0;n<=order;n++) {
 	int idx = n * (n + 1);
+	iris_real s = 1.0;
 	for(int m=0;m<=n;m++) {
-	    iris_real s = 1.0;
 	    for(int k=m;k<=order-n;k++) {
 		iris_real re, im;
 		mget(in_scratch, k, m, &re, &im);
@@ -235,5 +266,5 @@ void ORG_NCSA_IRIS::h_m2l_v2(int order, iris_real x, iris_real y, iris_real z, i
     swap_xz(f, order);
     mrot(f, f, -ax, order);
     swap_xz(f, order);
-    mrot(out_L2, f, -az, order);
+    mrot_add(out_L2, f, -az, order);
 }

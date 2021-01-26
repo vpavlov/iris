@@ -1240,7 +1240,7 @@ void fmm::eval_m2l_cpu()
 
 void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+1)];
 
     assert((m_xcells[srcID].flags & IRIS_FMM_CELL_VALID_M));
     
@@ -1263,8 +1263,7 @@ void fmm::eval_m2l(int srcID, int destID, int ix, int iy, int iz)
     do_other_side = false;
     memset(scratch, 0, m_nterms*sizeof(iris_real));
     h_m2l_v2(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
-	  m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
-	
+	     m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
 
 #if defined _OPENMP
 #pragma omp atomic
