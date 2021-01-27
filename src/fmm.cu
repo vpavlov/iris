@@ -772,7 +772,6 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles,
     
     iris_real phi, Ex, Ey, Ez;
     
-    memset(scratch, 0, scratch_size);
     l2p(m_order, x, y, z, q, L, scratch, &phi, &Ex, &Ey, &Ez);
 
     part->tgt[0] += phi;

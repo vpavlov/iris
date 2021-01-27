@@ -75,7 +75,6 @@ void ORG_NCSA_IRIS::madd(iris_real *M, int n, int m, complex<iris_real> &val)
     M[c-m] += val.imag();
 }
 
-
 // This version is used by the CPU kernel and by the M2M, L2L and L2P CPU/GPU kernels
 void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
@@ -385,6 +384,46 @@ void ORG_NCSA_IRIS::l2l(int order, iris_real x, iris_real y, iris_real z,
     }
 }
 
+
+__device__ void mset(iris_real *M, int n, int m, complex<iris_real> &val)
+{
+    int c = __fma(n, n, n);
+    M[c-m] = val.imag();
+    M[c+m] = val.real();
+}
+
+// This version is used by the CPU kernel and by the M2M, L2L and L2P CPU/GPU kernels
+__device__ void d_p2m_single(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
+{
+    iris_real r2 = __fma(x, x, __fma(y, y, __fma(z, z, 0)));
+
+    complex<iris_real> R_m_m(q, 0);
+    complex<iris_real> xy(x, y);
+
+    for(int m = 0; m < order; m++) {
+	mset(out_M, m, m, R_m_m);
+
+	complex<iris_real> R_mplus1_m = z * R_m_m;
+	mset(out_M, m+1, m, R_mplus1_m);
+
+	complex<iris_real> prev2 = R_m_m;
+	complex<iris_real> prev1 = R_mplus1_m;
+	for(int l = m+2; l <= order; l++) {
+	    complex<iris_real> R_l_m = __fma(2, l, -1) * z * prev1 - r2 * prev2;
+	    R_l_m /= __fma(l, l, __fma(-m, m, 0));
+	    mset(out_M, l, m, R_l_m);
+	    
+	    prev2 = prev1;
+	    prev1 = R_l_m;
+	}
+
+	R_m_m *= xy;
+	R_m_m /= __fma(2, m, 2);
+    }
+    mset(out_M, order, order, R_m_m);
+}
+
+
 //
 // L2P kernel
 //
@@ -394,7 +433,13 @@ IRIS_CUDA_DEVICE_HOST
 void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *in_L, iris_real *scratch,
 			iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez)
 {
+    
+#ifdef __CUDA_ARCH__
+    d_p2m_single(order, x, y, z, 1.0, scratch);
+#else
     p2m(order, x, y, z, 1.0, scratch);
+#endif
+    
     for(int n=0;n<=1;n++) {
     	for(int m=0;m<=n;m++) {
     	    iris_real re = 0.0, im = 0.0;
@@ -413,12 +458,12 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
     		}
     	    }
     	    if(n == 0 && m == 0) {
-    		*out_phi = re;  // multipoles of the L^a_a are real
+    	    	*out_phi = re;  // multipoles of the L^a_a are real
     	    }else if(n == 1 && m == 1) {
-    		*out_Ex = re*q;
-    		*out_Ey = im*q;
+    	    	*out_Ex = re*q;
+    	    	*out_Ey = im*q;
     	    }else if(n == 1 && m == 0) {
-    		*out_Ez = re*q;
+    	    	*out_Ez = re*q;
     	    }
     	}
     }
