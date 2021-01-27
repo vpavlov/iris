@@ -537,8 +537,6 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
 	return;
     }
     
-    int scratch_size = m_nterms*sizeof(iris_real);
-
     iris_real cx = in_cells[tcellID].ses.c.r[0];
     iris_real cy = in_cells[tcellID].ses.c.r[1];
     iris_real cz = in_cells[tcellID].ses.c.r[2];
@@ -550,7 +548,6 @@ __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int 
     iris_real y = in_cells[scellID].ses.c.r[1] - cy;
     iris_real z = in_cells[scellID].ses.c.r[2] - cz;
     
-    memset(scratch, 0, scratch_size);
     m2m(m_order, x, y, z, m_M + scellID * m_nterms, M, scratch);
     in_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_M;
 }
@@ -710,8 +707,6 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
 	return;
     }
     
-    int scratch_size = m_nterms*sizeof(iris_real);
-    
     iris_real cx = m_cells[scellID].ses.c.r[0];
     iris_real cy = m_cells[scellID].ses.c.r[1];
     iris_real cz = m_cells[scellID].ses.c.r[2];
@@ -723,7 +718,6 @@ __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iri
     iris_real y = cy - m_cells[tcellID].ses.c.r[1];
     iris_real z = cz - m_cells[tcellID].ses.c.r[2];
     
-    memset(scratch, 0, scratch_size);
     l2l(m_order, x, y, z, L, m_L + tcellID * m_nterms, scratch);
     m_cells[tcellID].flags |= IRIS_FMM_CELL_VALID_L;
 }
