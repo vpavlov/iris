@@ -77,7 +77,7 @@ void memory::wfree(void *ptr)
 
 #define CPU_EXTRA_CAP 1.05
 
-void *memory::wmalloc_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity)
+void *memory::wmalloc_cap(void *in_array, size_t in_new_size, int in_unit_size, size_t *io_capacity)
 {
     if(in_array != NULL && in_new_size > *io_capacity) {
 	memory::wfree(in_array);
@@ -90,7 +90,7 @@ void *memory::wmalloc_cap(void *in_array, int in_new_size, int in_unit_size, int
     return in_array;
 }
 
-void *memory::wrealloc_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity)
+void *memory::wrealloc_cap(void *in_array, size_t in_new_size, int in_unit_size, size_t *io_capacity)
 {
     if(in_new_size > *io_capacity) {
 	*io_capacity = in_new_size * CPU_EXTRA_CAP;

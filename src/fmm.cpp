@@ -436,6 +436,7 @@ void fmm::solve()
     exchange_LET();
     dual_tree_traversal();
     compute_energy_and_virial();
+    
     send_back_forces();
     
     tm.stop();
@@ -1113,6 +1114,7 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
 }
 
 #define M2L_CHUNK_SIZE 8192
+#define P2P_CHUNK_SIZE 512
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
@@ -1176,7 +1178,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
     
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	if(m_p2p_list.size() >= nleafs) {
+	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) { //nleafs) {
 	    eval_p2p_gpu();
 	}
     }
@@ -1215,6 +1217,7 @@ void fmm::eval_m2l_cpu()
     tm.start();
     
     int n = m_m2l_list.size();
+    m_logger->time("m2l n = %d",n);
 #if defined _OPENMP
 #pragma omp parallel
 #endif

@@ -329,9 +329,9 @@ namespace ORG_NCSA_IRIS {
 	struct cell_t      *m_cells;             // Local tree (actually cell_t *)
 	struct cell_t      *m_xcells;            // Local essential tree (cell_t *, local tree + needed parts from other ranks)
 	int                 m_nparticles;        // number of particle
-	int                 m_npart_cap;         // capacity of the allocated array of particles
+	size_t              m_npart_cap;         // capacity of the allocated array of particles
 	struct particle_t  *m_particles;         // array of particles themselves
-	int                 m_nxpart_cap;        // capacity of the allocated array of halo particles
+	size_t              m_nxpart_cap;        // capacity of the allocated array of halo particles
 	int                 m_nxparticles;       // number of halo particles
 	struct xparticle_t *m_xparticles[6];     // halo particles
 	bool                m_dirty;
@@ -353,16 +353,16 @@ namespace ORG_NCSA_IRIS {
 
 #ifdef IRIS_CUDA
 	std::map<int, iris_real *> m_charges_gpu;
-	std::map<int, int> m_charges_gpu_cap;
+	std::map<int, size_t> m_charges_gpu_cap;
 	cudaStream_t m_streams[IRIS_CUDA_FMM_NUM_STREAMS];
 	cudaEvent_t m_m2l_memcpy_done;
 	cudaEvent_t m_p2p_memcpy_done;	
 	
-	int *m_atom_types;
-	int m_at_cap;
+	int    *m_atom_types;
+	size_t m_at_cap;
 	
-	int *m_keys;
-	int m_keys_cap;
+	int    *m_keys;
+	size_t m_keys_cap;
 
 	struct cell_t *m_cells_cpu;
 	bool m_has_cells_cpu;
@@ -370,31 +370,31 @@ namespace ORG_NCSA_IRIS {
 	iris_real *m_M_cpu;
 
 	unsigned char *m_recvbuf_gpu;
-	int m_recvbuf_gpu_cap;
+	size_t m_recvbuf_gpu_cap;
 
 	std::vector<struct interact_item_t> m_p2p_list;
 	std::vector<struct interact_item_t> m_m2l_list;
 
 	struct interact_item_t *m_p2p_list_gpu;
 	struct interact_item_t *m_m2l_list_gpu;
-	int m_p2p_list_cap;
-	int m_m2l_list_cap;
+	size_t m_p2p_list_cap;
+	size_t m_m2l_list_cap;
 
 	iris_real *m_evir_gpu;
 	particle_t *m_particles_cpu;
-	int m_particles_cpu_cap;
+	size_t m_particles_cpu_cap;
 	int *m_max_particles_gpu;
 
 	void *m_halo_parts_gpu[2];
 
-	int m_xparticles_cap[6];
+	size_t m_xparticles_cap[6];
 #endif
 
 	int m_max_particles;
 	unsigned char *m_sendbuf;
 	unsigned char *m_recvbuf;
-	int m_sendbuf_cap;
-	int m_recvbuf_cap;
+	size_t m_sendbuf_cap;
+	size_t m_recvbuf_cap;
 
 	std::map<struct pair_t, bool, pair_comparator_t> m_p2p_skip;
 	std::map<struct pair_t, bool, pair_comparator_t> m_m2l_skip;

@@ -35,7 +35,7 @@
 
 using namespace ORG_NCSA_IRIS;
 
-void *memory::wmalloc_gpu(int nbytes, bool clear, bool host)
+void *memory::wmalloc_gpu(size_t nbytes, bool clear, bool host)
 {
     void *retval = NULL;
     cudaError_t res;
@@ -124,7 +124,7 @@ void memory::destroy_2d_gpu(iris_real **&array)
 
 #define GPU_EXTRA_CAP 1.05
 
-void *memory::wmalloc_gpu_cap(void *in_array, int in_new_size, int in_unit_size, int *io_capacity, bool host)
+void *memory::wmalloc_gpu_cap(void *in_array, size_t in_new_size, int in_unit_size, size_t *io_capacity, bool host)
 {
     if(in_array != NULL && in_new_size > *io_capacity) {
 	memory::wfree_gpu(in_array, host);
