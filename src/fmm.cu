@@ -523,7 +523,7 @@ void fmm::link_parents_gpu(cell_t *io_cells)
 
 __global__ void k_eval_m2m(cell_t *in_cells, bool invalid_only, int offset, int children_offset, iris_real *m_M, int m_nterms, int m_order)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+1)];
     
     int tid = IRIS_CUDA_TID;
     int tcellID = tid + offset;
@@ -625,7 +625,7 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
 __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells, cell_t *m_xcells, 
 			   iris_real gxsize, iris_real gysize, iris_real gzsize, int m_nterms, int m_order, iris_real *m_M, iris_real *m_L)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+1)];
     
     int tid = IRIS_CUDA_TID;
     if(tid >= list_size) {
@@ -651,9 +651,12 @@ __global__ void k_eval_m2l(interact_item_t *list, int list_size, cell_t *m_cells
     iris_real z = tz - sz;
 
     bool do_other_side = (list[tid].ix == 0 && list[tid].iy == 0 && list[tid].iz == 0);
+
+    do_other_side = false;
+    
     memset(scratch, 0, m_nterms*sizeof(iris_real));
-    m2l(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
-	m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
+    m2l_v2(m_order, x, y, z, m_M + srcID * m_nterms, m_L + destID * m_nterms, scratch,
+	   m_M + destID * m_nterms, m_L + srcID * m_nterms, do_other_side);
 
     atomicOr(&(m_cells[destID].flags), IRIS_FMM_CELL_VALID_L);
     if(do_other_side) {
@@ -689,7 +692,7 @@ void fmm::eval_m2l_gpu()
 
 __global__ void k_eval_l2l(cell_t *m_cells, int offset, int children_offset, iris_real *m_L, int m_nterms, int m_order)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+1)];
     
     int tid = IRIS_CUDA_TID;
     int scellID = tid + offset;
@@ -744,8 +747,8 @@ void fmm::eval_l2l_gpu()
 
 __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles, int m_order, iris_real *m_L, int m_nterms)
 {
-    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+2)];
-    int scratch_size = m_nterms * sizeof(iris_real);
+    iris_real scratch[(IRIS_FMM_MAX_ORDER+1) * (IRIS_FMM_MAX_ORDER+1)];
+    iris_real scratch_size = m_nterms * sizeof(iris_real);
     
     int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which cell we are processing
     int cellID = leaf_idx + offset;
@@ -759,14 +762,16 @@ __global__ void k_eval_l2p(cell_t *m_cells, int offset, particle_t *m_particles,
     }
 
     particle_t *part = m_particles + leaf->first_child + j;
-    iris_real *L = m_L + cellID * m_nterms;
 
+    iris_real *L = m_L + cellID * m_nterms;
+    
     iris_real x = leaf->ses.c.r[0] - part->xyzq[0];
     iris_real y = leaf->ses.c.r[1] - part->xyzq[1];
     iris_real z = leaf->ses.c.r[2] - part->xyzq[2];
     iris_real q = part->xyzq[3];
     
     iris_real phi, Ex, Ey, Ez;
+    
     memset(scratch, 0, scratch_size);
     l2p(m_order, x, y, z, q, L, scratch, &phi, &Ex, &Ey, &Ez);
 

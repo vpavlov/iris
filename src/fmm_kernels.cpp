@@ -28,7 +28,9 @@
 // THE SOFTWARE.
 //==============================================================================
 #include "cuda.h"
+#include "fmm.h"
 #include "fmm_kernels.h"
+#include "fmm_swapxz.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -188,7 +190,7 @@ void ORG_NCSA_IRIS::p2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 //
 // M2L GPU Kernel
 //
-IRIS_CUDA_DEVICE_HOST
+IRIS_CUDA_DEVICE
 void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
 			iris_real *in_M2, iris_real *out_L1, bool do_other_side)
 {
@@ -200,17 +202,17 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 	    for(int k=0;k<=order-n;k++) {
 		for(int l=-k;l<=k;l++) {
 		    iris_real a, b;
-		    multipole_get(in_M1, k, l, &a, &b);
+		    mget(in_M1, k, l, &a, &b);
 		    b = -b;
 
 		    iris_real c, d;
-		    multipole_get(in_scratch, n+k, m+l, &c, &d);
+		    mget(in_scratch, n+k, m+l, &c, &d);
 
 		    re2 += a*c - b*d;
 		    im2 += a*d + b*c;
 
 		    if(do_other_side) {
-			multipole_get(in_M2, k, l, &a, &b);
+			mget(in_M2, k, l, &a, &b);
 			b = -b;
 
 			if((n+k) % 2) {
@@ -224,16 +226,122 @@ void ORG_NCSA_IRIS::m2l(int order, iris_real x, iris_real y, iris_real z, iris_r
 		}
 	    }
 
-	    int idx = multipole_index(n, m);
+	    int idx = n * (n + 1);
 	    
-	    atomicAdd(out_L2+idx, re2);
-	    atomicAdd(out_L2+idx+1, im2);
+	    atomicAdd(out_L2+idx + m, re2);
+	    atomicAdd(out_L2+idx - m, im2);
 	    if(do_other_side) {
-		atomicAdd(out_L1+idx, re1);
-		atomicAdd(out_L1+idx+1, im1);
+		atomicAdd(out_L1+idx + m, re1);
+		atomicAdd(out_L1+idx - m, im1);
 	    }
 	}
     }
+}
+
+__device__ void d_mrot(iris_real *out, iris_real *in, iris_real alpha, int p)
+{    
+    for(int n=0;n<=p;n++) {
+	int idx = n * (n + 1);
+
+	// no need to rotate for m=0
+	iris_real re, im;
+	mget(in, n, 0, &re, &im);
+	out[idx] = re;
+	
+	for(int m=1;m<=n;m++) {
+	    iris_real re, im;
+	    iris_real cos_ma = cos(m*alpha);
+	    iris_real sin_ma = sin(m*alpha);
+	    mget(in, n, m, &re, &im);
+	    out[idx + m] = cos_ma * re - sin_ma * im;
+	    out[idx - m] = sin_ma * re + cos_ma * im;
+	}
+    }
+}
+
+__device__ void d_mrot_add(iris_real *out, iris_real *in, iris_real alpha, int p)
+{    
+    for(int n=0;n<=p;n++) {
+	int idx = n * (n + 1);
+	
+	// no need to rotate for m=0
+	iris_real re, im;
+	mget(in, n, 0, &re, &im);
+	atomicAdd(out+idx, re);
+	
+	for(int m=1;m<=n;m++) {
+	    iris_real re, im;
+	    iris_real cos_ma = cos(m*alpha);
+	    iris_real sin_ma = sin(m*alpha);
+	    mget(in, n, m, &re, &im);
+	    atomicAdd(out + idx + m, cos_ma * re - sin_ma * im);
+	    atomicAdd(out + idx - m, sin_ma * re + cos_ma * im);
+	}
+    }
+}
+
+__device__ iris_real d_fact[] = {
+				 1.0,
+				 1.0,
+				 2.0,
+				 6.0,
+				 24.0,
+				 120.0,
+				 720.0,
+				 5040.0,
+				 40320.0,
+				 362880.0,
+				 3628800.0
+};
+
+
+IRIS_CUDA_DEVICE
+void ORG_NCSA_IRIS::m2l_v2(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
+			   iris_real *in_M2, iris_real *out_L1, bool do_other_side)
+{
+    iris_real f[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
+    memset(f, 0, (IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)*sizeof(iris_real));
+
+    iris_real xxyy = __fma(x, x, __fma(y, y, 0.0));
+    iris_real az = atan2(x, y);
+    iris_real ax = - atan2(sqrt(xxyy), z);
+    iris_real r2 = __fma(z, z, xxyy);
+    iris_real invr = __rsqrt(r2);
+
+    d_mrot(in_scratch, in_M1, az, order);
+    d_swapT_xz(in_scratch, order);
+    d_mrot(in_scratch, in_scratch, ax, order);
+    d_swapT_xz(in_scratch, order);
+
+    iris_real denom = invr;
+    for(int n=0;n<=order;n++) {
+	int idx = n * (n + 1);
+	iris_real s = 1.0;
+	iris_real denom1 = denom;
+	for(int m=0;m<=n;m++) {
+	    iris_real denom2 = denom1;
+	    for(int k=m;k<=order-n;k++) {
+		iris_real re, im;
+		mget(in_scratch, k, m, &re, &im);
+
+		iris_real fct = s * d_fact[n+k] * denom2;
+		re *= fct;
+		im *= fct;
+		
+		f[idx + m] += re;
+		f[idx - m] += im;
+		denom2 *= invr;
+	    }
+	    denom1 *= invr;
+	    s *= -1.0;
+	}
+	denom *= invr;
+    }
+
+    d_swap_xz(f, order);
+    d_mrot(f, f, -ax, order);
+    d_swap_xz(f, order);
+    d_mrot_add(out_L2, f, -az, order);
 }
 
 #endif
@@ -288,31 +396,31 @@ void ORG_NCSA_IRIS::l2p(int order, iris_real x, iris_real y, iris_real z, iris_r
 {
     p2m(order, x, y, z, 1.0, scratch);
     for(int n=0;n<=1;n++) {
-	for(int m=0;m<=n;m++) {
-	    iris_real re = 0.0, im = 0.0;
-	    for(int k=0;k<=order-n;k++) {
-		for(int l=-k; l<=k; l++) {
+    	for(int m=0;m<=n;m++) {
+    	    iris_real re = 0.0, im = 0.0;
+    	    for(int k=0;k<=order-n;k++) {
+    		for(int l=-k; l<=k; l++) {
 		    
-		    iris_real a, b;
-		    mget(scratch, k, l, &a, &b);
-		    b = -b;
+    		    iris_real a, b;
+    		    mget(scratch, k, l, &a, &b);
+    		    b = -b;
 
-		    iris_real c, d;
-		    mget(in_L, n+k, m+l, &c, &d);
+    		    iris_real c, d;
+    		    mget(in_L, n+k, m+l, &c, &d);
 
-		    re += a*c - b*d;
-		    im += a*d + b*c;
-		}
-	    }
-	    if(n == 0 && m == 0) {
-		*out_phi = re;  // multipoles of the L^a_a are real
-	    }else if(n == 1 && m == 1) {
-		*out_Ex = re*q;
-		*out_Ey = im*q;
-	    }else if(n == 1 && m == 0) {
-		*out_Ez = re*q;
-	    }
-	}
+    		    re += a*c - b*d;
+    		    im += a*d + b*c;
+    		}
+    	    }
+    	    if(n == 0 && m == 0) {
+    		*out_phi = re;  // multipoles of the L^a_a are real
+    	    }else if(n == 1 && m == 1) {
+    		*out_Ex = re*q;
+    		*out_Ey = im*q;
+    	    }else if(n == 1 && m == 0) {
+    		*out_Ez = re*q;
+    	    }
+    	}
     }
 }
 

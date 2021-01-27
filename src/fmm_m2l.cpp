@@ -189,30 +189,6 @@ void mrot_add(iris_real *out, iris_real *in, iris_real alpha, int p)
     }
 }
 
-void swapT_xz(iris_real *mult, int p)
-{
-    iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
-    
-    for(int i=1;i<=p;i++) {
-	iris_real *src = mult + i*i;
-	int cnt = 2*i + 1;
-	swapT_fns[i-1](tmp, src);
-	memcpy(src, tmp, cnt * sizeof(iris_real));
-    }
-}
-
-void swap_xz(iris_real *mult, int p)
-{
-    iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];
-    
-    for(int i=1;i<=p;i++) {
-	iris_real *src = mult + i*i;
-	int cnt = 2*i + 1;
-	swap_fns[i-1](tmp, src);
-	memcpy(src, tmp, cnt * sizeof(iris_real));
-    }
-}
-
 iris_real fact[] = {
 		    1.0,
 		    1.0,

@@ -33,3 +33,16 @@ typedef void (*swap_fn)(iris_real *D, iris_real *S);
 
 extern swap_fn swapT_fns[];
 extern swap_fn swap_fns[];
+
+void swapT_xz(iris_real *mult, int p);
+void swap_xz(iris_real *mult, int p);
+
+#ifdef IRIS_CUDA
+
+extern IRIS_CUDA_DEVICE swap_fn d_swapT_fns[];
+extern IRIS_CUDA_DEVICE swap_fn d_swap_fns[];
+
+IRIS_CUDA_DEVICE void d_swapT_xz(iris_real *mult, int p);
+IRIS_CUDA_DEVICE void d_swap_xz(iris_real *mult, int p);
+
+#endif

@@ -29,7 +29,35 @@
 //==============================================================================
 #include "cuda.h"
 #include "real.h"
+#include "fmm.h"
 #include "fmm_swapxz.h"
+
+#define DEF_SWAP_XZ(FN_NAME, FNARR_NAME)				\
+    void FN_NAME(iris_real *mult, int p)				\
+    {									\
+        iris_real tmp[(IRIS_FMM_MAX_ORDER+1)*(IRIS_FMM_MAX_ORDER+1)];	\
+									\
+	for(int i=1;i<=p;i++) {						\
+	    iris_real *src = mult + i*i;				\
+	    int cnt = 2*i + 1;						\
+	    FNARR_NAME[i-1](tmp, src);					\
+	    memcpy(src, tmp, cnt * sizeof(iris_real));			\
+	}								\
+    }
+
+DEF_SWAP_XZ(swapT_xz, swapT_fns);
+DEF_SWAP_XZ(swap_xz, swap_fns);
+
+#ifdef IRIS_CUDA
+IRIS_CUDA_DEVICE DEF_SWAP_XZ(d_swapT_xz, d_swapT_fns);
+IRIS_CUDA_DEVICE DEF_SWAP_XZ(d_swap_xz, d_swap_fns);
+#endif
+
+// NOTE NOTE NOTE
+// THIS BLOCK BELOW IS AUTOMATICALLY GENERATED
+//
+//---------------8<---------------8<----------------8<---------------
+
 
 //////////////////////
 // Swap XZ @ order 1
@@ -431,29 +459,33 @@ void swapT_xz10(iris_real *D, iris_real *S) {
   D[20] = S[10] * 9.7656250000e-4 + S[12] * 1.953125000e-3 + S[14] * 1.953125000e-3 + S[16] * 1.953125000e-3 + S[18] * 1.953125000e-3 + S[20] * 1.953125000e-3;
 }
 
+//---------------8<---------------8<----------------8<---------------
+// END OF AUTOMATICALLY GENERATED BLOCK
+
 
 swap_fn swapT_fns[] = {
-		       swapT_xz1,
-		       swapT_xz2,
-		       swapT_xz3,
-		       swapT_xz4,
-		       swapT_xz5,
-		       swapT_xz6,
-		       swapT_xz7,
-		       swapT_xz8,
-		       swapT_xz9,
-		       swapT_xz10
+		       swapT_xz1, swapT_xz2, swapT_xz3, swapT_xz4,
+		       swapT_xz5, swapT_xz6, swapT_xz7, swapT_xz8,
+		       swapT_xz9, swapT_xz10
 };
 
 swap_fn swap_fns[] = {
-		      swap_xz1,
-		      swap_xz2,
-		      swap_xz3,
-		      swap_xz4,
-		      swap_xz5,
-		      swap_xz6,
-		      swap_xz7,
-		      swap_xz8,
-		      swap_xz9,
-		      swap_xz10
+		      swap_xz1, swap_xz2, swap_xz3, swap_xz4,
+		      swap_xz5, swap_xz6, swap_xz7, swap_xz8,
+		      swap_xz9, swap_xz10
 };
+
+
+#ifdef IRIS_CUDA
+IRIS_CUDA_DEVICE swap_fn d_swapT_fns[] = {
+		       swapT_xz1, swapT_xz2, swapT_xz3, swapT_xz4,
+		       swapT_xz5, swapT_xz6, swapT_xz7, swapT_xz8,
+		       swapT_xz9, swapT_xz10
+};
+
+IRIS_CUDA_DEVICE swap_fn d_swap_fns[] = {
+		      swap_xz1, swap_xz2, swap_xz3, swap_xz4,
+		      swap_xz5, swap_xz6, swap_xz7, swap_xz8,
+		      swap_xz9, swap_xz10
+};
+#endif

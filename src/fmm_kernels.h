@@ -61,11 +61,15 @@ namespace ORG_NCSA_IRIS {
     IRIS_CUDA_DEVICE_HOST void madd(iris_real *M, int l, int m, complex<iris_real> &val);
     
     IRIS_CUDA_DEVICE_HOST void p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M);
+    IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M);
     IRIS_CUDA_DEVICE_HOST void p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L);
     void h_p2l(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_L);
     IRIS_CUDA_DEVICE_HOST void m2m(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M, iris_real *out_M, iris_real *in_scratch);
-    IRIS_CUDA_DEVICE_HOST void m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
+    IRIS_CUDA_DEVICE void m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
 				   iris_real *in_M2, iris_real *out_L1, bool do_other_side);
+    IRIS_CUDA_DEVICE void m2l_v2(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
+				 iris_real *in_M2, iris_real *out_L1, bool do_other_side);
+
     void h_m2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
 	       iris_real *in_M2, iris_real *out_L1, bool do_other_side);
     void h_m2l_v2(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
@@ -73,7 +77,6 @@ namespace ORG_NCSA_IRIS {
     IRIS_CUDA_DEVICE_HOST void l2l(int order, iris_real x, iris_real y, iris_real z, iris_real *in_L, iris_real *out_L, iris_real *in_scratch);
     IRIS_CUDA_DEVICE_HOST void l2p(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *in_L, iris_real *in_scratch,
 				   iris_real *out_phi, iris_real *out_Ex, iris_real *out_Ey, iris_real *out_Ez);
-
 }
 
 #endif

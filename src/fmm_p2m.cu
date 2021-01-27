@@ -47,18 +47,18 @@ using namespace ORG_NCSA_IRIS;
 // Eval P2M //
 //////////////
 
-__device__ void multipole_atomic_add(iris_real *M, int l, int m, complex<iris_real> &val)
+__device__ void madd_atomic(iris_real *M, int n, int m, complex<iris_real> &val)
 {
-    int i = multipole_index(l, m);
-    atomicAdd(M+i, val.real());
-    atomicAdd(M+i+1, val.imag());
+    int c = n * (n + 1);
+    atomicAdd(M+c+m, val.real());
+    atomicAdd(M+c-m, val.imag());
 }
 
-IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
+IRIS_CUDA_DEVICE void ORG_NCSA_IRIS::d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
 {
     typedef cub::WarpReduce<complex<iris_real>> WarpReduce;
     
-    __shared__ typename WarpReduce::TempStorage temp[32];
+    __shared__ typename WarpReduce::TempStorage temp[32]; // warp size = 32
     
     iris_real r2 = x * x + y * y + z * z;
 
@@ -70,13 +70,13 @@ IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, ir
     for(int m = 0; m < order; m++) {
 	complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
 	if(lane_id == 0) {
-	    multipole_atomic_add(out_M, m, m, tt);
+	    madd_atomic(out_M, m, m, tt);
 	}
 
 	complex<iris_real> R_mplus1_m = z * R_m_m;
 	tt = WarpReduce(temp[lane_id]).Sum(R_mplus1_m);
 	if(lane_id == 0) {
-	    multipole_atomic_add(out_M, m+1, m, tt);
+	    madd_atomic(out_M, m+1, m, tt);
 	}
 
 	complex<iris_real> prev2 = R_m_m;
@@ -86,7 +86,7 @@ IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, ir
 	    R_l_m /= (l * l - m * m);
 	    tt = WarpReduce(temp[lane_id]).Sum(R_l_m);
 	    if(lane_id == 0) {
-		multipole_atomic_add(out_M, l, m, tt);
+		madd_atomic(out_M, l, m, tt);
 	    }
 	    prev2 = prev1;
 	    prev1 = R_l_m;
@@ -97,10 +97,9 @@ IRIS_CUDA_DEVICE void d_p2m(int order, iris_real x, iris_real y, iris_real z, ir
     }
     complex<iris_real> tt = WarpReduce(temp[lane_id]).Sum(R_m_m);
     if(lane_id == 0) {
-	multipole_atomic_add(out_M, order, order, tt);
+	madd_atomic(out_M, order, order, tt);
     }
 }
-
 
 __global__ void k_eval_p2m(cell_t *in_cells, int offset, bool alien_only, particle_t *m_particles, xparticle_t **m_xparticles, int m_order, iris_real *m_M, int m_nterms)
 {

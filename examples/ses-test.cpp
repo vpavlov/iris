@@ -2,7 +2,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include "iris/fmm_swapxz.h"
 
 #define IRIS_FMM_MAX_ORDER 20
 
