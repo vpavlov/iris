@@ -371,7 +371,7 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     MPI_Reduce(&fsum, &tot_fsum, 3, IRIS_REAL, MPI_SUM, iris->m_local_leader,
 	       iris->m_local_comm->m_comm);
     if(iris->is_leader()) {
-	iris->m_logger->info("Total Fsum = (%.15g, %.15g, %.15g)",
+	iris->m_logger->error("Total Fsum = (%.15g, %.15g, %.15g)",
 			      tot_fsum[0], tot_fsum[1], tot_fsum[2]);
     }
 
@@ -584,7 +584,7 @@ int main(int argc, char **argv)
 	    x->m_logger->info("Virial[4] = %f", virial[4]);
 	    x->m_logger->info("Virial[5] = %f", virial[5]);
 	    x->get_global_energy(&Ek, &Es, &Ecorr);
-	    x->m_logger->info("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
+	    x->m_logger->error("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
 
 	    handle_forces(x, nforces, forces);
 	    delete [] nforces;

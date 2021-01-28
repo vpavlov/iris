@@ -167,9 +167,12 @@ __device__ __forceinline__ void __reduce_warpy(iris_real4 &phie, int tid)
 __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xcells, particle_t *m_particles,
 			    xparticle_t *m_xparticles1, xparticle_t *m_xparticles2, xparticle_t *m_xparticles3,
 			    xparticle_t *m_xparticles4, xparticle_t *m_xparticles5, xparticle_t *m_xparticles6,
-			    iris_real gxsize, iris_real gysize, iris_real gzsize)
+			    iris_real gxsize, iris_real gysize, iris_real gzsize, int list_size, int tile_offset)
 {
-    int pair_idx = blockIdx.y * gridDim.z + blockIdx.z;                  // Which interaction pair we're processing
+    int pair_idx = blockIdx.y * gridDim.z + blockIdx.z + tile_offset;    // Which interaction pair we're processing
+    if(pair_idx > list_size) {
+	return;
+    }
     int srcID = list[pair_idx].sourceID;                                 // Source cell
     int destID = list[pair_idx].targetID;                                // Destination cell
 
@@ -320,19 +323,26 @@ void fmm::eval_p2p_gpu()
 	return;
     }
 
+    int nstreams = 4;
+    int tile_offset;
+    int tile_size = n / nstreams + ((n % nstreams)?1:0);
+    
     m_p2p_list_gpu = (interact_item_t *)memory::wmalloc_gpu_cap(m_p2p_list_gpu, n, sizeof(interact_item_t), &m_p2p_list_cap);
-    cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[2]);
-    cudaEventRecord(m_p2p_memcpy_done, m_streams[2]);
+    cudaMemcpyAsync(m_p2p_list_gpu, m_p2p_list.data(), n * sizeof(interact_item_t), cudaMemcpyDefault, m_streams[0]);
+    cudaEventRecord(m_p2p_memcpy_done, m_streams[0]);
     
     // NOTE: The whole thing only works for 8x8x1 blocks, so don't try to change it.
     dim3 nthreads(8, 8, 1);
-    dim3 nblocks((m_max_particles-1)/64 + 1, n, 1);
-    k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[2]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles,
-							m_xparticles[0], m_xparticles[1], m_xparticles[2],
-							m_xparticles[3], m_xparticles[4], m_xparticles[5],
-							m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize);
-    cudaEventSynchronize(m_p2p_memcpy_done);
+    dim3 nblocks((m_max_particles-1)/64 + 1, tile_size, 1);
+    for(int i=0;i<nstreams;i++) {
+	tile_offset = i * tile_size;
+	k_p2p_neigh<<<nblocks, nthreads, 0, m_streams[i]>>>(m_p2p_list_gpu, m_cells, m_xcells, m_particles,
+							    m_xparticles[0], m_xparticles[1], m_xparticles[2],
+							    m_xparticles[3], m_xparticles[4], m_xparticles[5],
+							    m_domain->m_global_box.xsize, m_domain->m_global_box.ysize, m_domain->m_global_box.zsize, n, tile_offset);
+    }
     
+    cudaEventSynchronize(m_p2p_memcpy_done);
     m_p2p_list.clear();
 }
 

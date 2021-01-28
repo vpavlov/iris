@@ -436,27 +436,19 @@ void fmm::solve()
     exchange_LET();
     dual_tree_traversal();
     compute_energy_and_virial();
-    
+
+    tm.stop();
+
     send_back_forces();
     
-    tm.stop();
-    m_logger->time("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
-    m_logger->time("FMM: TTS: %f ns/day (2 fs step)", 24*60*60/(tm.read_wall()*500000));
+    m_logger->error("FMM: Total step wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
+    m_logger->error("FMM: TTS: %f ns/day (2 fs step)", 24*60*60/(tm.read_wall()*500000));
 }
 
 void fmm::local_tree_construction()
 {
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
-
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	eval_p2p_self_gpu();
-    }else
-#endif
-    {
-	eval_p2p_self_cpu();
-    }
     
     eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
     link_parents(m_cells);                                     // link parents and calculate parent's SES
@@ -884,6 +876,15 @@ void fmm::exchange_LET()
     {
 	memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     }
+
+#ifdef IRIS_CUDA
+    if(m_iris->m_cuda) {
+	eval_p2p_self_gpu();
+    }else
+#endif
+    {
+	eval_p2p_self_cpu();
+    }
     
     if(m_local_comm->m_size > 1) {
 	exchange_p2p_halo();
@@ -1117,8 +1118,8 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     }
 }
 
-#define M2L_CHUNK_SIZE 8192
-#define P2P_CHUNK_SIZE 512
+#define M2L_CHUNK_SIZE 1000000
+#define P2P_CHUNK_SIZE 1000000
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
