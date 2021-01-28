@@ -323,7 +323,7 @@ void fmm::eval_p2p_gpu()
 	return;
     }
 
-    int nstreams = 4;
+    int nstreams = 1;
     int tile_offset;
     int tile_size = n / nstreams + ((n % nstreams)?1:0);
     

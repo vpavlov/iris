@@ -74,6 +74,7 @@ namespace ORG_NCSA_IRIS {
 	IRIS_CUDA_DEVICE_HOST static int level_of(int in_cellID);
 	IRIS_CUDA_DEVICE_HOST static int parent_of(int in_cellID);
 	IRIS_CUDA_DEVICE_HOST static int leaf_coords_to_ID(int lx, int ly, int lz, int max_level);
+	IRIS_CUDA_DEVICE_HOST static void leaf_ID_to_coords(int cellID, int max_level, int *lx, int *ly, int *lz);
     };
     
     struct cell_t {

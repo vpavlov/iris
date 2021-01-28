@@ -154,3 +154,21 @@ IRIS_CUDA_DEVICE_HOST int cell_meta_t::leaf_coords_to_ID(int lx, int ly, int lz,
     }
     return offset + id;
 }
+
+void cell_meta_t::leaf_ID_to_coords(int cellID, int max_level, int *out_x, int *out_y, int *out_z)
+{
+    int offset = cell_meta_t::offset_for_level(max_level);
+    int id = cellID - offset;
+    int lc[3] = { 0, 0, 0 };
+    
+    for(int l=max_level-1;l>=0;l--) {
+	for(int d=0;d<3;d++) {
+	    int mask = 1 << (3*l + d);
+	    lc[d] += (id & mask)?1:0;
+	    lc[d] <<= 1;
+	}
+    }
+    *out_x = lc[0] / 2;
+    *out_y = lc[1] / 2;
+    *out_z = lc[2] / 2;
+}

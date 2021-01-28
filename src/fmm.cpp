@@ -1108,18 +1108,51 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     
     iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
     iris_real dn = src_cells[srcID].ses.r + dest_cells[destID].ses.r;
+
     if(dn/rn < m_mac) {
 	do_m2l_interact(srcID, destID, ix, iy, iz);
     }else if(cell_meta_t::level_of(srcID) == max_level() && cell_meta_t::level_of(destID) == max_level()) {
-	do_p2p_interact(srcID, destID, ix, iy, iz);
+	int sx, sy, sz;
+	int dx, dy, dz;
+	int nd = 1 << max_level();
+	cell_meta_t::leaf_ID_to_coords(srcID, max_level(), &sx, &sy, &sz);
+	cell_meta_t::leaf_ID_to_coords(destID, max_level(), &dx, &dy, &dz);
+	if(ix == -1) {
+	    sx -= nd;
+	}else if(ix == 1) {
+	    sx += nd;
+	}
+	if(iy == -1) {
+	    sy -= nd;
+	}else if(iy == 1) {
+	    sy += nd;
+	}
+	if(iz == -1) {
+	    sz -= nd;
+	}else if(iz == 1) {
+	    sz += nd;
+	}
+	
+	int diffx, diffy, diffz;
+	diffx = sx - dx;
+	diffy = sy - dy;
+	diffz = sz - dz;
+	if(((diffx >= -1 && diffx <= 1) &&
+	    (diffy >= -1 && diffy <= 1) &&
+	    (diffz >= -1 && diffz <= 1)))
+	{
+	    do_p2p_interact(srcID, destID, ix, iy, iz);
+	}else {
+	    //m_logger->info("----> Overriding MAC because cells %d and %d are not neighbours; doing M2L instead", srcID, destID);
+	    do_m2l_interact(srcID, destID, ix, iy, iz);
+	}
     }else {
 	pair_t pair(srcID, destID);
 	m_queue.push_back(pair);
     }
 }
 
-#define M2L_CHUNK_SIZE 1000000
-#define P2P_CHUNK_SIZE 1000000
+#define M2L_CHUNK_SIZE 32768
 
 void fmm::do_m2l_interact(int srcID, int destID, int ix, int iy, int iz)
 {
@@ -1151,7 +1184,7 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
     if(srcID == destID && ix == 0 && iy == 0 && iz == 0) {  
     	return;
     }
-
+    
     if(m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0) {
 	do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
     }else if(m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0) {
@@ -1183,7 +1216,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
     
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	if(m_p2p_list.size() >= P2P_CHUNK_SIZE) { //nleafs) {
+	if(m_p2p_list.size() >= nleafs / m_local_comm->m_size) {
 	    eval_p2p_gpu();
 	}
     }
