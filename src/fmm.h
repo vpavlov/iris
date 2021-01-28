@@ -194,10 +194,10 @@ namespace ORG_NCSA_IRIS {
 	void relink_parents_gpu(cell_t *io_cells);
 #endif
 	
-	inline void eval_p2m(cell_t *in_cells, bool alien_only);
-	void eval_p2m_cpu(cell_t *in_cells, bool alien_only);
+	inline void eval_p2m(cell_t *in_cells);
+	void eval_p2m_cpu(cell_t *in_cells);
 #ifdef IRIS_CUDA
-	void eval_p2m_gpu(cell_t *in_cells, bool alien_only);
+	void eval_p2m_gpu(cell_t *in_cells);
 #endif
 	
 	inline void eval_m2m(cell_t *in_cells, bool alien_only);

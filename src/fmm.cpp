@@ -450,7 +450,7 @@ void fmm::local_tree_construction()
     load_particles();                                          // creates and sorts the m_particles array
     distribute_particles(m_particles, m_nparticles, IRIS_FMM_CELL_LOCAL, m_cells);  // distribute particles into leaf cells
     
-    eval_p2m(m_cells, false);                                  // eval P2M for leaf nodes
+    eval_p2m(m_cells);                                         // eval P2M for leaf nodes
     link_parents(m_cells);                                     // link parents and calculate parent's SES
     eval_m2m(m_cells, false);                                  // eval M2M for non-leaf nodes
     
@@ -697,19 +697,19 @@ void fmm::link_parents_cpu(cell_t *io_cells)
     m_logger->time("Link parents wall/cpu time: %g/%g (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
-void fmm::eval_p2m(cell_t *in_cells, bool alien_only)
+void fmm::eval_p2m(cell_t *in_cells)
 {
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	eval_p2m_gpu(in_cells, alien_only);
+	eval_p2m_gpu(in_cells);
     }else
 #endif
     {
-	eval_p2m_cpu(in_cells, alien_only);
+	eval_p2m_cpu(in_cells);
     }
 }
 
-void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
+void fmm::eval_p2m_cpu(cell_t *in_cells)
 {
     timer tm;
     tm.start();
@@ -732,43 +732,12 @@ void fmm::eval_p2m_cpu(cell_t *in_cells, bool alien_only)
 		continue;
 	    }
 	    
-	    // we only want alien cells, but this one is local -- continue
-	    if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
-		continue;
-	    }
-	    
-	    // it has been send from exchange_LET AND from halo exchange -- continue
-	    if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
-		continue;
-	    }
 	    for(int j=0;j<leaf->num_children;j++) {
 		iris_real x, y, z, q;
-		xparticle_t *ptr;
-		if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-		    if(leaf->flags & IRIS_FMM_CELL_ALIEN_L1) {
-			ptr = m_xparticles[0];
-		    }else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L2) {
-			ptr = m_xparticles[1];
-		    }else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L3) {
-			ptr = m_xparticles[2];
-		    }else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L4) {
-			ptr = m_xparticles[3];
-		    }else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L5) {
-			ptr = m_xparticles[4];
-		    }else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L6) {
-			ptr = m_xparticles[5];
-		    }
-		    x = ptr[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		    y = ptr[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		    z = ptr[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		    q = ptr[leaf->first_child+j].xyzq[3];
-		}else {
-		    x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
-		    y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
-		    z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
-		    q = m_particles[leaf->first_child+j].xyzq[3];
-		}
-		
+		x = m_particles[leaf->first_child+j].xyzq[0] - in_cells[i].ses.c.r[0];
+		y = m_particles[leaf->first_child+j].xyzq[1] - in_cells[i].ses.c.r[1];
+		z = m_particles[leaf->first_child+j].xyzq[2] - in_cells[i].ses.c.r[2];
+		q = m_particles[leaf->first_child+j].xyzq[3];
 		p2m(m_order, x, y, z, q, m_M + i * m_nterms);
 		in_cells[i].flags |= IRIS_FMM_CELL_VALID_M;
 	    }
@@ -934,7 +903,6 @@ void fmm::comm_LET()
 void fmm::recalculate_LET()
 {
     relink_parents(m_xcells);
-    //eval_p2m(m_xcells, true);  // this is no longer needed -- all necessary leaf cells's multipoles are also sent...
     eval_m2m(m_xcells, true);
 }
 
@@ -1112,40 +1080,7 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     if(dn/rn < m_mac) {
 	do_m2l_interact(srcID, destID, ix, iy, iz);
     }else if(cell_meta_t::level_of(srcID) == max_level() && cell_meta_t::level_of(destID) == max_level()) {
-	int sx, sy, sz;
-	int dx, dy, dz;
-	int nd = 1 << max_level();
-	cell_meta_t::leaf_ID_to_coords(srcID, max_level(), &sx, &sy, &sz);
-	cell_meta_t::leaf_ID_to_coords(destID, max_level(), &dx, &dy, &dz);
-	if(ix == -1) {
-	    sx -= nd;
-	}else if(ix == 1) {
-	    sx += nd;
-	}
-	if(iy == -1) {
-	    sy -= nd;
-	}else if(iy == 1) {
-	    sy += nd;
-	}
-	if(iz == -1) {
-	    sz -= nd;
-	}else if(iz == 1) {
-	    sz += nd;
-	}
-	
-	int diffx, diffy, diffz;
-	diffx = sx - dx;
-	diffy = sy - dy;
-	diffz = sz - dz;
-	if(((diffx >= -1 && diffx <= 1) &&
-	    (diffy >= -1 && diffy <= 1) &&
-	    (diffz >= -1 && diffz <= 1)))
-	{
-	    do_p2p_interact(srcID, destID, ix, iy, iz);
-	}else {
-	    //m_logger->info("----> Overriding MAC because cells %d and %d are not neighbours; doing M2L instead", srcID, destID);
-	    do_m2l_interact(srcID, destID, ix, iy, iz);
-	}
+	do_p2p_interact(srcID, destID, ix, iy, iz);
     }else {
 	pair_t pair(srcID, destID);
 	m_queue.push_back(pair);
@@ -1210,7 +1145,7 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
 	m_p2p_skip[pp] = true;
     }
 #endif
-    
+
     interact_item_t t(srcID, destID, ix, iy, iz);
     m_p2p_list.push_back(t);
     

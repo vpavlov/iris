@@ -39,6 +39,7 @@
 #include "ses.h"
 #include "fmm_kernels.h"
 #include "fmm_pair.h"
+#include "cuda_timer.h"
 
 using namespace ORG_NCSA_IRIS;
 
@@ -50,8 +51,8 @@ using namespace ORG_NCSA_IRIS;
 __device__ void madd_atomic(iris_real *M, int n, int m, complex<iris_real> &val)
 {
     int c = n * (n + 1);
-    atomicAdd(M+c+m, val.real());
     atomicAdd(M+c-m, val.imag());
+    atomicAdd(M+c+m, val.real());
 }
 
 IRIS_CUDA_DEVICE void ORG_NCSA_IRIS::d_p2m(int order, iris_real x, iris_real y, iris_real z, iris_real q, iris_real *out_M)
@@ -101,11 +102,11 @@ IRIS_CUDA_DEVICE void ORG_NCSA_IRIS::d_p2m(int order, iris_real x, iris_real y, 
     }
 }
 
-__global__ void k_eval_p2m(cell_t *in_cells, int offset, bool alien_only, particle_t *m_particles, xparticle_t **m_xparticles, int m_order, iris_real *m_M, int m_nterms)
+__global__ void k_eval_p2m(cell_t *in_cells, int offset, particle_t *m_particles, int m_order, iris_real *m_M, int m_nterms)
 {
-    int leaf_idx = blockIdx.y * gridDim.z + blockIdx.z;   // Which leaf we are processing
-    int cellID = leaf_idx + offset;
-    int j = IRIS_CUDA_TID;                                // Target particle inside cellID
+    int leaf_idx = __fma(blockIdx.y, gridDim.z, blockIdx.z);   // Which leaf we are processing
+    int cellID = leaf_idx + offset;                            // CellID of the leaf
+    int j = IRIS_CUDA_TID;                                     // Target particle inside cellID
     
     cell_t *leaf = &in_cells[cellID];
     
@@ -114,58 +115,33 @@ __global__ void k_eval_p2m(cell_t *in_cells, int offset, bool alien_only, partic
 	return;
     }
     
-    // we only want alien cells, but this one is local -- continue
-    if(alien_only && !(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF)) {
-	return;
-    }
-    
-    // it has been send from exchange_LET AND from halo exchange -- continue
-    if(alien_only && (leaf->flags & IRIS_FMM_CELL_ALIEN_NL)) {
-	return;
-    }
-    
     iris_real *M = m_M + cellID * m_nterms;
 
     iris_real x, y, z, q;
-    if(leaf->flags & IRIS_FMM_CELL_ALIEN_LEAF) {
-	xparticle_t *ptr;
-	if(leaf->flags & IRIS_FMM_CELL_ALIEN_L1) {
-	    ptr = m_xparticles[0];
-	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L2) {
-	    ptr = m_xparticles[1];
-	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L3) {
-	    ptr = m_xparticles[1];
-	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L4) {
-	    ptr = m_xparticles[1];
-	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L5) {
-	    ptr = m_xparticles[1];
-	}else if(leaf->flags & IRIS_FMM_CELL_ALIEN_L6) {
-	    ptr = m_xparticles[1];
-	}
-	x = ptr[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
-	y = ptr[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
-	z = ptr[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
-	q = ptr[leaf->first_child+j].xyzq[3];
-    }else {
-	x = m_particles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
-	y = m_particles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
-	z = m_particles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
-	q = m_particles[leaf->first_child+j].xyzq[3];
-    }
-    
+    x = m_particles[leaf->first_child+j].xyzq[0] - leaf->ses.c.r[0];
+    y = m_particles[leaf->first_child+j].xyzq[1] - leaf->ses.c.r[1];
+    z = m_particles[leaf->first_child+j].xyzq[2] - leaf->ses.c.r[2];
+    q = m_particles[leaf->first_child+j].xyzq[3];
     d_p2m(m_order, x, y, z, q, M);
     
     leaf->flags |= IRIS_FMM_CELL_VALID_M;
 }
 
-void fmm::eval_p2m_gpu(cell_t *in_cells, bool alien_only)
+void fmm::eval_p2m_gpu(cell_t *in_cells)
 {
+    // cuda_timer tm(m_streams[1]);
+
     int offset = cell_meta_t::offset_for_level(max_level());
     int nleafs = m_tree_size - offset;
 
     dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
     dim3 nblocks((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
-    k_eval_p2m<<<nblocks, nthreads, 0, m_streams[1]>>>(in_cells, offset, alien_only, m_particles, m_xparticles, m_order, m_M, m_nterms);
+    
+    // tm.start();
+    k_eval_p2m<<<nblocks, nthreads, 0, m_streams[1]>>>(in_cells, offset, m_particles, m_order, m_M, m_nterms);
+    // tm.stop();
+    
+    // m_logger->time("**** P2M time: %f ms (m_max_particles = %d, nleafs = %d)", tm.read(), m_max_particles, nleafs);
 }
 
 #endif
