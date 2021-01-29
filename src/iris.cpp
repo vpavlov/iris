@@ -728,7 +728,7 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
     ASSERT_CLIENT("send_charges");
 
     MPI_Comm comm = server_comm();
-    MPI_Win win;
+    MPI_Win win = NULL;
     int *pending = stos_fence_pending(&win);
 
     MPI_Request req;
@@ -755,7 +755,7 @@ void iris::commit_charges()
     MPI_Barrier(m_local_comm->m_comm);
 
     MPI_Comm comm = server_comm();
-    MPI_Win win;
+    MPI_Win win = NULL;
     int *pending = stos_fence_pending(&win);
 
     if(is_leader()) {
