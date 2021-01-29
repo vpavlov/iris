@@ -106,6 +106,8 @@ void ORG_NCSA_IRIS::p2m(int order, iris_real x, iris_real y, iris_real z, iris_r
     madd(out_M, order, order, R_m_m);
 }
 
+#ifdef IRIS_CUDA
+
 __device__ void mset(iris_real *M, int n, int m, complex<iris_real> &val)
 {
     int c = __fma(n, n, n);
@@ -143,6 +145,7 @@ __device__ void d_p2m_single(int order, iris_real x, iris_real y, iris_real z, i
     }
     mset(out_M, order, order, R_m_m);
 }
+#endif
 
 
 //
