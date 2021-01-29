@@ -428,7 +428,7 @@ int main(int argc, char **argv)
     // debugging facility
     
     // bool ready = false;
-    // if(rank == 0) {
+    // if(rank == 1) {
     // 	printf("Rank %d is PID %d\n", rank, getpid());
     // 	while (!ready) {
     // 	    sleep(5);

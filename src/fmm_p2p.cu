@@ -219,7 +219,8 @@ __global__ void k_p2p_neigh(interact_item_t *list, cell_t *m_cells, cell_t *m_xc
 	}
     }
     
-
+    do_other_side = false;
+	
     // Store 64 source particles (one per thread) in the src shared buffer.
     // In case there are not enough particles, store a dummy particle
     // that is sufficiently far from all the others. This is crucially needed for the

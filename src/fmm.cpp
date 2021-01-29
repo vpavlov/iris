@@ -962,9 +962,6 @@ void fmm::print_tree(const char *label, cell_t *in_cells, int cellID, iris_real 
 
 void fmm::dual_tree_traversal()
 {
-    // timer tm;
-    // tm.start();
-            
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
 	dual_tree_traversal_gpu();
@@ -981,9 +978,6 @@ void fmm::dual_tree_traversal()
 	eval_l2l();
 	eval_l2p();
     }
-
-    // tm.stop();
-    // m_logger->info("FMM: Dual Tree Traversal wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
 }
 
 #ifdef IRIS_CUDA
@@ -1135,15 +1129,15 @@ void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
     int nleafs = m_tree_size - offset;
 
 #ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	pair_t p(destID, srcID);
-	auto skip = m_p2p_skip.find(p);
-	if(skip != m_p2p_skip.end()) {
-	    return;
-	}
-	pair_t pp(srcID, destID);
-	m_p2p_skip[pp] = true;
-    }
+    // if(m_iris->m_cuda) {
+    // 	pair_t p(destID, srcID);
+    // 	auto skip = m_p2p_skip.find(p);
+    // 	if(skip != m_p2p_skip.end()) {
+    // 	    return;
+    // 	}
+    // 	pair_t pp(srcID, destID);
+    // 	m_p2p_skip[pp] = true;
+    // }
 #endif
 
     interact_item_t t(srcID, destID, ix, iy, iz);

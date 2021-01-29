@@ -83,12 +83,12 @@ void domain::set_global_box(iris_real x0, iris_real y0, iris_real z0,
 	m_solver->handle_box_resize();
     }
 
-    m_logger->trace("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
-		    m_global_box.xsize, m_global_box.ysize,
-		    m_global_box.zsize,
-		    m_global_box.xlo, m_global_box.xhi,
-		    m_global_box.ylo, m_global_box.yhi,
-		    m_global_box.zlo, m_global_box.zhi);
+    m_logger->info("Global box is %g x %g x %g: [%g:%g][%g:%g][%g:%g]",
+		   m_global_box.xsize, m_global_box.ysize,
+		   m_global_box.zsize,
+		   m_global_box.xlo, m_global_box.xhi,
+		   m_global_box.ylo, m_global_box.yhi,
+		   m_global_box.zlo, m_global_box.zhi);
 }
 
 void domain::commit()

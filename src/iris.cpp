@@ -559,11 +559,8 @@ void iris::commit()
     if(is_leader()) {
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-        m_logger->trace("sending event");
 	send_event(comm, m_other_leader, IRIS_TAG_COMMIT_FANOUT, 0, NULL, &req, NULL);
-        m_logger->trace("commit MPI_Wait");
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
-        m_logger->trace("commit MPI_Recv");
 	MPI_Recv(NULL, 0, MPI_BYTE, m_other_leader, IRIS_TAG_COMMIT_DONE, comm, MPI_STATUS_IGNORE);
     }
 
@@ -745,11 +742,8 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
 	}
     }
-    m_logger->trace("send_charges stos_process_pending");
     stos_process_pending(pending, win);
-    m_logger->trace("send_charges MPI_Wait");
     MPI_Wait(&req, MPI_STATUS_IGNORE);
-    m_logger->trace("send_charges ended MPI_Wait");
 }
 
 void iris::commit_charges()
@@ -785,7 +779,6 @@ bool iris::handle_charges(event_t *event)
     }
 
     int ncharges = event->size / unit;
-    m_logger->trace("Received %d atoms from %d", ncharges, event->peer);
 
     m_ncharges[event->peer] = ncharges;
 #ifdef IRIS_CUDA
@@ -816,8 +809,6 @@ bool iris::handle_charges(event_t *event)
 
 bool iris::handle_commit_charges()
 {
-    m_logger->trace("handle_commit_charges()");
-    
     if(m_mesh != NULL) {
 	m_mesh->assign_charges();
 	m_mesh->exchange_rho_halo();
@@ -874,7 +865,6 @@ void iris::clear_wff()
 
 iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
-    m_logger->trace("entering receive_forces");
     *out_Ek = 0.0;
     *(out_virial + 0) = 0.0;
     *(out_virial + 1) = 0.0;
@@ -912,11 +902,6 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size - 7*sizeof(iris_real));
 	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
 
-	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
-	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->trace("i %d retval %f %f %f %f",i, bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
-	    }
-
 	    hwm += ev.size - 7*sizeof(iris_real);
 
 	    *out_Ek +=         *((iris_real *)ev.data + 0);
@@ -934,19 +919,11 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
     hwm=0;
     for(int i=0;i<m_server_size;i++) {
 	if(m_wff[i]) {
-	    
-	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
-	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->trace("i %d bahor %f %f %f %f",i,bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
-	    }
-
 	    hwm += (*out_counts)[i]*unit;
-
 	}
 	
     }
     clear_wff();
-    m_logger->trace("return from receive_forces");
     return retval;
 }
 

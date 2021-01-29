@@ -201,7 +201,7 @@ void fmm::exchange_p2p_halo_cpu()
 
     MPI_Alltoallv(m_a2a_sendbuf.data(), m_a2a_send_cnt.data(), m_a2a_send_disp.data(), MPI_BYTE,
     		  m_xparticles[0], m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
-    		  MPI_COMM_WORLD);
+    		  m_local_comm->m_comm);
     
     distribute_xparticles(m_xparticles[0], rsize, IRIS_FMM_CELL_ALIEN_L1, m_xcells);
     
