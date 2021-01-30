@@ -30,10 +30,13 @@
 #ifndef __IRIS_SOLVER_PARAM_H__
 #define __IRIS_SOLVER_PARAM_H__
 
-union solver_param_t
+namespace ORG_NCSA_IRIS
 {
-    int i;
-    iris_real r;
+    union solver_param_t
+    {
+        int i;
+        iris_real r;
+    };
 };
 
 #define IRIS_SOLVER_CG_NSIGMAS         0  // total width of Gaussian

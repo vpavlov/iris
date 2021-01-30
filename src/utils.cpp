@@ -267,3 +267,21 @@ void ORG_NCSA_IRIS::qsort_int(int *in_data, size_t in_num)
 {
     qsort(in_data, in_num, sizeof(int), __cmp_int);
 }
+
+int ORG_NCSA_IRIS::get_int_env(const char *name, int def)
+{
+    char *tmp = getenv(name);
+    if(tmp == NULL) {
+    return def;
+    }
+    return atoi(tmp);
+}
+
+float ORG_NCSA_IRIS::get_float_env(const char *name, float def)
+{
+    char *tmp = getenv(name);
+    if(tmp == NULL) {
+    return def;
+    }
+    return atof(tmp);
+}

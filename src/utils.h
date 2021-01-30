@@ -67,6 +67,10 @@ namespace ORG_NCSA_IRIS {
 	    a[i] = tmp;
 	}
     }
+
+    int get_int_env(const char *name, int def);
+
+    float get_float_env(const char *name, float def);
 }
 
 #endif

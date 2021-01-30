@@ -865,6 +865,8 @@ void iris::clear_wff()
 
 iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
+    timer tm, tm_get_event,tm_alloc_copy;
+    tm.start();
     *out_Ek = 0.0;
     *(out_virial + 0) = 0.0;
     *(out_virial + 1) = 0.0;
@@ -890,15 +892,16 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	(*out_counts)[i] = 0;
 	if(m_wff[i]) {
 	    event_t ev;
+        tm_get_event.start();
 	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
-	    
+	    tm_get_event.stop();
 	    if((ev.size - 7*sizeof(iris_real)) % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
 	    (*out_counts)[i] = (ev.size - 7*sizeof(iris_real)) / unit;
 	    
 	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
-
+        tm_alloc_copy.start();
 	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size - 7*sizeof(iris_real));
 	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
 
@@ -913,6 +916,7 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	    *(out_virial+5) += *((iris_real *)ev.data + 6);
 
 	    memory::wfree(ev.data);
+        tm_alloc_copy.stop();
 	}
     }
 
@@ -924,6 +928,9 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	
     }
     clear_wff();
+    tm.stop();
+    m_logger->trace("receive_forces total %f s get_enent %f s allocate and copy data %f s",tm.read_wall(),tm_get_event.read_wall(),tm_alloc_copy.read_wall());
+
     return retval;
 }
 

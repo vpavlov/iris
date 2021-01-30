@@ -178,9 +178,10 @@ void fmm::commit()
 
 	m_nterms = (m_order + 1) * (m_order + 1);
 
-	m_local_root_level = int(log(m_local_comm->m_size-1) / _LN8) + 1;
-	if(m_local_comm->m_size == 1) {
+	if(m_local_comm->m_size <= 1) {
 	    m_local_root_level = 0;
+	} else {
+		m_local_root_level = int(log(m_local_comm->m_size-1) / _LN8) + 1;
 	}
 
 	m_tree_size = ((1 << 3 * m_depth) - 1) / 7;
@@ -310,9 +311,30 @@ void fmm::compute_energy_and_virial_cpu()
     iris_real ener = 0.0;
     for(int i=0;i<m_nparticles;i++) {
     	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
+		iris_real xfx = m_particles[i].xyzq[0] * m_particles[i].tgt[1];
+		iris_real yfx = m_particles[i].xyzq[1] * m_particles[i].tgt[1];
+		iris_real zfx = m_particles[i].xyzq[2] * m_particles[i].tgt[1];
+		iris_real xfy = m_particles[i].xyzq[0] * m_particles[i].tgt[2];
+		iris_real yfy = m_particles[i].xyzq[1] * m_particles[i].tgt[2];
+		iris_real zfy = m_particles[i].xyzq[2] * m_particles[i].tgt[2];
+		iris_real xfz = m_particles[i].xyzq[0] * m_particles[i].tgt[3];
+		iris_real yfz = m_particles[i].xyzq[1] * m_particles[i].tgt[3];
+		iris_real zfz = m_particles[i].xyzq[2] * m_particles[i].tgt[3];
+		m_iris->m_virial[0] += xfx;
+		m_iris->m_virial[1] += yfy;
+		m_iris->m_virial[2] += zfz;
+		m_iris->m_virial[3] += (xfy + yfx);
+		m_iris->m_virial[4] += (xfz + zfx);
+		m_iris->m_virial[5] += (yfz + zfy);
     }
     m_iris->m_Ek = ener * 0.5 * m_units->ecf;
     // TODO: calculate virial in m_iris->m_virial[0..5]
+	m_iris->m_virial[0] *= 0.5 * m_units->ecf;
+	m_iris->m_virial[1] *= 0.5 * m_units->ecf;
+	m_iris->m_virial[2] *= 0.5 * m_units->ecf;
+	m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
+	m_iris->m_virial[4] *= 0.25* m_units->ecf;
+	m_iris->m_virial[5] *= 0.25* m_units->ecf;
 }
 
 void fmm::send_forces_to(particle_t *in_particles, int peer, int start, int end, bool include_energy_virial)
@@ -1071,7 +1093,7 @@ void fmm::interact(cell_t *src_cells, cell_t *dest_cells, int srcID, int destID,
     iris_real rn = sqrt(dx*dx + dy*dy + dz*dz);
     iris_real dn = src_cells[srcID].ses.r + dest_cells[destID].ses.r;
 
-    if(dn/rn < m_mac) {
+    if(rn != 0.0 && dn/rn < m_mac) {
 	do_m2l_interact(srcID, destID, ix, iy, iz);
     }else if(cell_meta_t::level_of(srcID) == max_level() && cell_meta_t::level_of(destID) == max_level()) {
 	do_p2p_interact(srcID, destID, ix, iy, iz);

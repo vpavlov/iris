@@ -378,24 +378,6 @@ void handle_forces(iris *iris, int *nforces, iris_real *forces)
     fclose(fp);
 }
 
-int get_int_env(const char *name, int def)
-{
-    char *tmp = getenv(name);
-    if(tmp == NULL) {
-	return def;
-    }
-    return atoi(tmp);
-}
-
-float get_float_env(const char *name, float def)
-{
-    char *tmp = getenv(name);
-    if(tmp == NULL) {
-	return def;
-    }
-    return atof(tmp);
-}
-
 int main(int argc, char **argv)
 {
     int depth = get_int_env("DEPTH", 4);
