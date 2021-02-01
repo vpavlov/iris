@@ -740,9 +740,9 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 	send_event(comm, in_peer, IRIS_TAG_CHARGES,
 		   5*in_count*sizeof(iris_real),
 		   in_charges, &req, win);
-	if(!is_server()) {
-	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
-	}
+	// if(!is_server()) {
+	//     MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
+	// }
     }
     stos_process_pending(pending, win);
     MPI_Wait(&req, MPI_STATUS_IGNORE);
@@ -794,10 +794,10 @@ bool iris::handle_charges(event_t *event)
     }
 
     if(!is_client()) {
-	MPI_Request req;
-	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
-		  event->comm, &req);
-	MPI_Request_free(&req);
+	// MPI_Request req;
+	// MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
+	// 	  event->comm, &req);
+	// MPI_Request_free(&req);
     }
 
 #ifdef IRIS_CUDA

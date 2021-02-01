@@ -319,25 +319,30 @@ bool read_frameN(int N, char *dirname, comm_rec *in_local_comm, input_t *out_inp
 // the example.
 void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes, box_t<iris_real> *in_ext_boxes, box_t<iris_real> in_gbox)
 {
-    iris_real *sendbuf = (iris_real *)memory::wmalloc(in_input->atoms.size() * sizeof(atom_t));
+    static std::vector<iris_real> sendvec;
+    sendvec.reserve(in_input->atoms.size() * 5);
+    
+    iris_real *sendbuf = sendvec.data();
+    
+    int hwm = 0;
     for(int i=0;i<in_iris->m_server_size;i++) {
 	int cnt = 0;
 	for(int j=0;j<in_input->atoms.size();j++) {
 	    if(in_ext_boxes[i].in_periodic(in_input->atoms[j].xyzqi, &in_gbox)) {
 		if(in_local_boxes[i].in(in_input->atoms[j].xyzqi)) {
-		    memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
+		    memcpy(sendbuf+hwm+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
 		    cnt++;
 		}else {
 		    in_input->atoms[j].xyzqi[4] *= -1.0;
-		    memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
+		    memcpy(sendbuf+hwm+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
 		    in_input->atoms[j].xyzqi[4] *= -1.0;
 		    cnt++;
 		}
 	    }
 	}
-	in_iris->send_charges(i, sendbuf, cnt);
+	in_iris->send_charges(i, sendbuf+hwm, cnt);
+	hwm += cnt * 5;
     }
-    memory::wfree(sendbuf);
 }
 
 // Do whatever is needed with the forces that came back from IRIS
