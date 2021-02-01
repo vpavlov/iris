@@ -311,30 +311,30 @@ void fmm::compute_energy_and_virial_cpu()
     iris_real ener = 0.0;
     for(int i=0;i<m_nparticles;i++) {
     	ener += m_particles[i].tgt[0] * m_particles[i].xyzq[3];
-		iris_real xfx = m_particles[i].xyzq[0] * m_particles[i].tgt[1];
-		iris_real yfx = m_particles[i].xyzq[1] * m_particles[i].tgt[1];
-		iris_real zfx = m_particles[i].xyzq[2] * m_particles[i].tgt[1];
-		iris_real xfy = m_particles[i].xyzq[0] * m_particles[i].tgt[2];
-		iris_real yfy = m_particles[i].xyzq[1] * m_particles[i].tgt[2];
-		iris_real zfy = m_particles[i].xyzq[2] * m_particles[i].tgt[2];
-		iris_real xfz = m_particles[i].xyzq[0] * m_particles[i].tgt[3];
-		iris_real yfz = m_particles[i].xyzq[1] * m_particles[i].tgt[3];
-		iris_real zfz = m_particles[i].xyzq[2] * m_particles[i].tgt[3];
-		m_iris->m_virial[0] += xfx;
-		m_iris->m_virial[1] += yfy;
-		m_iris->m_virial[2] += zfz;
-		m_iris->m_virial[3] += (xfy + yfx);
-		m_iris->m_virial[4] += (xfz + zfx);
-		m_iris->m_virial[5] += (yfz + zfy);
+	iris_real xfx = m_particles[i].xyzq[0] * m_particles[i].tgt[1];
+	iris_real yfx = m_particles[i].xyzq[1] * m_particles[i].tgt[1];
+	iris_real zfx = m_particles[i].xyzq[2] * m_particles[i].tgt[1];
+	iris_real xfy = m_particles[i].xyzq[0] * m_particles[i].tgt[2];
+	iris_real yfy = m_particles[i].xyzq[1] * m_particles[i].tgt[2];
+	iris_real zfy = m_particles[i].xyzq[2] * m_particles[i].tgt[2];
+	iris_real xfz = m_particles[i].xyzq[0] * m_particles[i].tgt[3];
+	iris_real yfz = m_particles[i].xyzq[1] * m_particles[i].tgt[3];
+	iris_real zfz = m_particles[i].xyzq[2] * m_particles[i].tgt[3];
+	m_iris->m_virial[0] += xfx;
+	m_iris->m_virial[1] += yfy;
+	m_iris->m_virial[2] += zfz;
+	m_iris->m_virial[3] += (xfy + yfx);
+	m_iris->m_virial[4] += (xfz + zfx);
+	m_iris->m_virial[5] += (yfz + zfy);
     }
+    
     m_iris->m_Ek = ener * 0.5 * m_units->ecf;
-    // TODO: calculate virial in m_iris->m_virial[0..5]
-	m_iris->m_virial[0] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[1] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[2] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
-	m_iris->m_virial[4] *= 0.25* m_units->ecf;
-	m_iris->m_virial[5] *= 0.25* m_units->ecf;
+    m_iris->m_virial[0] *= 0.5 * m_units->ecf;
+    m_iris->m_virial[1] *= 0.5 * m_units->ecf;
+    m_iris->m_virial[2] *= 0.5 * m_units->ecf;
+    m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
+    m_iris->m_virial[4] *= 0.25* m_units->ecf;
+    m_iris->m_virial[5] *= 0.25* m_units->ecf;
 }
 
 void fmm::send_forces_to(particle_t *in_particles, int peer, int start, int end, bool include_energy_virial)

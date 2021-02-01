@@ -795,30 +795,45 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
 {
     __shared__ iris_real ener_acc[IRIS_CUDA_NTHREADS];
     __shared__ iris_real vir_acc[IRIS_CUDA_NTHREADS][6];
+
     int iacc = threadIdx.x;
+
     ener_acc[iacc] = 0.0;
+    vir_acc[iacc][0] = 0.0;
+    vir_acc[iacc][1] = 0.0;
+    vir_acc[iacc][2] = 0.0;
+    vir_acc[iacc][3] = 0.0;
+    vir_acc[iacc][4] = 0.0;
+    vir_acc[iacc][5] = 0.0;
     
     int tid = IRIS_CUDA_TID;
     if(tid == 0) {
-	*out_ener = 0.0;
+	out_ener[0] = 0.0;
+	out_ener[1] = 0.0;
+	out_ener[2] = 0.0;
+	out_ener[3] = 0.0;
+	out_ener[4] = 0.0;
+	out_ener[5] = 0.0;
+	out_ener[6] = 0.0;
     }
+    
     if(tid < npart) {
-    ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
-    iris_real xfx = m_particles[tid].xyzq[0] * m_particles[tid].tgt[1];
-    iris_real yfx = m_particles[tid].xyzq[1] * m_particles[tid].tgt[1];
-    iris_real zfx = m_particles[tid].xyzq[2] * m_particles[tid].tgt[1];
-    iris_real xfy = m_particles[tid].xyzq[0] * m_particles[tid].tgt[2];
-    iris_real yfy = m_particles[tid].xyzq[1] * m_particles[tid].tgt[2];
-    iris_real zfy = m_particles[tid].xyzq[2] * m_particles[tid].tgt[2];
-    iris_real xfz = m_particles[tid].xyzq[0] * m_particles[tid].tgt[3];
-    iris_real yfz = m_particles[tid].xyzq[1] * m_particles[tid].tgt[3];
-    iris_real zfz = m_particles[tid].xyzq[2] * m_particles[tid].tgt[3];
-    vir_acc[iacc][0] += xfx;
-    vir_acc[iacc][1] += yfy;
-    vir_acc[iacc][2] += zfz;
-    vir_acc[iacc][3] += (xfy + yfx);
-    vir_acc[iacc][4] += (xfz + zfx);
-    vir_acc[iacc][5] += (yfz + zfy);
+	ener_acc[iacc] += m_particles[tid].tgt[0] * m_particles[tid].xyzq[3];
+	iris_real xfx = m_particles[tid].xyzq[0] * m_particles[tid].tgt[1];
+	iris_real yfx = m_particles[tid].xyzq[1] * m_particles[tid].tgt[1];
+	iris_real zfx = m_particles[tid].xyzq[2] * m_particles[tid].tgt[1];
+	iris_real xfy = m_particles[tid].xyzq[0] * m_particles[tid].tgt[2];
+	iris_real yfy = m_particles[tid].xyzq[1] * m_particles[tid].tgt[2];
+	iris_real zfy = m_particles[tid].xyzq[2] * m_particles[tid].tgt[2];
+	iris_real xfz = m_particles[tid].xyzq[0] * m_particles[tid].tgt[3];
+	iris_real yfz = m_particles[tid].xyzq[1] * m_particles[tid].tgt[3];
+	iris_real zfz = m_particles[tid].xyzq[2] * m_particles[tid].tgt[3];
+	vir_acc[iacc][0] += xfx;
+	vir_acc[iacc][1] += yfy;
+	vir_acc[iacc][2] += zfz;
+	vir_acc[iacc][3] += (xfy + yfx);
+	vir_acc[iacc][4] += (xfz + zfx);
+	vir_acc[iacc][5] += (yfz + zfy);
     }
 
     __syncthreads();
@@ -826,24 +841,25 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
     for(int i=blockDim.x; i>0; i/=2) {
 	int stride = blockDim.x/i;
 	if(iacc < (blockDim.x - stride) && iacc % (2*stride) == 0) {
-        ener_acc[iacc] += ener_acc[iacc+stride];
-        vir_acc[iacc][0] += vir_acc[iacc+stride][0];
-        vir_acc[iacc][1] += vir_acc[iacc+stride][1];
-        vir_acc[iacc][2] += vir_acc[iacc+stride][2];
-        vir_acc[iacc][3] += vir_acc[iacc+stride][3];
-        vir_acc[iacc][4] += vir_acc[iacc+stride][4];
-        vir_acc[iacc][5] += vir_acc[iacc+stride][5];
+	    ener_acc[iacc] += ener_acc[iacc+stride];
+	    vir_acc[iacc][0] += vir_acc[iacc+stride][0];
+	    vir_acc[iacc][1] += vir_acc[iacc+stride][1];
+	    vir_acc[iacc][2] += vir_acc[iacc+stride][2];
+	    vir_acc[iacc][3] += vir_acc[iacc+stride][3];
+	    vir_acc[iacc][4] += vir_acc[iacc+stride][4];
+	    vir_acc[iacc][5] += vir_acc[iacc+stride][5];
 	}
 	__syncthreads();
     }
+    
     if(iacc == 0) {
-    atomicAdd(out_ener, ener_acc[0]);
-    atomicAdd(out_ener+1, vir_acc[0][0]);
-    atomicAdd(out_ener+2, vir_acc[0][1]);
-    atomicAdd(out_ener+3, vir_acc[0][2]);
-    atomicAdd(out_ener+4, vir_acc[0][3]);
-    atomicAdd(out_ener+5, vir_acc[0][4]);
-    atomicAdd(out_ener+6, vir_acc[0][5]);
+	atomicAdd(out_ener, ener_acc[0]);
+	atomicAdd(out_ener+1, vir_acc[0][0]);
+	atomicAdd(out_ener+2, vir_acc[0][1]);
+	atomicAdd(out_ener+3, vir_acc[0][2]);
+	atomicAdd(out_ener+4, vir_acc[0][3]);
+	atomicAdd(out_ener+5, vir_acc[0][4]);
+	atomicAdd(out_ener+6, vir_acc[0][5]);
     }
 }
 
@@ -857,13 +873,14 @@ void fmm::compute_energy_and_virial_gpu()
     k_compute_energy_and_virial<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, m_evir_gpu, n);
     cudaMemcpyAsync(&(m_iris->m_Ek), m_evir_gpu, 7*sizeof(iris_real), cudaMemcpyDefault, m_streams[0]);
     cudaStreamSynchronize(m_streams[0]); // must be synchronous
+    
     m_iris->m_Ek *= 0.5 * m_units->ecf;
     m_iris->m_virial[0] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[1] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[2] *= 0.5 * m_units->ecf;
-	m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
-	m_iris->m_virial[4] *= 0.25* m_units->ecf;
-	m_iris->m_virial[5] *= 0.25* m_units->ecf;
+    m_iris->m_virial[1] *= 0.5 * m_units->ecf;
+    m_iris->m_virial[2] *= 0.5 * m_units->ecf;
+    m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
+    m_iris->m_virial[4] *= 0.25* m_units->ecf;
+    m_iris->m_virial[5] *= 0.25* m_units->ecf;
 }
 
 
