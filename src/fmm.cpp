@@ -341,6 +341,7 @@ void fmm::send_forces_to(particle_t *in_particles, int peer, int start, int end,
 {
     MPI_Comm comm = m_iris->client_comm();
     int ncharges = end - start;
+    
     int size = 7*sizeof(iris_real) + ncharges*4*sizeof(iris_real);
     iris_real *forces = (iris_real *)memory::wmalloc(size);
     

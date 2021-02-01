@@ -33,6 +33,7 @@
 #include <mpi.h>
 #include <pthread.h>
 #include <map>
+#include <vector>
 #include "real.h"
 #include "box.h"
 #include "event.h"
@@ -279,6 +280,8 @@ namespace ORG_NCSA_IRIS {
 	class units           *m_units;       // Units system to use
     private:
 	volatile bool m_quit;  // quit the main loop
+
+	std::vector<iris_real> m_forcebuf;    // returned from receive_forces
     };
 }
 #endif

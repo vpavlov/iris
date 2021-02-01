@@ -569,8 +569,6 @@ int main(int argc, char **argv)
 	    x->m_logger->error("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
 
 	    handle_forces(x, nforces, forces);
-	    delete [] nforces;
-	    memory::wfree(forces);
 
 	    // the clients don't have a mesh; this needs to be moved to the server
 	    // x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);

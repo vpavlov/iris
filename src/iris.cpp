@@ -551,6 +551,8 @@ void iris::commit()
 {
     ASSERT_CLIENT("commit");
 
+    clear_wff();
+
     if(is_both()) {
 	perform_commit();
 	return;
@@ -863,6 +865,7 @@ void iris::clear_wff()
     }
 }
 
+// TODO: make this work for mode 0, 2 (server is also client)
 iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
     timer tm, tm_get_event,tm_alloc_copy;
@@ -882,14 +885,18 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
     }
 
     size_t hwm = 0;  // high water mark (in bytes)
-    iris_real *retval = NULL;
 
-    *out_counts = new int[m_server_size];
+    int total_forces = 0;
+    for(int i=0;i<m_server_size;i++) {
+	total_forces += m_wff[i];
+    }
 
+    m_forcebuf.reserve(total_forces * 4);
+    iris_real *retval = m_forcebuf.data();
+    
     comm_rec *server_comm = is_server()?m_local_comm:m_inter_comm;
 
     for(int i=0;i<m_server_size;i++) {
-	(*out_counts)[i] = 0;
 	if(m_wff[i]) {
 	    event_t ev;
 	    tm_get_event.start();
@@ -898,11 +905,9 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
 	    if((ev.size - 7*sizeof(iris_real)) % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
-	    (*out_counts)[i] = (ev.size - 7*sizeof(iris_real)) / unit;
 	    
-	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
+	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", m_wff[i], i);
 	    tm_alloc_copy.start();
-	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size - 7*sizeof(iris_real));
 	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
 
 	    hwm += ev.size - 7*sizeof(iris_real);
@@ -923,11 +928,13 @@ iris_real *iris::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *
     hwm=0;
     for(int i=0;i<m_server_size;i++) {
 	if(m_wff[i]) {
-	    hwm += (*out_counts)[i]*unit;
+	    hwm += m_wff[i]*unit;
 	}
 	
     }
-    clear_wff();
+
+    *out_counts = m_wff;
+    
     tm.stop();
     m_logger->trace("receive_forces total %f s get_enent %f s allocate and copy data %f s",tm.read_wall(),tm_get_event.read_wall(),tm_alloc_copy.read_wall());
 
