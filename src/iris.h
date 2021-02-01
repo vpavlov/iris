@@ -235,7 +235,7 @@ namespace ORG_NCSA_IRIS {
 	int m_other_leader;            // the leader of the other group
 	int m_nthreads;                // # of threads to use
 	// which server peers this client is waiting to receive forces from
-	bool *m_wff;
+	int *m_wff;
 
 	int *m_ncharges;
 	//std::map<int, int> m_ncharges;           // per sending rank
