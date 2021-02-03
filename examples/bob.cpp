@@ -109,8 +109,17 @@ bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
 		SUBSTR(tmp, line, 55, 61);
 		atom.xyzqi[3] = (iris_real) atof(tmp);
 
+		SUBSTR(tmp, line, 13, 16);
+		if(!strncmp(tmp, " OW ", 4)) {
+		    atom.xyzqi[3] = -.8340000;
+		}
+		
+                if(!strncmp(tmp, " HW1", 4) || !strncmp(tmp, " HW2", 4)) {
+		    atom.xyzqi[3] = .4170000;
+		}
+		
 		atom.xyzqi[4] = (1 + out_input->natoms) * (iris_real) 1.0;
-
+		
 		out_input->atoms.push_back(atom);
 		qtot += atom.xyzqi[3];
 		qtot2 += (atom.xyzqi[3] * atom.xyzqi[3]);

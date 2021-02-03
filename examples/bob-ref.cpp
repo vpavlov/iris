@@ -54,11 +54,7 @@ bool read_frame0(const char *dirname, input_t *out_input)
     int in_client_size = 1;
     int in_client_rank = 0;
     
-    char fname[1024];
-    
-    snprintf(fname, 1024, "%s/bob0-ch.pdb", dirname);
-
-    FILE *fp = fopen(fname, "r");
+    FILE *fp = fopen(dirname, "r");
     if(fp == NULL) {
 	return false;
     }
@@ -84,6 +80,7 @@ bool read_frame0(const char *dirname, input_t *out_input)
 	}else if(!strcmp(tmp, "ATOM  ")) {
 	    if(out_input->natoms % in_client_size == in_client_rank) {
 		atom_t atom;
+
 		SUBSTR(tmp, line, 31, 38);
 		atom.xyzqi[0] = (iris_real) atof(tmp) / 10.0;
 		
@@ -96,6 +93,15 @@ bool read_frame0(const char *dirname, input_t *out_input)
 		SUBSTR(tmp, line, 55, 61);
 		atom.xyzqi[3] = (iris_real) atof(tmp);
 
+		SUBSTR(tmp, line, 13, 16);
+		if(!strncmp(tmp, " OW ", 4)) {
+		    atom.xyzqi[3] = -.8340000;
+		}
+		
+                if(!strncmp(tmp, " HW1", 4) || !strncmp(tmp, " HW2", 4)) {
+		    atom.xyzqi[3] = .4170000;
+		}
+		
 		atom.xyzqi[4] = out_input->natoms * (iris_real) 1.0;
 
 		out_input->atoms.push_back(atom);
@@ -115,10 +121,11 @@ bool read_frame0(const char *dirname, input_t *out_input)
     return true;
 }
 
-int main()
+int main(int argc, char **argv)
 {
     input_t input;
-    read_frame0("../examples/bob-trj", &input);
+    
+    read_frame0(argv[1], &input);
     iris_real fx_tot = 0.0;
     iris_real fy_tot = 0.0;
     iris_real fz_tot = 0.0;
@@ -134,7 +141,7 @@ int main()
 	iris_real ry = input.atoms[i].xyzqi[1];
 	iris_real rz = input.atoms[i].xyzqi[2];
 	iris_real q = input.atoms[i].xyzqi[3];
-	
+
 	for(int ix=-IMAGES;ix<=IMAGES;ix++) {
 	    for(int iy=-IMAGES;iy<=IMAGES;iy++) {
 		for(int iz=-IMAGES;iz<=IMAGES;iz++) {

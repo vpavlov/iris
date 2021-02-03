@@ -868,10 +868,11 @@ void fmm::compute_energy_and_virial_gpu()
     cudaDeviceSynchronize();
     
     int n = m_nparticles;
-    int nthreads = MIN(IRIS_CUDA_NTHREADS, n);
-    int nblocks = IRIS_CUDA_NBLOCKS(n, nthreads);
+    dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
+    dim3 nblocks((n-1)/IRIS_CUDA_NTHREADS + 1, 1, 1);
     k_compute_energy_and_virial<<<nblocks, nthreads, 0, m_streams[0]>>>(m_particles, m_evir_gpu, n);
-    cudaMemcpyAsync(&(m_iris->m_Ek), m_evir_gpu, 7*sizeof(iris_real), cudaMemcpyDefault, m_streams[0]);
+    cudaMemcpyAsync(&(m_iris->m_Ek), m_evir_gpu, sizeof(iris_real), cudaMemcpyDefault, m_streams[0]);
+    cudaMemcpyAsync(&(m_iris->m_virial[0]), m_evir_gpu + 1, 6*sizeof(iris_real), cudaMemcpyDefault, m_streams[0]);
     cudaStreamSynchronize(m_streams[0]); // must be synchronous
     
     m_iris->m_Ek *= 0.5 * m_units->ecf;
