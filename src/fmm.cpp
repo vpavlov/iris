@@ -405,8 +405,10 @@ void fmm::send_back_forces_cpu(particle_t *in_particles, bool sort)
 		break;
 	    }
 	}
-	send_forces_to(in_particles, rank, start, end, include_energy_virial);
-	include_energy_virial = false;
+	if(end-start != 0) {
+	    send_forces_to(in_particles, rank, start, end, include_energy_virial);
+	    include_energy_virial = false;
+	}
 	start = end;
     }
 }

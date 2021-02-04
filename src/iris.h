@@ -169,8 +169,9 @@ namespace ORG_NCSA_IRIS {
 	// Use this on a client node to send charges to a server node
 	void send_charges(int in_peer, iris_real *in_charges, int in_count);
 
-	void commit_charges();
-
+	//void commit_charges();
+	bool can_start_solving();
+	
 	// Use this on a client node to receive forces from server nodes
 	iris_real *receive_forces(int **out_count, iris_real *out_Ek, iris_real *out_virial);
 	void get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
@@ -212,9 +213,10 @@ namespace ORG_NCSA_IRIS {
 
 	void perform_get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
 	
-	// initialize m_waiting_forces_from to sensible initial state
+	
 	void clear_wff();
-
+	void clear_wfc();
+	
 	void calculate_etot();  // calculate Hartree energy, for verification
 
 	void auto_tune_parameters();
@@ -235,8 +237,9 @@ namespace ORG_NCSA_IRIS {
 	int m_remote_leader;           // rank in uber_comm of remote leader
 	int m_other_leader;            // the leader of the other group
 	int m_nthreads;                // # of threads to use
-	// which server peers this client is waiting to receive forces from
-	int *m_wff;
+	
+	int *m_wff;                    // which server peers this client is waiting to receive forces from
+	int *m_wfc;                    // which client peers this server is waiting to receive charges from
 
 	int *m_ncharges;
 	//std::map<int, int> m_ncharges;           // per sending rank

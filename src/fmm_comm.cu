@@ -212,7 +212,7 @@ void fmm::exchange_p2p_halo_gpu()
     
     MPI_Alltoallv(m_a2a_sendbuf_cpu.data(), m_a2a_send_cnt.data(), m_a2a_send_disp.data(), MPI_BYTE,
     		  m_a2a_recvbuf.data(), m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
-    		  MPI_COMM_WORLD);
+    		  m_local_comm->m_comm);
 
     cudaMemcpyAsync(m_xparticles[0], m_a2a_recvbuf.data(), rsize*sizeof(xparticle_t), cudaMemcpyDefault, m_streams[0]);
     distribute_xparticles(m_xparticles[0], rsize, IRIS_FMM_CELL_ALIEN_L1, m_xcells);

@@ -567,7 +567,6 @@ int main(int argc, char **argv)
 	    
 	    int *nforces;
 	    send_charges(x, &input, local_boxes, ext_boxes, gbox);
-	    x->commit_charges();
 	    
 	    iris_real Ek, Es, Ecorr;
 	    iris_real virial[6];

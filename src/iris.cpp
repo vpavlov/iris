@@ -154,6 +154,7 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     m_units = new units(real);
 
     m_wff = NULL;
+    m_wfc = NULL;
 
     m_uber_comm = new comm_rec(this, in_uber_comm);
     m_local_comm = new comm_rec(this, in_local_comm);
@@ -189,6 +190,11 @@ void iris::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	clear_wff();
     }
 
+    if(is_server()) {
+	m_wfc = new int[m_client_size];
+	clear_wfc();
+    }
+    
     m_logger = new logger(this);
 
     m_domain = NULL;
@@ -456,7 +462,7 @@ void iris::perform_commit()
 	    m_solver = get_solver();
 	    m_dirty = false;
 	}
-
+	
 	// Beware: order is important. Some configurations depend on other
 	// being already performed
 	if(m_chass != NULL) {
@@ -485,7 +491,7 @@ void iris::perform_commit()
 	}
 
 	memset(m_ncharges, 0, m_client_size*sizeof(int));
-	
+	clear_wfc();
 	m_charges.clear();
 	m_forces.clear();	
 	
@@ -495,6 +501,7 @@ void iris::perform_commit()
 	if(m_solver != NULL) {
 	    m_solver->commit();     // depends on m_mesh
 	}
+	
 	m_quit = false;
     }
 }
@@ -552,7 +559,7 @@ void iris::commit()
     ASSERT_CLIENT("commit");
 
     clear_wff();
-
+    
     if(is_both()) {
 	perform_commit();
 	return;
@@ -733,44 +740,50 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
     MPI_Win win = NULL;
     int *pending = stos_fence_pending(&win);
 
-    MPI_Request req;
-    req = MPI_REQUEST_NULL;
-    if(in_count != 0) {
-	m_wff[in_peer] = in_count;
-	send_event(comm, in_peer, IRIS_TAG_CHARGES,
-		   5*in_count*sizeof(iris_real),
-		   in_charges, &req, win);
-	// if(!is_server()) {
-	//     MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
-	// }
-    }
+    MPI_Request req = MPI_REQUEST_NULL;
+    m_wff[in_peer] = in_count;
+    
+    send_event(comm, in_peer, IRIS_TAG_CHARGES,
+	       5*in_count*sizeof(iris_real),
+	       in_charges, &req, win);
+    
     stos_process_pending(pending, win);
     MPI_Wait(&req, MPI_STATUS_IGNORE);
 }
 
-void iris::commit_charges()
+// void iris::commit_charges()
+// {
+//     ASSERT_CLIENT("commit_charges");
+
+//     // Make sure all clients have already sent their atoms before notifying
+//     // the server that there are no more charges.
+//     MPI_Barrier(m_local_comm->m_comm);
+
+//     MPI_Comm comm = server_comm();
+//     MPI_Win win = NULL;
+//     int *pending = stos_fence_pending(&win);
+
+//     if(is_leader()) {
+// 	for(int i=0;i<m_server_size;i++) {
+// 	    MPI_Request req;
+// 	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
+// 	    if(req != MPI_REQUEST_NULL) {
+// 		MPI_Request_free(&req);
+// 	    }
+// 	}
+//     }
+
+//     stos_process_pending(pending, win);
+// }
+
+bool iris::can_start_solving()
 {
-    ASSERT_CLIENT("commit_charges");
-
-    // Make sure all clients have already sent their atoms before notifying
-    // the server that there are no more charges.
-    MPI_Barrier(m_local_comm->m_comm);
-
-    MPI_Comm comm = server_comm();
-    MPI_Win win = NULL;
-    int *pending = stos_fence_pending(&win);
-
-    if(is_leader()) {
-	for(int i=0;i<m_server_size;i++) {
-	    MPI_Request req;
-	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
-	    if(req != MPI_REQUEST_NULL) {
-		MPI_Request_free(&req);
-	    }
+    for(int i=0;i<m_client_size;i++) {
+	if(m_wfc[i] == -1) {
+	    return false;
 	}
     }
-
-    stos_process_pending(pending, win);
+    return true;
 }
 
 bool iris::handle_charges(event_t *event)
@@ -783,6 +796,8 @@ bool iris::handle_charges(event_t *event)
     int ncharges = event->size / unit;
 
     m_ncharges[event->peer] = ncharges;
+    m_wfc[event->peer] = ncharges;
+    
 #ifdef IRIS_CUDA
     if(m_cuda) {
 	m_charges[event->peer] = (iris_real *)memory::wmalloc_gpu(ncharges * unit, false, true);  // copy to pinned memory
@@ -800,12 +815,16 @@ bool iris::handle_charges(event_t *event)
 	// MPI_Request_free(&req);
     }
 
+    if(can_start_solving()) {
+	handle_commit_charges();
+    }
+
 #ifdef IRIS_CUDA
     if(m_cuda) {
 	return false;  // in the cuda version, we already copied it to pinned memory
     }
 #endif
-	
+
     return true;  // hold on to dear life; we need the charges for later
 }
 
@@ -862,6 +881,17 @@ void iris::clear_wff()
 
     for(int i=0;i<m_server_size;i++) {
 	m_wff[i] = 0;
+    }
+}
+
+void iris::clear_wfc()
+{
+    if(!is_server()) {
+	return;
+    }
+
+    for(int i=0;i<m_client_size;i++) {
+	m_wfc[i] = -1;
     }
 }
 
