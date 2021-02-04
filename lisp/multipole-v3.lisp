@@ -68,6 +68,14 @@
 				   (* (mget scratch k l)
 				      (mget mult (- n k) (- m l)))))))))
 
+(defun l2l-v3 (dx dy dz p mult)
+  (let ((scratch (p2m-v3 dx dy dz 1 p)))
+    (gen-multipole p #'(lambda (n m)
+			 (loop for k from 0 to (- p n) sum
+			      (loop for l from (- k) to k sum
+				   (* (conjugate (mget scratch k l))
+				      (mget mult (+ n k) (+ m l)))))))))
+
 (defun rot-m-v3 (mult α p)
   (gen-multipole p #'(lambda (n m)
 		       (* (mget mult n m) (exp (* #C(0 1.d0) m α))))))

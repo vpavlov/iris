@@ -1137,13 +1137,14 @@ void fmm::do_p2p_interact(int srcID, int destID, int ix, int iy, int iz)
     	return;
     }
     
-    if(m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0) {
-	do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
-    }else if(m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0) {
-	throw std::logic_error("Open boundary P2P not implemented!");
-    }else {
-	throw std::logic_error("Partial PBC P2P not implemented!");
-    }
+    do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
+    // if(m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0 && m_proc_grid->m_pbc[0] != 0) {
+    // 	do_p2p_interact_pbc(srcID, destID, ix, iy, iz);
+    // }else if(m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0 && m_proc_grid->m_pbc[0] == 0) {
+    // 	throw std::logic_error("Open boundary P2P not implemented!");
+    // }else {
+    // 	throw std::logic_error("Partial PBC P2P not implemented!");
+    // }
 }
 
 void fmm::do_p2p_interact_pbc(int srcID, int destID, int ix, int iy, int iz)
@@ -1208,6 +1209,7 @@ void fmm::eval_m2l_cpu()
 
     int n = m_m2l_list.size();
     m_logger->info("M2L list size = %d", n);
+    
 #if defined _OPENMP
 #pragma omp parallel
 #endif
@@ -1501,10 +1503,10 @@ void fmm::eval_l2p_cpu()
 		iris_real z = leaf->ses.c.r[2] - m_particles[leaf->first_child+j].xyzq[2];
 		iris_real q = m_particles[leaf->first_child+j].xyzq[3];
 		iris_real phi, Ex, Ey, Ez;
-		
+
 		memset(scratch, 0, m_nterms*sizeof(iris_real));
 		l2p(m_order, x, y, z, q, m_L + i * m_nterms, scratch, &phi, &Ex, &Ey, &Ez);
-		
+
 		m_particles[leaf->first_child+j].tgt[0] += phi;
 		m_particles[leaf->first_child+j].tgt[1] += Ex;
 		m_particles[leaf->first_child+j].tgt[2] += Ey;
