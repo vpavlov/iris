@@ -876,12 +876,12 @@ void fmm::compute_energy_and_virial_gpu()
     cudaStreamSynchronize(m_streams[0]); // must be synchronous
     
     m_iris->m_Ek *= 0.5 * m_units->ecf;
-    m_iris->m_virial[0] *= 0.5 * m_units->ecf;
-    m_iris->m_virial[1] *= 0.5 * m_units->ecf;
-    m_iris->m_virial[2] *= 0.5 * m_units->ecf;
-    m_iris->m_virial[3] *= 0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
-    m_iris->m_virial[4] *= 0.25* m_units->ecf;
-    m_iris->m_virial[5] *= 0.25* m_units->ecf;
+    m_iris->m_virial[0] *= -0.5 * m_units->ecf;
+    m_iris->m_virial[1] *= -0.5 * m_units->ecf;
+    m_iris->m_virial[2] *= -0.5 * m_units->ecf;
+    m_iris->m_virial[3] *= -0.25* m_units->ecf; //make the virial symmetric - multipling by extra 0.5 commumig from the averaging offdiagonal elementes 
+    m_iris->m_virial[4] *= -0.25* m_units->ecf;
+    m_iris->m_virial[5] *= -0.25* m_units->ecf;
 }
 
 

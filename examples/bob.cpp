@@ -119,7 +119,29 @@ bool read_frame0(char *dirname, comm_rec *in_local_comm, input_t *out_input)
 		}
 		
 		atom.xyzqi[4] = (1 + out_input->natoms) * (iris_real) 1.0;
-		
+
+			if (atom.xyzqi[0] < 0) {
+				atom.xyzqi[0] += out_input->box[0];
+			}
+			if (atom.xyzqi[0] >= out_input->box[0]) {
+				atom.xyzqi[0] -= out_input->box[0];
+			}
+
+			if (atom.xyzqi[1] < 0) {
+				atom.xyzqi[1] += out_input->box[1];
+			}
+			if (atom.xyzqi[1] >= out_input->box[1]) {
+				atom.xyzqi[1] -= out_input->box[1];
+			}
+
+			if (atom.xyzqi[2] < 0) {
+				atom.xyzqi[2] += out_input->box[2];
+			}
+			if (atom.xyzqi[2] >= out_input->box[2]) {
+				atom.xyzqi[2] -= out_input->box[2];
+			}
+
+
 		out_input->atoms.push_back(atom);
 		qtot += atom.xyzqi[3];
 		qtot2 += (atom.xyzqi[3] * atom.xyzqi[3]);
