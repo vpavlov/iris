@@ -155,7 +155,7 @@ void fmm::commit()
 	
 	m_order = m_iris->m_order;  // if p = 2, we expand multipoles until Y_2^2
 	if(m_order > IRIS_FMM_MAX_ORDER) {
-	    throw std::logic_error("Max FMM order exceeded. Change IRIS_FMM_MAX_ORDER if you need to!");
+	    throw std::logic_error("Max FMM order exceeded!");
 	}
 	int natoms = m_iris->m_natoms;  // atoms won't change during simulation (hopefully)
 	solver_param_t t = m_iris->get_solver_param(IRIS_SOLVER_FMM_NCRIT);

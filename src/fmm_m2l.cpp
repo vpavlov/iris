@@ -189,18 +189,28 @@ void mrot_add(iris_real *out, iris_real *in, iris_real alpha, int p)
     }
 }
 
-iris_real fact[] = {
-		    1.0,
-		    1.0,
-		    2.0,
-		    6.0,
-		    24.0,
-		    120.0,
-		    720.0,
-		    5040.0,
-		    40320.0,
-		    362880.0,
-		    3628800.0
+unsigned long long fact[] = {
+			     1,
+			     1,
+			     2,
+			     6,
+			     24,
+			     120,
+			     720,
+			     5040,
+			     40320,
+			     362880,
+			     3628800,
+			     39916800,
+			     479001600,
+			     6227020800,
+			     87178291200,
+			     1307674368000,
+			     20922789888000,
+			     355687428096000,
+			     6402373705728000,
+			     121645100408832000,
+			     2432902008176640000
 };
 
 void ORG_NCSA_IRIS::h_m2l_v2(int order, iris_real x, iris_real y, iris_real z, iris_real *in_M1, iris_real *out_L2, iris_real *in_scratch,
