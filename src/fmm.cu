@@ -111,13 +111,15 @@ void fmm::load_particles_gpu()
 	int ncharges = m_iris->m_ncharges[rank];
 	iris_real *charges = m_iris->m_charges[rank];
 	cudaMemcpyAsync(m_charges_gpu[rank], charges, ncharges * 5 * sizeof(iris_real), cudaMemcpyDefault, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]);
-	
-	int nthreads = MIN(IRIS_CUDA_NTHREADS, ncharges);
-	int nblocks = IRIS_CUDA_NBLOCKS(ncharges, nthreads);
-	k_load_charges<<<nblocks, nthreads, 0, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]>>>(m_charges_gpu[rank], ncharges, hwm,
-											      m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
-											      m_leaf_size[0], m_leaf_size[1], m_leaf_size[2],
-											      max_level(), offset, m_particles, rank);
+
+	if(ncharges != 0) {
+	    int nthreads = MIN(IRIS_CUDA_NTHREADS, ncharges);
+	    int nblocks = IRIS_CUDA_NBLOCKS(ncharges, nthreads);
+	    k_load_charges<<<nblocks, nthreads, 0, m_streams[rank % IRIS_CUDA_FMM_NUM_STREAMS]>>>(m_charges_gpu[rank], ncharges, hwm,
+												  m_domain->m_global_box.xlo, m_domain->m_global_box.ylo, m_domain->m_global_box.zlo,
+												  m_leaf_size[0], m_leaf_size[1], m_leaf_size[2],
+												  max_level(), offset, m_particles, rank);
+	}
 	hwm += ncharges;
     }
         
