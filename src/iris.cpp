@@ -732,7 +732,7 @@ void iris::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     }
 }
 
-void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
+MPI_Request iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 {
     ASSERT_CLIENT("send_charges");
 
@@ -748,7 +748,7 @@ void iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 	       in_charges, &req, win);
     
     stos_process_pending(pending, win);
-    MPI_Wait(&req, MPI_STATUS_IGNORE);
+    return req;
 }
 
 // void iris::commit_charges()

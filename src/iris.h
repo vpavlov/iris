@@ -167,7 +167,7 @@ namespace ORG_NCSA_IRIS {
 	void get_ext_boxes(box_t<iris_real> *out_ext_boxes);
 
 	// Use this on a client node to send charges to a server node
-	void send_charges(int in_peer, iris_real *in_charges, int in_count);
+	MPI_Request send_charges(int in_peer, iris_real *in_charges, int in_count);
 
 	//void commit_charges();
 	bool can_start_solving();

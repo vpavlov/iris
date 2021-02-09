@@ -354,6 +354,8 @@ void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_b
     sendvec.reserve(in_input->atoms.size() * 5);
     
     iris_real *sendbuf = sendvec.data();
+
+    MPI_Request *req = (MPI_Request *)malloc(in_iris->m_server_size * sizeof(MPI_Request));
     
     int hwm = 0;
     for(int i=0;i<in_iris->m_server_size;i++) {
@@ -371,9 +373,14 @@ void send_charges(iris *in_iris, input_t *in_input, box_t<iris_real> *in_local_b
 		}
 	    }
 	}
-	in_iris->send_charges(i, sendbuf+hwm, cnt);
+	req[i] = in_iris->send_charges(i, sendbuf+hwm, cnt);
 	hwm += cnt * 5;
     }
+
+    for(int i=0;i<in_iris->m_server_size;i++) {
+	MPI_Wait(&(req[i]), MPI_STATUS_IGNORE);
+    }
+    free(req);
 }
 
 // Do whatever is needed with the forces that came back from IRIS
