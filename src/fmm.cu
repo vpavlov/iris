@@ -449,7 +449,8 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
     k_find_max_particles<<<nblocks, nthreads, 0, m_streams[1]>>>(out_target, offset, m_max_particles_gpu);
-    cudaMemcpy(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault);
+    cudaMemcpyAsync(&m_max_particles, m_max_particles_gpu, sizeof(int), cudaMemcpyDefault, m_streams[1]);
+    cudaStreamSynchronize(m_streams[1]);
 }
 
 
