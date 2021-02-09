@@ -246,10 +246,11 @@ void fmm::inhale_xcells_gpu(int in_count)
     int unit_size = sizeof(int) + sizeof(sphere_t) + m_nterms*sizeof(iris_real);
     int rsize = in_count * unit_size;
     m_recvbuf_gpu = (unsigned char *)memory::wmalloc_gpu_cap(m_recvbuf_gpu, rsize, 1, &m_recvbuf_gpu_cap);
-    cudaMemcpy(m_recvbuf_gpu, m_recvbuf, rsize, cudaMemcpyDefault);
+    cudaMemcpyAsync(m_recvbuf_gpu, m_recvbuf, rsize, cudaMemcpyDefault, m_streams[3]);
     int nthreads = IRIS_CUDA_NTHREADS;
     int nblocks = IRIS_CUDA_NBLOCKS(in_count, nthreads);
-    k_inhale_cells<<<nblocks, nthreads>>>(m_recvbuf_gpu, in_count, m_xcells, m_M, unit_size, m_nterms);
+    k_inhale_cells<<<nblocks, nthreads, 0, m_streams[3]>>>(m_recvbuf_gpu, in_count, m_xcells, m_M, unit_size, m_nterms);
+    cudaStreamSynchronize(m_streams[3]);
 }
 
 
