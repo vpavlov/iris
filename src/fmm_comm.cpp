@@ -177,6 +177,8 @@ void fmm::exchange_p2p_halo_cpu()
     for(int i=0;i<m_local_comm->m_size;i++) {
     	m_logger->trace("Will be sending %d particles to %d, starting from %d", m_a2a_send_cnt[i], i, m_a2a_send_disp[i]);
     }
+
+    eval_p2p_self_cpu();
     
     MPI_Alltoall(m_a2a_send_cnt.data(), 1, MPI_INT, m_a2a_recv_cnt.data(), 1, MPI_INT, m_local_comm->m_comm);
 

@@ -874,20 +874,20 @@ void fmm::exchange_LET()
     {
 	memcpy(m_xcells, m_cells, m_tree_size * sizeof(cell_t));  // copy local tree to LET
     }
-
-#ifdef IRIS_CUDA
-    if(m_iris->m_cuda) {
-	eval_p2p_self_gpu();
-    }else
-#endif
-    {
-	eval_p2p_self_cpu();
-    }
     
     if(m_local_comm->m_size > 1) {
 	exchange_p2p_halo();
 	comm_LET();
 	recalculate_LET();
+    }else {
+#ifdef IRIS_CUDA
+	if(m_iris->m_cuda) {
+	    eval_p2p_self_gpu();
+	}else
+#endif
+	{
+	    eval_p2p_self_cpu();
+	}
     }
     
 // #ifdef IRIS_CUDA
