@@ -429,6 +429,8 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
 	return;
     }
 
+    int nstreams = 3;
+
     for(int i=0;i<nstreams;i++) {
         if(i==2) {
             continue;
@@ -439,7 +441,7 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
     // Then, find the first_child and num_children for each leaf
     // Also, sum all particle coordinates for each cell to prepare to find the center of mass
     // Do this in several streams to reduce atomic conflicts inside threads
-    int nstreams = 3;
+
     int tile_offset;
     int tile_size = in_count / nstreams + ((in_count % nstreams)?1:0);
     dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
