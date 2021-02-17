@@ -312,8 +312,9 @@ void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int i
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
     int nblocks = IRIS_CUDA_NBLOCKS(nleafs, nthreads);
-    k_init_first_child<<<nblocks, nthreads>>>(out_target, offset);
-
+    k_init_first_child<<<nblocks, nthreads, 0, m_streams[0]>>>(out_target, offset);
+    cudaStreamSynchronize(m_streams[0]);
+    
     // Then, find the first_child and num_children for each leaf
     // Also, sum all particle coordinates for each cell to prepare to find the center of mass
     // Do this in several streams to reduce atomic conflicts inside threads
@@ -607,12 +608,12 @@ void fmm::relink_parents_gpu(cell_t *io_cells)
     int end = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, end);
     int nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
-    k_clear_nl_children<<<nblocks, nthreads>>>(io_cells, end);
+    k_clear_nl_children<<<nblocks, nthreads, 0, m_streams[0]>>>(io_cells, end);
 
     end = cell_meta_t::offset_for_level(m_local_root_level);
     nthreads = MIN(IRIS_CUDA_NTHREADS, end);
     nblocks = IRIS_CUDA_NBLOCKS(end, nthreads);
-    k_clear_nl_ses<<<nblocks, nthreads>>>(io_cells, end);
+    k_clear_nl_ses<<<nblocks, nthreads, 0, m_streams[0]>>>(io_cells, end);
 
     link_parents_gpu(io_cells);
 }
@@ -933,6 +934,23 @@ void fmm::cuda_specific_construct()
     m_a2a_sendbuf_gpu = new thrust::device_vector<xparticle_t>();
 
     IRIS_CUDA_CHECK_ERROR;
+}
+
+void fmm::cuda_specific_commit()
+{
+    int nleafs = m_tree_size - cell_meta_t::offset_for_level(max_level());
+
+    thrust::device_vector<int> *cell_cnt = (thrust::device_vector<int> *)m_a2a_cell_cnt_gpu;
+    thrust::device_vector<int> *cell_disp = (thrust::device_vector<int> *)m_a2a_cell_disp_gpu;
+    
+    cell_cnt->resize(nleafs);
+    cell_disp->resize(nleafs);
+}
+
+void fmm::cuda_specific_step_init()
+{
+    thrust::device_vector<xparticle_t> *sendbuf = (thrust::device_vector<xparticle_t> *)m_a2a_sendbuf_gpu;
+    sendbuf->clear();
 }
 
 #endif

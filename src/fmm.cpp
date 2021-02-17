@@ -222,7 +222,8 @@ void fmm::commit()
 
 	    if(m_halo_cell_disp[1] != NULL) { memory::wfree_gpu(m_halo_cell_disp[1]); }
 	    m_halo_cell_disp[1] = (int *)memory::wmalloc_gpu(nleafs * sizeof(int));
-	    
+
+	    cuda_specific_commit();
 	}else
 #endif
 	{
@@ -448,6 +449,7 @@ void fmm::solve()
        	cudaMemsetAsync(m_M, 0, m_tree_size*m_nterms*sizeof(iris_real), m_streams[1]);
 	cudaMemsetAsync(m_L, 0, m_tree_size*m_nterms*sizeof(iris_real), m_streams[2]);
 	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[3]);
+	cuda_specific_step_init();
 	cudaDeviceSynchronize();
 	m_has_cells_cpu = false;
     }else

@@ -127,8 +127,6 @@ int fmm::collect_halo_for_gpu(int rank, int hwm)
     thrust::device_vector<int> *cell_cnt = (thrust::device_vector<int> *)m_a2a_cell_cnt_gpu;
     thrust::device_vector<int> *cell_disp = (thrust::device_vector<int> *)m_a2a_cell_disp_gpu;
     
-    cell_cnt->resize(nleafs);
-    cell_disp->resize(nleafs);
     cudaMemsetAsync(cell_cnt->data().get(), 0, nleafs * sizeof(int), m_streams[0]);
 
     int *cnt_ptr = cell_cnt->data().get();
@@ -148,8 +146,10 @@ int fmm::collect_halo_for_gpu(int rank, int hwm)
     int halo_size = last_count + last_disp;
 
     thrust::device_vector<xparticle_t> *sendbuf = (thrust::device_vector<xparticle_t> *)m_a2a_sendbuf_gpu;
-    sendbuf->resize(sendbuf->size() + halo_size);
-
+    if(halo_size != 0) {
+	sendbuf->resize(sendbuf->size() + halo_size);
+    }
+    
     dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
     dim3 nblocks2((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
     k_fill_sendbuf<<<nblocks2, nthreads2, 0, m_streams[0]>>>(sendbuf->data().get() + hwm, m_particles, m_xcells, cnt_ptr, disp_ptr, start);
@@ -167,7 +167,6 @@ void fmm::exchange_p2p_halo_gpu()
     m_a2a_recv_cnt.resize(m_local_comm->m_size);
     m_a2a_recv_disp.resize(m_local_comm->m_size);
     thrust::device_vector<xparticle_t> *sendbuf = (thrust::device_vector<xparticle_t> *)m_a2a_sendbuf_gpu;
-    sendbuf->clear();
 
     int hwm = 0;
     for(int rank=0;rank<m_local_comm->m_size;rank++) {

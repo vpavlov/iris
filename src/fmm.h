@@ -68,6 +68,8 @@ namespace ORG_NCSA_IRIS {
 
 #ifdef IRIS_CUDA
 	void cuda_specific_construct();
+	void cuda_specific_commit();
+	void cuda_specific_step_init();
 #endif
 	
 	void commit();
