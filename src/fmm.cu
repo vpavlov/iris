@@ -429,12 +429,17 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
 	return;
     }
 
-    cudaDeviceSynchronize();
+    for(int i=0;i<nstreams;i++) {
+        if(i==2) {
+            continue;
+        }
+        cudaStreamSynchronize(m_streams[i]);
+    }
     
     // Then, find the first_child and num_children for each leaf
     // Also, sum all particle coordinates for each cell to prepare to find the center of mass
     // Do this in several streams to reduce atomic conflicts inside threads
-    int nstreams = 4;
+    int nstreams = 3;
     int tile_offset;
     int tile_size = in_count / nstreams + ((in_count % nstreams)?1:0);
     dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
@@ -442,9 +447,18 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
 
     for(int i=0;i<nstreams;i++) {
 	tile_offset = i * tile_size;
+        if(i==2) {
+            continue;
+        }
 	k_find_xrange<<<nblocks2, nthreads2, 0, m_streams[i]>>>(in_particles, in_count, out_target, tile_size, tile_offset, in_flags);
     }
-    cudaDeviceSynchronize();
+
+    for(int i=0;i<nstreams;i++) {
+        if(i==2) { // 
+            continue;
+        }
+        cudaStreamSynchronize(m_streams[i]);
+    }
 
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
