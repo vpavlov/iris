@@ -108,19 +108,20 @@ __global__ void k_get_data_ptr(iris_real **array, iris_real *&data)
     data = array[0];
 }
 
-void memory::destroy_2d_gpu(iris_real **&array)
-{
-    if(array == NULL) {
-	return;
-    }
+// Not used 
+// void memory::destroy_2d_gpu(iris_real **&array)
+// {
+//     if(array == NULL) {
+// 	return;
+//     }
     
-    iris_real *data;
-    k_get_data_ptr<<<1, 1>>>(array, data);
-    cudaDeviceSynchronize();
-    wfree_gpu(data);
-    wfree_gpu(array);
-    array = NULL;
-}
+//     iris_real *data;
+//     k_get_data_ptr<<<1, 1>>>(array, data);
+//     cudaDeviceSynchronize();
+//     wfree_gpu(data);
+//     wfree_gpu(array);
+//     array = NULL;
+// }
 
 #define GPU_EXTRA_CAP 1.05
 

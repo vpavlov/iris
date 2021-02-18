@@ -122,8 +122,10 @@ void fmm::load_particles_gpu()
 	}
 	hwm += ncharges;
     }
-        
-    cudaDeviceSynchronize();  // all k_load_charges kernels must have finished to have valid m_particles
+    
+    for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	cudaStreamSynchronize(m_streams[i]);
+    }
 
     // Get the cellIDs in the reordered array
     int nthreads = MIN(IRIS_CUDA_NTHREADS, m_nparticles);
@@ -318,7 +320,7 @@ void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int i
     // Then, find the first_child and num_children for each leaf
     // Also, sum all particle coordinates for each cell to prepare to find the center of mass
     // Do this in several streams to reduce atomic conflicts inside threads
-    int nstreams = 4;
+    int nstreams = IRIS_CUDA_FMM_NUM_STREAMS;
     int tile_offset;
     int tile_size = in_count / nstreams + ((in_count % nstreams)?1:0);
     dim3 nthreads2(IRIS_CUDA_NTHREADS, 1, 1);
@@ -328,7 +330,9 @@ void fmm::distribute_particles_gpu(particle_t *in_particles, int in_count, int i
 	tile_offset = i * tile_size;
 	k_find_range<<<nblocks2, nthreads2, 0, m_streams[i]>>>(in_particles, in_count, out_target, tile_size, tile_offset, in_flags);
     }
-    cudaDeviceSynchronize();
+    for(int i=0;i<nstreams;i++) {
+	cudaStreamSynchronize(m_streams[i]);
+    }
     
     k_find_ses<<<nblocks, nthreads, 0, m_streams[0]>>>(in_particles, in_flags, out_target, offset);
     k_find_max_particles<<<nblocks, nthreads, 0, m_streams[1]>>>(out_target, offset, m_max_particles_gpu);
@@ -429,13 +433,9 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
 	return;
     }
 
-    int nstreams = 3;
-
+    int nstreams = IRIS_CUDA_FMM_NUM_STREAMS;
     for(int i=0;i<nstreams;i++) {
-        if(i==2) {
-            continue;
-        }
-        cudaStreamSynchronize(m_streams[i]);
+	cudaStreamSynchronize(m_streams[i]);
     }
     
     // Then, find the first_child and num_children for each leaf
@@ -449,19 +449,13 @@ void fmm::distribute_xparticles_gpu(xparticle_t *in_particles, int in_count, int
 
     for(int i=0;i<nstreams;i++) {
 	tile_offset = i * tile_size;
-        if(i==2) {
-            continue;
-        }
 	k_find_xrange<<<nblocks2, nthreads2, 0, m_streams[i]>>>(in_particles, in_count, out_target, tile_size, tile_offset, in_flags);
     }
 
     for(int i=0;i<nstreams;i++) {
-        if(i==2) { // 
-            continue;
-        }
-        cudaStreamSynchronize(m_streams[i]);
+	cudaStreamSynchronize(m_streams[i]);
     }
-
+    
     int nleafs = (1 << 3 * max_level());
     int offset = cell_meta_t::offset_for_level(max_level());
     int nthreads = MIN(IRIS_CUDA_NTHREADS, nleafs);
@@ -886,7 +880,10 @@ __global__ void k_compute_energy_and_virial(particle_t *m_particles, iris_real *
 
 void fmm::compute_energy_and_virial_gpu()
 {
-    cudaDeviceSynchronize();
+    for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	cudaStreamSynchronize(m_streams[i]);
+    }
+    cudaStreamSynchronize(m_p2p_self_stream);
     
     int n = m_nparticles;
     dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
@@ -938,6 +935,7 @@ void fmm::cuda_specific_construct()
     for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	cudaStreamCreate(&m_streams[i]);
     }
+    cudaStreamCreate(&m_p2p_self_stream);
     cudaEventCreate(&m_m2l_memcpy_done);
     cudaEventCreate(&m_p2p_memcpy_done);
     //cudaDeviceSetLimit(cudaLimitStackSize, 8192);  // otherwise distribute_particles won't work because of the welzl recursion

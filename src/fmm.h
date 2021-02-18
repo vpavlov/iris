@@ -358,6 +358,7 @@ namespace ORG_NCSA_IRIS {
 	std::map<int, iris_real *> m_charges_gpu;
 	std::map<int, size_t> m_charges_gpu_cap;
 	cudaStream_t m_streams[IRIS_CUDA_FMM_NUM_STREAMS];
+	cudaStream_t m_p2p_self_stream;
 	cudaEvent_t m_m2l_memcpy_done;
 	cudaEvent_t m_p2p_memcpy_done;	
 	

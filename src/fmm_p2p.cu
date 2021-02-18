@@ -113,7 +113,7 @@ void fmm::eval_p2p_self_gpu()
     
     dim3 nthreads(IRIS_CUDA_NTHREADS, 1, 1);
     dim3 nblocks((m_max_particles-1)/IRIS_CUDA_NTHREADS + 1, nleafs, 1);
-    k_p2p_self<<<nblocks, nthreads, 0, m_streams[2]>>>(m_cells, m_particles, offset);
+    k_p2p_self<<<nblocks, nthreads, 0, m_p2p_self_stream>>>(m_cells, m_particles, offset);
 }
 
 

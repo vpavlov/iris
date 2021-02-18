@@ -93,6 +93,7 @@ fmm::~fmm()
 	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
 	    cudaStreamDestroy(m_streams[i]);
 	}
+	cudaStreamDestroy(m_p2p_self_stream);
 	cudaEventDestroy(m_m2l_memcpy_done);
 	cudaEventDestroy(m_p2p_memcpy_done);
 	
@@ -450,7 +451,9 @@ void fmm::solve()
 	cudaMemsetAsync(m_L, 0, m_tree_size*m_nterms*sizeof(iris_real), m_streams[2]);
 	cudaMemsetAsync(m_cells, 0, m_tree_size*sizeof(cell_t), m_streams[3]);
 	cuda_specific_step_init();
-	cudaDeviceSynchronize();
+	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	    cudaStreamSynchronize(m_streams[i]);
+	}
 	m_has_cells_cpu = false;
     }else
 #endif
@@ -869,7 +872,9 @@ void fmm::exchange_LET()
 
 #ifdef IRIS_CUDA
     if(m_iris->m_cuda) {
-	cudaDeviceSynchronize();
+	for(int i=0;i<IRIS_CUDA_FMM_NUM_STREAMS;i++) {
+	    cudaStreamSynchronize(m_streams[i]);
+	}
 	cudaMemcpyAsync(m_xcells, m_cells, m_tree_size * sizeof(cell_t), cudaMemcpyDefault, m_streams[0]);  // copy local tree to LET
     }else
 #endif
