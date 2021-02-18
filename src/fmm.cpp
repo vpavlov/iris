@@ -885,6 +885,7 @@ void fmm::exchange_LET()
     if(m_local_comm->m_size > 1) {
 	exchange_p2p_halo();
 	comm_LET();
+	distribute_xparticles(m_xparticles[0], m_nxparticles, IRIS_FMM_CELL_ALIEN_L1, m_xcells);
 	recalculate_LET();
     }else {
 #ifdef IRIS_CUDA

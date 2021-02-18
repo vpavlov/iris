@@ -215,8 +215,8 @@ void fmm::exchange_p2p_halo_gpu()
     		  m_a2a_recvbuf.data(), m_a2a_recv_cnt.data(), m_a2a_recv_disp.data(), MPI_BYTE,
     		  m_local_comm->m_comm);
 
+    m_nxparticles = rsize;
     cudaMemcpyAsync(m_xparticles[0], m_a2a_recvbuf.data(), rsize*sizeof(xparticle_t), cudaMemcpyDefault, m_streams[0]);
-    distribute_xparticles(m_xparticles[0], rsize, IRIS_FMM_CELL_ALIEN_L1, m_xcells);
     
     tm.stop();
     m_logger->time("Halo exchange wall/cpu time %lf/%lf (%.2lf%% util)", tm.read_wall(), tm.read_cpu(), (tm.read_cpu() * 100.0) /tm.read_wall());
