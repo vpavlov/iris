@@ -33,6 +33,7 @@
 #include <mpi.h>
 #include <pthread.h>
 #include <map>
+#include <vector>
 #include <cuda_runtime_api.h>
 #include "real.h"
 #include "box.h"
@@ -160,13 +161,15 @@ namespace ORG_NCSA_IRIS {
 	// The client nodes receive an array of xlo,ylo,zlo,xhi,yhi,zhi
 	// for each of the server's local boxes, in the rank order of the
 	// server's local_comm.
-	box_t<iris_real> *get_local_boxes();
+	void get_local_boxes(box_t<iris_real> *out_local_boxes);
+	void get_ext_boxes(box_t<iris_real> *out_ext_boxes);
 
 	// Use this on a client node to send charges to a server node
-	void send_charges(int in_peer, iris_real *in_charges, int in_count);
+	MPI_Request send_charges(int in_peer, iris_real *in_charges, int in_count);
 
-	void commit_charges();
-
+	//void commit_charges();
+	bool can_start_solving();
+	
 	// Use this on a client node to receive forces from server nodes
 	iris_real *receive_forces(int **out_count, iris_real *out_Ek, iris_real *out_virial);
 	void get_global_energy(iris_real *out_Ek, iris_real *out_Es, iris_real *out_Ecorr);
@@ -227,8 +230,11 @@ namespace ORG_NCSA_IRIS {
 	int m_remote_leader;           // rank in uber_comm of remote leader
 	int m_other_leader;            // the leader of the other group
 	int m_nthreads;                // # of threads to use
-	// which server peers this client is waiting to receive forces from
-	bool *m_wff;
+	
+	int *m_wff;                    // which server peers this client is waiting to receive forces from
+	int *m_wfc;                    // which client peers this server is waiting to receive charges from
+	std::map<int, iris_real *> m_charges;      // per sending rank
+	std::map<int, iris_real *> m_forces;       // per recv rank
 
 	bool                   m_compute_global_energy;  // whether to compute global long-range energy
 	bool                   m_compute_global_virial;  // whether to compute global long-range virial
@@ -270,6 +276,9 @@ namespace ORG_NCSA_IRIS {
     
 	private:
 	volatile bool m_quit;  // quit the main loop
+
+	std::vector<iris_real> m_forcebuf;    // returned from receive_forces
+
     };
 	struct collective_fft3D_state_t
 	{

@@ -156,6 +156,7 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
     memory_gpu::create_1d(m_Ek_vir, 7);
 
     m_wff = NULL;
+    m_wfc = NULL;
 
     m_uber_comm = new comm_rec_gpu(this, in_uber_comm);
     m_local_comm = new comm_rec_gpu(this, in_local_comm);
@@ -191,7 +192,12 @@ void iris_gpu::init(MPI_Comm in_local_comm, MPI_Comm in_uber_comm)
 	clear_wff();
     }
 
-    m_logger = new logger_gpu(this);
+    if(is_server()) {
+	m_wfc = new int[m_client_size];
+	clear_wfc();
+    }
+    
+    m_logger = new logger(this);
 
     m_domain = NULL;
     m_proc_grid = NULL;
@@ -243,6 +249,9 @@ iris_gpu::~iris_gpu()
 	delete m_chass;
     }
 
+    for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	memory::wfree(it->second);
+    }
     if(m_mesh != NULL) {
 	delete m_mesh;
     }
@@ -420,6 +429,12 @@ void iris_gpu::perform_commit()
 	m_chass->commit();      // does not depend on anything
 	m_proc_grid->commit();  // does not depend on anything
 	m_domain->commit();     // depends on m_proc_grid
+	for(auto it = m_forces.begin(); it != m_forces.end(); it++) {
+	    memory::wfree(it->second);
+	}
+	clear_wfc();
+	m_charges.clear();
+	m_forces.clear();	
 	m_mesh->commit();       // depends on m_proc_grid and m_chass and alpha
 	m_solver->commit();     // depends on m_mesh
 	m_quit = false;
@@ -427,37 +442,58 @@ void iris_gpu::perform_commit()
 }
 
 // this one is called by all clients
-box_t<iris_real> *iris_gpu::get_local_boxes()
+void iris::get_local_boxes(box_t<iris_real> *out_local_boxes)
 {
     ASSERT_CLIENT("get_local_boxes");
 
     int size = sizeof(box_t<iris_real>) * m_server_size;
-    box_t<iris_real> *local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-    
+
     if(is_both()) {
-	// clients are also servers; an allgather will do
-	MPI_Allgather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
-		      local_boxes, sizeof(box_t<iris_real>), MPI_BYTE, m_local_comm->m_comm);
-	return local_boxes;
+	memcpy(out_local_boxes, m_domain->m_local_boxes, size);
+	return;
     }
 
     if(is_leader()) {
 	// the client leader sends to the server leader request to get the local boxes
 	MPI_Comm comm = server_comm();
 	MPI_Request req = MPI_REQUEST_NULL;
-	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES_FANOUT, 0, NULL, &req, NULL);
+	send_event(comm, m_other_leader, IRIS_TAG_GET_LBOXES, 0, NULL, &req, NULL);
 	MPI_Wait(&req, MPI_STATUS_IGNORE);
-	MPI_Recv(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
+	MPI_Recv(out_local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, comm, MPI_STATUS_IGNORE);
     }
 
-    MPI_Bcast(local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
-    return local_boxes;
+    MPI_Bcast(out_local_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
+}
+
+// this one is called by all clients
+void iris::get_ext_boxes(box_t<iris_real> *out_ext_boxes)
+{
+    ASSERT_CLIENT("get_ext_boxes");
+
+    int size = sizeof(box_t<iris_real>) * m_server_size;
+
+    if(is_both()) {
+	memcpy(out_ext_boxes, m_solver->get_ext_boxes(), size);
+	return;
+    }
+ 
+    if(is_leader()) {
+	// the client leader sends to the server leader request to get the local boxes
+	MPI_Comm comm = server_comm();
+	MPI_Request req = MPI_REQUEST_NULL;
+	send_event(comm, m_other_leader, IRIS_TAG_GET_EBOXES, 0, NULL, &req, NULL);
+	MPI_Wait(&req, MPI_STATUS_IGNORE);
+	MPI_Recv(out_ext_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_EBOXES_DONE, comm, MPI_STATUS_IGNORE);
+    }
+
+    MPI_Bcast(out_ext_boxes, size, MPI_BYTE, m_local_leader, m_local_comm->m_comm);
 }
 
 void iris_gpu::commit()
 {
     ASSERT_CLIENT("commit");
 
+    clear_wff();
     if(is_both()) {
         m_logger->trace("colling perform commit");
 	perform_commit();
@@ -524,7 +560,6 @@ void iris_gpu::process_event(event_t *event)
     switch(event->tag) {
 
     case IRIS_TAG_SET_GBOX_FANOUT:
-    case IRIS_TAG_GET_LBOXES_FANOUT:
     case IRIS_TAG_COMMIT_FANOUT:
     case IRIS_TAG_QUIT_FANOUT:
     case IRIS_TAG_GGE_FANOUT:
@@ -551,6 +586,10 @@ void iris_gpu::process_event(event_t *event)
 	hodl = handle_get_lboxes(event);
 	break;
 
+    case IRIS_TAG_GET_EBOXES:
+	hodl = handle_get_eboxes(event);
+	break;
+	
     case IRIS_TAG_COMMIT:
 	hodl= handle_commit(event);
 	break;
@@ -633,55 +672,61 @@ void iris_gpu::send_event(MPI_Comm in_comm, int in_peer, int in_tag,
     }
 }
 
-void iris_gpu::send_charges(int in_peer, iris_real *in_charges, int in_count)
+MPI_Request iris::send_charges(int in_peer, iris_real *in_charges, int in_count)
 {
     ASSERT_CLIENT("send_charges");
 
     MPI_Comm comm = server_comm();
-    MPI_Win win;
+    MPI_Win win = NULL;
     int *pending = stos_fence_pending(&win);
 
-    MPI_Request req;
-    req = MPI_REQUEST_NULL;
-    if(in_count != 0) {
-	m_wff[in_peer] = true;
-	send_event(comm, in_peer, IRIS_TAG_CHARGES,
-		   5*in_count*sizeof(iris_real),
-		   in_charges, &req, win);
-	if(!is_server()) {
-	    MPI_Recv(NULL, 0, MPI_BYTE, in_peer, IRIS_TAG_CHARGES_ACK, comm, MPI_STATUS_IGNORE);
-	}
-    }
+    MPI_Request req = MPI_REQUEST_NULL;
+    m_wff[in_peer] = in_count;
+    
+    send_event(comm, in_peer, IRIS_TAG_CHARGES,
+	       5*in_count*sizeof(iris_real),
+	       in_charges, &req, win);
+    
     m_logger->trace("send_charges stos_process_pending");
     stos_process_pending(pending, win);
     m_logger->trace("send_charges MPI_Wait");
-    MPI_Wait(&req, MPI_STATUS_IGNORE);
     m_logger->trace("send_charges ended MPI_Wait");
+    return req;
 }
 
-void iris_gpu::commit_charges()
+//void iris::commit_charges()
+//{
+//     ASSERT_CLIENT("commit_charges");
+
+//     // Make sure all clients have already sent their atoms before notifying
+//     // the server that there are no more charges.
+//     MPI_Barrier(m_local_comm->m_comm);
+
+//     MPI_Comm comm = server_comm();
+//     MPI_Win win = NULL;
+//     int *pending = stos_fence_pending(&win);
+
+//     if(is_leader()) {
+// 	for(int i=0;i<m_server_size;i++) {
+// 	    MPI_Request req;
+// 	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
+// 	    if(req != MPI_REQUEST_NULL) {
+// 		MPI_Request_free(&req);
+// 	    }
+// 	}
+//     }
+
+//     stos_process_pending(pending, win);
+//}
+
+bool iris::can_start_solving()
 {
-    ASSERT_CLIENT("commit_charges");
-
-    // Make sure all clients have already sent their atoms before notifying
-    // the server that there are no more charges.
-    MPI_Barrier(m_local_comm->m_comm);
-
-    MPI_Comm comm = server_comm();
-    MPI_Win win;
-    int *pending = stos_fence_pending(&win);
-
-    if(is_leader()) {
-	for(int i=0;i<m_server_size;i++) {
-	    MPI_Request req;
-	    send_event(comm, i, IRIS_TAG_COMMIT_CHARGES, 0, NULL, &req, win);
-	    if(req != MPI_REQUEST_NULL) {
-		MPI_Request_free(&req);
-	    }
+    for(int i=0;i<m_client_size;i++) {
+	if(m_wfc[i] == -1) {
+	    return false;
 	}
     }
-
-    stos_process_pending(pending, win);
+    return true;
 }
 
 bool iris_gpu::handle_charges(event_t *event)
@@ -704,11 +749,15 @@ bool iris_gpu::handle_charges(event_t *event)
     }
 
     if(!is_client()) {
-	MPI_Request req;
-	MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
-		  event->comm, &req);
-	MPI_Request_free(&req);
+	// MPI_Request req;
+	// MPI_Isend(NULL, 0, MPI_BYTE, event->peer, IRIS_TAG_CHARGES_ACK,
+	// 	  event->comm, &req);
+	// MPI_Request_free(&req);
     }
+    if(can_start_solving()) {
+	handle_commit_charges();
+    }
+
 
     return true;  // hold on to dear life; we need the charges for later
 }
@@ -785,75 +834,6 @@ void iris_gpu::solve()
 
     m_solver->solve();
 
-    // iris_real post_corr = 0.5 *
-	// m_domain->m_global_box.xsize *
-	// m_domain->m_global_box.ysize *
-	// m_domain->m_global_box.zsize *
-	// m_units->ecf;
-    
-    // #warning "post_corr not applied to the gpu data before sending"
-
-    // if(m_compute_global_energy) {
-	// m_Ek *= post_corr;
-    // }
-    
-    // if(m_compute_global_virial) {
-	// for(int i=0;i<6;i++) {
-	//     m_virial[i] *= post_corr;
-	// }
-    // }
-
-    // iris_real phi_sum = 0.0;
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		phi_sum += m_mesh->m_phi[i][j][k];
-    // 	    }
-    // 	}
-    // }
-
-    // phi_sum /= h3;
-
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		m_mesh->m_phi[i][j][k] -= phi_sum;
-    // 	    }
-    // 	}
-    // }
-    
-    // iris_real ener = 0.0;
-    // iris_real h3 = m_mesh->m_h[0] * m_mesh->m_h[1] * m_mesh->m_h[2];
-    // for(int i=0;i<m_mesh->m_own_size[0];i++) {
-    // 	for(int j=0;j<m_mesh->m_own_size[1];j++) {
-    // 	    for(int k=0;k<m_mesh->m_own_size[2];k++) {
-    // 		ener += m_mesh->m_rho[i][j][k] * h3 * m_mesh->m_phi[i][j][k];
-    // 	    }
-    // 	}
-    // }
-    // m_logger->info("ener = %g | %g [%s]", ener*0.5, ener*0.5*m_units->ecf, m_units->energy_unit);
-
-    // if(m_compute_global_energy) {
-    // 	iris_real etot;
-    // 	iris_real volume =
-    // 	    m_domain->m_global_box.xsize * 
-    // 	    m_domain->m_global_box.ysize *
-    // 	    m_domain->m_global_box.zsize;
-	
-    // 	MPI_Allreduce(&m_Ek, &etot, 1, IRIS_REAL, MPI_SUM, server_comm());
-    // 	m_Ek = etot;
-    // 	m_logger->info("etot1 = %g", m_Ek);
-    // 	m_Ek *= 0.5 * volume;
-
-    // 	m_logger->info("E(k) = %g | %g", m_Ek, m_Ek * m_units->ecf);
-    // 	iris_real Es = -m_alpha * m_mesh->m_q2tot / _SQRT_PI;
-    // 	m_logger->info("E(s) = %g", Es);
-    // 	m_Ek += Es + 
-    // 	    _PI2 * m_mesh->m_qtot * m_mesh->m_qtot / (m_alpha * m_alpha * volume);
-    // 	m_logger->info("etot3 = %g", m_Ek);
-    // 	m_Ek *= m_units->ecf;
-    // 	m_logger->info("E(total) = %f", m_Ek);
-    // }
 }
 
 void iris_gpu::clear_wff()
@@ -863,9 +843,21 @@ void iris_gpu::clear_wff()
     }
 
     for(int i=0;i<m_server_size;i++) {
-	m_wff[i] = false;
+	m_wff[i] = 0;
     }
 }
+
+void iris::clear_wfc()
+{
+    if(!is_server()) {
+	return;
+    }
+
+    for(int i=0;i<m_client_size;i++) {
+	m_wfc[i] = -1;
+    }
+}
+
 
 iris_real *iris_gpu::receive_forces(int **out_counts, iris_real *out_Ek, iris_real *out_virial)
 {
@@ -884,15 +876,19 @@ iris_real *iris_gpu::receive_forces(int **out_counts, iris_real *out_Ek, iris_re
 	return NULL;
     }
 
-    int hwm = 0;  // high water mark (in bytes)
-    iris_real *retval = NULL;
+    size_t hwm = 0;  // high water mark (in bytes)
 
-    *out_counts = new int[m_server_size];
+    int total_forces = 0;
+    for(int i=0;i<m_server_size;i++) {
+	total_forces += m_wff[i];
+    }
+
+    m_forcebuf.reserve(total_forces * 4);
+    iris_real *retval = m_forcebuf.data();
 
     comm_rec_gpu *server_comm = is_server()?m_local_comm:m_inter_comm;
 
     for(int i=0;i<m_server_size;i++) {
-	(*out_counts)[i] = 0;
 	if(m_wff[i]) {
 	    event_t ev;
 	    server_comm->get_event(i, IRIS_TAG_FORCES, ev);
@@ -900,17 +896,10 @@ iris_real *iris_gpu::receive_forces(int **out_counts, iris_real *out_Ek, iris_re
 	    if((ev.size - 7*sizeof(iris_real)) % unit != 0) {
 		throw std::length_error("Unexpected message size while receiving forces!");
 	    }
-	    (*out_counts)[i] = (ev.size - 7*sizeof(iris_real)) / unit;
 	    
 	    m_logger->trace("Received %d forces from server #%d (this is not rank!)", (*out_counts)[i], i);
 
-	    retval = (iris_real *)memory::wrealloc(retval, hwm + ev.size - 7*sizeof(iris_real));
 	    memcpy(((unsigned char *)retval) + hwm, (unsigned char *)ev.data + 7*sizeof(iris_real), ev.size - 7*sizeof(iris_real));
-
-	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
-	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->trace("i %d retval %f %f %f %f",i, bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
-	    }
 
 	    hwm += ev.size - 7*sizeof(iris_real);
 
@@ -929,19 +918,12 @@ iris_real *iris_gpu::receive_forces(int **out_counts, iris_real *out_Ek, iris_re
     hwm=0;
     for(int i=0;i<m_server_size;i++) {
 	if(m_wff[i]) {
-	    
-	    iris_real* bahor = (iris_real*)(((unsigned char *)retval) + hwm);
-	    for( int vv=0; vv<(*out_counts)[i]; ++vv) {
-	      m_logger->trace("i %d bahor %f %f %f %f",i,bahor[vv*4+0],bahor[vv*4+1],bahor[vv*4+2],bahor[vv*4+3]);
-	    }
-
-	    hwm += (*out_counts)[i]*unit;
-
+	    hwm += m_wff[i]*unit;
 	}
 	
     }
-    clear_wff();
-    m_logger->trace("return from receive_forces");
+
+    *out_counts = m_wff;
     return retval;
 }
 
@@ -1243,21 +1225,15 @@ bool iris_gpu::handle_set_gbox(struct event_t *event)
 
 bool iris_gpu::handle_get_lboxes(event_t *in_event)
 {
-    box_t<iris_real> *local_boxes = NULL;
-    int size = sizeof(box_t<iris_real>) * m_server_size;
-    
-    if(is_leader()) {
-	local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
-    }
+    MPI_Send(m_domain->m_local_boxes, sizeof(box_t<iris_real>) * m_server_size, MPI_BYTE,
+	     m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
+    return false;
+}
 
-    MPI_Gather(&(m_domain->m_local_box), sizeof(box_t<iris_real>), MPI_BYTE,
-	       local_boxes,              sizeof(box_t<iris_real>), MPI_BYTE,
-	       m_local_leader,
-	       m_local_comm->m_comm);
-
-    if(is_leader()) {
-	MPI_Send(local_boxes, size, MPI_BYTE, m_other_leader, IRIS_TAG_GET_LBOXES_DONE, client_comm());
-    }
+bool iris::handle_get_eboxes(event_t *in_event)
+{
+    MPI_Send(m_solver->get_ext_boxes(), sizeof(box_t<iris_real>) * m_server_size, MPI_BYTE,
+	     m_other_leader, IRIS_TAG_GET_EBOXES_DONE, client_comm());
     return false;
 }
 
@@ -1289,6 +1265,37 @@ bool iris_gpu::handle_get_global_energy(event_t *in_event)
     }
     return false;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void ORG_NCSA_IRIS::free_collective_fft3D_memory(collective_fft3D_state &fftstate, bool keep_it)
 {
