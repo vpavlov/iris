@@ -511,12 +511,15 @@ main(int argc, char **argv)
 	    gbox.zhi = input.box[2];
 	    x->set_global_box(&gbox);
 	    x->commit();
-	    box_t<iris_real> *local_boxes = x->get_local_boxes();
-	    
+
+	    int lb_size = sizeof(ORG_NCSA_IRIS::box_t<iris_real>) * x->m_server_size;
+	    ORG_NCSA_IRIS::box_t<iris_real> *local_boxes = 
+	      (ORG_NCSA_IRIS::box_t<iris_real> *)ORG_NCSA_IRIS::memory::wmalloc(lb_size);
+	    x->get_local_boxes(local_boxes);
+
 	    int *nforces;
 	    send_charges(x, &input, local_boxes);
-	    x->commit_charges();
-	    
+		    
 	    iris_real Ek, Es, Ecorr;
 	    iris_real virial[6];
 	    iris_real *forces = x->receive_forces(&nforces, &Ek, virial);

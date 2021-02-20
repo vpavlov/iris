@@ -1194,8 +1194,8 @@ solver *iris::get_solver()
     case IRIS_SOLVER_CG:
 	return new poisson_solver_cg(this);
 
-    case IRIS_SOLVER_FMM:
-	return new fmm(this);
+    // case IRIS_SOLVER_FMM:
+    // 	return new fmm(this);
 	
     default:
 	throw new std::logic_error("Unimplemented solver!");

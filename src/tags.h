@@ -72,4 +72,7 @@
 #define IRIS_TAG_FMM_P2P_HALO_CNT   78
 #define IRIS_TAG_FMM_P2P_HALO       79
 
+#define IRIS_TAG_GET_EBOXES         80
+#define IRIS_TAG_GET_EBOXES_DONE    81
+
 #endif

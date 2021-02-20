@@ -204,6 +204,7 @@ namespace ORG_NCSA_IRIS {
 	bool fanout_event(struct event_t *in_event);
 	bool handle_set_gbox(struct event_t *in_event);
 	bool handle_get_lboxes(struct event_t *in_event);
+        bool handle_get_eboxes(struct event_t *in_event);
 	bool handle_commit(struct event_t *in_event);
 	bool handle_quit(struct event_t *in_event);
 
@@ -211,6 +212,7 @@ namespace ORG_NCSA_IRIS {
 	
 	// initialize m_waiting_forces_from to sensible initial state
 	void clear_wff();
+	void clear_wfc();
 
 	void calculate_etot();  // calculate Hartree energy, for verification
 

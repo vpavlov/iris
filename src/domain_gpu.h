@@ -52,7 +52,7 @@ namespace ORG_NCSA_IRIS {
 	bool m_initialized;
 	box_t<iris_real> m_global_box;
 	box_t<iris_real> m_local_box;
-
+        box_t<iris_real> *m_local_boxes;
     };
 }
 #endif

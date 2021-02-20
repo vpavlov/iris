@@ -30,6 +30,7 @@
 #ifndef __IRIS_FMM_H__
 #define __IRIS_FMM_H__
 #include <deque>
+#include <cstring>
 #include "solver.h"
 #include "real.h"
 #include "memory.h"

@@ -206,9 +206,9 @@ namespace ORG_NCSA_IRIS {
 	    array = NULL;
 	}
     };
-	
+#define IRIS_CUDA	
 #ifdef IRIS_CUDA
-//#include <cuda_runtime_api.h>
+#include <cuda_runtime_api.h>
     class memory_gpu {
 
     public:

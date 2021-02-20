@@ -28,6 +28,7 @@
 // THE SOFTWARE.
 //==============================================================================
 #include <assert.h>
+#include <cstring>
 #include "fmm.h"
 #include "fmm_cell.h"
 #include "fmm_particle.h"

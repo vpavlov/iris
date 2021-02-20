@@ -318,18 +318,36 @@ bool read_frameN(int N, char *dirname, comm_rec_gpu *in_local_comm, input_t *out
 // the example.
 void send_charges(iris_gpu *in_iris, input_t *in_input, box_t<iris_real> *in_local_boxes)
 {
-    iris_real *sendbuf = (iris_real *)memory::wmalloc(in_input->atoms.size() * sizeof(atom_t));
+    std::vector<MPI_Request> sendvec_req(in_iris->m_server_size);
+    
+    static std::vector<std::vector<iris_real>> sendvec(in_iris->m_server_size);
+    for (int i = 0; i < in_iris->m_server_size; i++) {
+      sendvec[i].clear();
+    } 
+
+
     for(int i=0;i<in_iris->m_server_size;i++) {
 	int cnt = 0;
+	std::vector<iris_real> *sv = &sendvec[i];
 	for(int j=0;j<in_input->atoms.size();j++) {
 	    if(in_local_boxes[i].in(in_input->atoms[j].xyzqi)) {
-		memcpy(sendbuf+cnt*5, in_input->atoms[j].xyzqi, sizeof(atom_t));
+	      sv->push_back(in_input->atoms[j].xyzqi[0]);
+	      sv->push_back(in_input->atoms[j].xyzqi[1]);
+	      sv->push_back(in_input->atoms[j].xyzqi[2]);
+	      sv->push_back(in_input->atoms[j].xyzqi[3]);
+	      sv->push_back(in_input->atoms[j].xyzqi[4]);
 		cnt++;
 	    }
 	}
-	in_iris->send_charges(i, sendbuf, cnt);
     }
-    memory::wfree(sendbuf);
+
+    for (int i = 0; i < in_iris->m_server_size; i++)
+      {
+	in_iris->m_logger->trace("send %d charges to %d", (int) sendvec[i].size()/5,i);
+	sendvec_req[i]=in_iris->send_charges(i, sendvec[i].data(), (int) sendvec[i].size()/5);
+      }
+    
+    MPI_Waitall(sendvec_req.size(),sendvec_req.data(),MPI_STATUSES_IGNORE);
 }
 
 // Do whatever is needed with the forces that came back from IRIS
@@ -511,11 +529,15 @@ main(int argc, char **argv)
 	    gbox.zhi = input.box[2];
 	    x->set_global_box(&gbox);
 	    x->commit();
-	    box_t<iris_real> *local_boxes = x->get_local_boxes();
+
+	    int lb_size = sizeof(ORG_NCSA_IRIS::box_t<iris_real>) * x->m_server_size;
+	    ORG_NCSA_IRIS::box_t<iris_real> *local_boxes = 
+	      (ORG_NCSA_IRIS::box_t<iris_real> *)ORG_NCSA_IRIS::memory::wmalloc(lb_size);
+	    x->get_local_boxes(local_boxes);
 	    
 	    int *nforces;
 	    send_charges(x, &input, local_boxes);
-	    x->commit_charges();
+	    //x->commit_charges();
 	    
 	    iris_real Ek, Es, Ecorr;
 	    iris_real virial[6];
@@ -531,8 +553,6 @@ main(int argc, char **argv)
 	    x->m_logger->info("E(total) = %f (%f, %f, %f) [%s]", Ek + Es + Ecorr, Ek, Es, Ecorr, x->m_units->energy_unit);
 
 	    handle_forces(x, nforces, forces);
-	    delete [] nforces;
-	    memory::wfree(forces);
 
 	    // the clients don't have a mesh; this needs to be moved to the server
 	    // x->m_mesh->dump_ascii("bob-rho", x->m_mesh->m_rho);
