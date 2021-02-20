@@ -225,8 +225,8 @@ namespace ORG_NCSA_IRIS {
 		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
 	    }
 
-	    box_t<iris_real> tmp = (*this) && other_box;
-	    if(tmp.xsize > 1 || tmp.ysize > 1 || tmp.zsize > 1) {
+	    box_t<iris_real> tmp = (*this) && *other_box;
+	    if(tmp.xsize > 1 && tmp.ysize > 1 && tmp.zsize > 1) {
 		return true;
 	    }
 	
