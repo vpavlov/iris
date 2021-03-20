@@ -46,7 +46,7 @@ namespace ORG_NCSA_IRIS {
 	void solve_async();
 	void solve_sync();
 	void handle_box_resize();
-
+        virtual box_t<iris_real> *get_ext_boxes() {return NULL;};
     private:
 	void setup_fft_pencils_z(bool in_use_collective);
 	void setup_fft_planes_yz(bool in_use_collective);

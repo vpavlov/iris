@@ -101,6 +101,138 @@ namespace ORG_NCSA_IRIS {
 	    iris_real dz = (z > zhi) * (z - zhi) + (z < zlo) * (zlo - z);
 	    return sqrt(dx*dx + dy*dy + dz*dz);
 	}
+
+	bool periodic_overlap(box_t<iris_real> *other_box, box_t<iris_real> *gbox)
+	{
+	    if(xlo < gbox->xlo) {
+		box_t<iris_real> b1;
+		b1.xlo = gbox->xsize + xlo;
+		b1.xhi = gbox->xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = gbox->xlo;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+	    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+	    if(xhi > gbox->xhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = gbox->xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = gbox->xlo;
+		b2.xhi = xhi - gbox->xsize;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+	    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+	    if(ylo < gbox->ylo) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = gbox->ysize + ylo;
+		b1.yhi = gbox->yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = gbox->ylo;
+		b2.yhi = yhi;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+	    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+	    if(yhi > gbox->yhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = gbox->yhi;
+		b1.zlo = zlo;
+		b1.zhi = zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = gbox->ylo;
+		b2.yhi = yhi - gbox->ysize;
+		b2.zlo = zlo;
+		b2.zhi = zhi;
+	    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+
+	    if(zlo < gbox->zlo) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = gbox->zsize + zlo;
+		b1.zhi = gbox->zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;
+		b2.zlo = gbox->zlo;
+		b2.zhi = zhi;
+	    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+	    if(zhi > gbox->zhi) {
+		box_t<iris_real> b1;
+		b1.xlo = xlo;
+		b1.xhi = xhi;
+		b1.ylo = ylo;
+		b1.yhi = yhi;
+		b1.zlo = zlo;
+		b1.zhi = gbox->zhi;
+	    
+		box_t<iris_real> b2;
+		b2.xlo = xlo;
+		b2.xhi = xhi;
+		b2.ylo = ylo;
+		b2.yhi = yhi;	
+		b2.zlo = gbox->zlo;
+		b2.zhi = zhi - gbox->zsize;
+    
+		return b1.periodic_overlap(other_box, gbox) || b2.periodic_overlap(other_box, gbox);
+	    }
+
+	    box_t<iris_real> tmp = (*this) && *other_box;
+	    if(tmp.xsize > 1 && tmp.ysize > 1 && tmp.zsize > 1) {
+		return true;
+	    }
+	
+	    return false;
+	}
+	
     };
 
 }

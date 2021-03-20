@@ -47,7 +47,7 @@ namespace ORG_NCSA_IRIS {
 	void set_stencil_width(int in_width);
 	void set_max_iters(int in_max_iters);
 	void set_epsilon(iris_real in_epsilon);
-
+        virtual box_t<iris_real> *get_ext_boxes() {return NULL;};
     private:
 	// convolution-related helpers
 	void init_convolution();

@@ -34,16 +34,20 @@
 #include "proc_grid_gpu.h"
 #include "mesh_gpu.h"
 #include "poisson_solver_gpu.h"
+#include "comm_rec_gpu.h"
 
 using namespace ORG_NCSA_IRIS;
 
 domain_gpu::domain_gpu(iris_gpu *obj)
-    :state_accessor_gpu(obj), m_initialized(false), m_dirty(true)
+  :state_accessor_gpu(obj), m_initialized(false), m_dirty(true), m_local_boxes(NULL)
 {
+  int size = sizeof(box_t<iris_real>) * m_iris->m_server_size;
+  m_local_boxes = (box_t<iris_real> *)memory::wmalloc(size);
 }
 
 domain_gpu::~domain_gpu()
 {
+  memory::wfree(m_local_boxes);
 }
 
 void domain_gpu::set_global_box(iris_real x0, iris_real y0, iris_real z0,
@@ -120,6 +124,11 @@ void domain_gpu::commit()
 			m_local_box.xlo, m_local_box.xhi,
 			m_local_box.ylo, m_local_box.yhi,
 			m_local_box.zlo, m_local_box.zhi);
+
+	MPI_Allgather(&m_local_box, sizeof(box_t<iris_real>), MPI_BYTE,
+		      m_local_boxes, sizeof(box_t<iris_real>), MPI_BYTE,
+		      m_local_comm->m_comm);
+
 	m_dirty = false;
     }
 }

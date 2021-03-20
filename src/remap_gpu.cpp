@@ -462,13 +462,13 @@ void remap_gpu::perform_collective(iris_real ***in_src, iris_real *in_dest, iris
 	{
 
 		if (memory_gpu::m_env_psp_cuda!=0) {
-			memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
-			memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
-			MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
-					recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
+			// memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
+			// memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
+			MPI_Alltoallv(send_buff_gpu, send_counts, send_offsets, IRIS_REAL,
+					recv_buff_gpu, recv_counts, recv_offsets, IRIS_REAL,
 					m_collective_comm);
-			memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
-			memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
+			// memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
+			// memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
 		} else {
 	#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
@@ -636,13 +636,14 @@ void remap_gpu::perform_collective(iris_real *in_src, iris_real *in_dest, iris_r
 		sync_with_gpu();
 
 		if (memory_gpu::m_env_psp_cuda!=0) {
-		memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
-		memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
-		MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
-				recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
-				m_collective_comm);
-		memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
-		memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
+		// memory_gpu::sync_gpu_buffer(send_counts_gpu, send_counts, m_comm_len * sizeof(int));
+		// memory_gpu::sync_gpu_buffer(send_offsets_gpu, send_offsets, m_comm_len * sizeof(int));
+		// MPI_Alltoallv(send_buff_gpu, send_counts_gpu, send_offsets_gpu, IRIS_REAL,
+		// 		recv_buff_gpu, recv_counts_gpu, recv_offsets_gpu, IRIS_REAL,
+		// 		m_collective_comm);
+		// memory_gpu::sync_cpu_buffer(recv_counts, recv_counts_gpu, m_comm_len * sizeof(int));
+		// memory_gpu::sync_cpu_buffer(recv_offsets, recv_offsets_gpu, m_comm_len * sizeof(int));
+		  MPI_Alltoallv(send_buff_gpu, send_counts, send_offsets, IRIS_REAL, recv_buff_gpu, recv_counts, recv_offsets, IRIS_REAL, m_collective_comm);  
 		} else {
 	#warning "all to all goes using cumemcpy all2allv cumemcpy"
 
@@ -810,8 +811,8 @@ void remap_gpu::perform_collective_communicate(collective_fft3D_state &fftstate)
     // do all2all
     if (memory_gpu::m_env_psp_cuda!=0) {
 
-	MPI_Alltoallv(fftstate.send_buff_gpu, fftstate.send_counts_gpu, fftstate.send_offsets_gpu, IRIS_REAL,
-		      fftstate.recv_buff_gpu, fftstate.recv_counts_gpu, fftstate.recv_offsets_gpu, IRIS_REAL,
+	MPI_Alltoallv(fftstate.send_buff_gpu, fftstate.send_counts, fftstate.send_offsets, IRIS_REAL,
+		      fftstate.recv_buff_gpu, fftstate.recv_counts, fftstate.recv_offsets, IRIS_REAL,
 		      m_collective_comm);
 
     } else {

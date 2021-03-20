@@ -252,7 +252,6 @@ void mesh_gpu::commit()
 			  m_ext_size[2],
 			  true);
 
-
 	if(m_rho_haloex != NULL) {
 	    delete m_rho_haloex;
 	}
@@ -439,7 +438,7 @@ void mesh_gpu::assign_forces(bool ad)
 	}else {
 	    assign_forces1(ncharges, m_charges[it->first], forces);
 	}
-assign_energy_virial_data(forces,include_energy_virial);
+	assign_energy_virial_data(forces,include_energy_virial);
 	MPI_Request req;
 	if(memory_gpu::m_env_psp_cuda!=0) {
 	m_iris->send_event(comm, peer, IRIS_TAG_FORCES, size, forces, &req, NULL);

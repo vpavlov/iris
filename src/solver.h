@@ -43,9 +43,9 @@ namespace ORG_NCSA_IRIS {
 	virtual void commit() = 0;
 	virtual void solve() = 0;
 	virtual void handle_box_resize() = 0;
+	virtual box_t<iris_real> *get_ext_boxes() = 0;
 	
 	void set_dirty(bool in_dirty) { m_dirty = in_dirty; };
-
     protected:
 	bool m_dirty;  // wether to recalculate on commit
     };
