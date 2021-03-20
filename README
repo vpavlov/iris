@@ -1,3 +1,9 @@
 This is IRIS -- Long-Range Interaction Solver Library
 
-(Long is replaced with Infinite in the acronym)
+The IRIS library is dedicated to calculation of electrostatic interaction in Molecular Dynamics simulations. It includes CPU and GPU implementaions of P3M and FMM methods. For now the P3M GPU impementation can be found in the master-p3m-gpu branch and the FMM implementaion can be found in the master-fmm branch; merging of these branches into a single master branch is planned for the future. 
+
+This work was financially supported by the PRACE-5IP project funded in part by the EU’s Horizon 2020 research and Innovation programme (2014-2020) under grant agreement 730913.
+
+The FMM implementation was financially supported by the DEEP-EST project.
+
+The DEEP projects have received funding from the European Union’s Seventh Framework Programme (FP7) for research, technological development and demonstration and the Horion2020 (H2020) funding framework under grant agreement no. FP7-ICT-287530 (DEEP), FP7-ICT-610476 (DEEP-ER) and H2020-FETHPC-754304 (DEEP-EST).
