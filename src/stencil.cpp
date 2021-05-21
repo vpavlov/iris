@@ -43,4 +43,5 @@ stencil::stencil(int in_dim, int in_order, int in_acc)
 
 stencil::~stencil()
 {
+
 }
